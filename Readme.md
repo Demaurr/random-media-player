@@ -11,7 +11,7 @@
 
 
 ## Introduction
-Random Video Player to Keep Track of Your Watchtime for local Movies Watched.
+Random Video Player to Keep Track of Your Watchtime for local Media files. The video extensions supported **avi, mp4, mkv, m4v, webm.**
 
 
 ## Installation
