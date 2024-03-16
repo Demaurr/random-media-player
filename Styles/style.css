@@ -1,19 +1,21 @@
 body {
     font-family: 'Arial', sans-serif;
-    background-color: rgb(56, 54, 54);
+    background-color: black;
     margin: 0;
     padding: 0;
 }
 
 .container {
     width: 80%;
-    margin: 20px auto;
+    margin: auto;
+    padding: 20px;
 }
 
 h1 {
     text-align: center;
-    color: white;
-    font-size: 40px;
+    color: red;
+    font-size: 44px;
+    text-decoration: underline;
 }
 
 table {
@@ -22,12 +24,18 @@ table {
     margin-top: 20px;
 }
 
-table th, table td {
+/* table th, td {
     /* border: 1px solid #dddddd; */
-    border: 1px solid #f2f2f2;
+    /* border: 1px solid #f2f2f2; *?
     /* color: beige; */
-    padding: 10px;
+    /* padding: 10px;*/
+    /* text-align: left;
+} */
+
+th, td {
+    padding: 8px;
     text-align: left;
+    border-bottom: 1px solid #ddd;
 }
 table td {
     color: white;
