@@ -53,7 +53,7 @@ class VideoStatsApp:
         root.mainloop()
     """
 
-    def __init__(self, master, report_folder, video_data, session_time=0):
+    def __init__(self, master, report_folder, video_data, session_time=0, fg="black", bg="white"):
         """
         Initializes the VideoStatsApp with the specified parameters and default settings.
         Args:
@@ -65,24 +65,24 @@ class VideoStatsApp:
         self.master = master
         self.video_data = video_data
         self.session_time = session_time
-
         self.master.title("Video Stats For This Session")
 
+        self.master.configure(bg=bg)
         self.master.geometry("800x500")  # Set initial window size
         self.center_window()  # Center the window on the screen
 
         # Frame to hold the heading label and the button
-        self.heading_frame = tk.Frame(master)
+        self.heading_frame = tk.Frame(master, bg=bg)
         self.heading_frame.pack(pady=5)
 
-        self.heading_label = tk.Label(self.heading_frame, text="Statistics For The Session", font=("Tahoma", 20, "bold"), fg="Black")
+        self.heading_label = tk.Label(self.heading_frame, text="Statistics For The Session", font=("Tahoma", 20, "bold"), fg=fg, bg=bg)
         self.heading_label.pack(side="left")
 
         # Add a button for generating the summary report
         self.generate_report_button = tk.Button(self.heading_frame, text="Generate Summary Report", font=("Open Sans", 12, "bold"), bg="green", fg="white", command=self.generate_report_html)
         self.generate_report_button.pack(side="left", padx=10, pady=10)
 
-        self.session_time_label = tk.Label(master, text=f"Session Time: {self.format_session_time(self.session_time)}", font=("Open Sans", 14, "bold"))
+        self.session_time_label = tk.Label(master, text=f"Session Time: {self.format_session_time(self.session_time)}", font=("Open Sans", 14, "bold"), fg=fg, bg=bg)
         self.session_time_label.pack(pady=5)
 
         self.create_table()

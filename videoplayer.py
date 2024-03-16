@@ -19,10 +19,12 @@ class MediaPlayerApp(tk.Tk):
         # self.watch_history_csv = self.get_csvfile()
         self.ensure_folder_exists(FILES_FOLDER)
         self.get_history_csvfile(watch_history_csv)
+        self.bg_color = "black"
+        self.fg_color = "white"
         self.title("Media Player")
         self.geometry("800x600")
         self.center_window()
-        self.configure(bg="#f0f0f0")
+        self.configure(bg=self.bg_color)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
         self.initialize_player(video_files, video_path)
@@ -95,37 +97,50 @@ class MediaPlayerApp(tk.Tk):
         self.media_canvas.pack(pady=10, fill=tk.BOTH, expand=True)
 
         # Frame to contain control buttons and duration label
-        control_frame = tk.Frame(self, bg="#f0f0f0")
-        control_frame.pack(pady=5, fill=tk.X)
+        control_frame = tk.Frame(self, bg="black")
+        control_frame.pack(pady=0, fill=tk.X)
 
         # Control buttons
-        self.select_file_button = tk.Button(
+        self.current_stats_button = tk.Button(
             control_frame,
             text="Current Stats",
             font=("Arial", 12, "bold"),
             command=self.current_stats,
         )
-        self.select_file_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.current_stats_button.pack(side=tk.LEFT, padx=3, pady=0)
 
         self.prev_button = tk.Button(
             control_frame,
             text="Previous",
             font=("Arial", 12, "bold"),
-            bg="#2196F3",
+            bg="red",
             fg="white",
             command=self.play_previous,
         )
-        self.prev_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.bind("<Shift-KeyPress-Left>", self.play_previous)
+        self.prev_button.pack(side=tk.LEFT, padx=3, pady=0)
+
+        self.rewind_button = tk.Button(
+            control_frame,
+            text=" << ",
+            font=("Arial", 12, "bold"),
+            bg="red",
+            fg="white",
+            command=self.rewind,
+        )
+        self.rewind_button.pack(side=tk.LEFT, padx=3, pady=0)
+        self.bind("<KeyPress-Left>", self.rewind)
 
         self.play_button = tk.Button(
             control_frame,
             text="Play",
             font=("Arial", 12, "bold"),
-            bg="#4CAF50",
+            bg="black",
             fg="white",
+            width=10,
             command=self.play_video,
         )
-        self.play_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.play_button.pack(side=tk.LEFT, padx=3, pady=0)
 
         self.pause_button = tk.Button(
             control_frame,
@@ -135,59 +150,54 @@ class MediaPlayerApp(tk.Tk):
             fg="white",
             command=self.pause_video,
         )
-        self.pause_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.pause_button.pack(side=tk.LEFT, padx=3, pady=0)
+        self.bind("<KeyPress-space>", self.pause_video)
+
+        self.fast_forward_button = tk.Button(
+            control_frame,
+            text=" >> ",
+            font=("Arial", 12, "bold"),
+            bg="red",
+            fg="white",
+            command=self.fast_forward,
+        )
+        self.fast_forward_button.pack(side=tk.LEFT, padx=3, pady=0)
+        self.bind("<KeyPress-Right>", self.fast_forward)
 
         self.next_button = tk.Button(
             control_frame,
             text="Next",
             font=("Arial", 12, "bold"),
-            bg="#F44336",
+            bg="red",
             fg="white",
             command=self.play_next,
         )
-        self.next_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-        self.fast_forward_button = tk.Button(
-            control_frame,
-            text="Fast Forward",
-            font=("Arial", 12, "bold"),
-            bg="#2196F3",
-            fg="white",
-            command=self.fast_forward,
-        )
-        self.fast_forward_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-        self.rewind_button = tk.Button(
-            control_frame,
-            text="Rewind",
-            font=("Arial", 12, "bold"),
-            bg="#2196F3",
-            fg="white",
-            command=self.rewind,
-        )
-        self.rewind_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.next_button.pack(side=tk.LEFT, padx=3, pady=0)
+        self.bind("<Shift-KeyPress-Right>", self.play_next)
 
         # Duration label
         self.time_label = tk.Label(
             control_frame,
             text="00:00:00 / 00:00:00",
             font=("Arial", 12, "bold"),
-            fg="#555555",
-            bg="#f0f0f0",
+            fg="white",
+            bg="black",
         )
-        self.time_label.pack(side=tk.RIGHT, padx=10, pady=5)
+        self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
 
         # Progress bar
         self.progress_bar = VideoProgressBar(
-            self, self.set_video_position, bg="#e0e0e0", highlightthickness=0
+            self, self.set_video_position, bg=self.bg_color, highlightthickness=0
         )
         self.progress_bar.pack(side=tk.LEFT, padx=5, pady=5)
-        self.volume_bar = VolumeBar(self, self.media_player)
+        self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
         self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=5)
 
 
     def select_file(self):
-        """Plays a video file from the start when the 'Select File' button is clicked."""
+        """Plays a video file from the start when the 'Select File' button is clicked.
+            Unused up till Version 1.1.0
+        """
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
         self.play_video()
     
@@ -196,7 +206,7 @@ class MediaPlayerApp(tk.Tk):
         self.session_end = timeit.default_timer()
         self.show_seassion_stats(self.get_stats())
 
-    def play_next(self):
+    def play_next(self, event=None):
         """
         Plays the next video in the playlist.
 
@@ -209,7 +219,7 @@ class MediaPlayerApp(tk.Tk):
         self.current_file = random.choice(self.video_files)
         self.play_video()
     
-    def play_previous(self):
+    def play_previous(self, event=None):
         """
         Plays the previous video in the playlist.
 
@@ -281,7 +291,7 @@ class MediaPlayerApp(tk.Tk):
         self.watched_videos.add_watch(self.current_file)
         self.progress_bar.set(0)
 
-    def fast_forward(self):
+    def fast_forward(self, event=None):
         """
         Fast-forwards the currently playing video by 10 seconds.
         """
@@ -289,7 +299,7 @@ class MediaPlayerApp(tk.Tk):
             current_time = self.media_player.get_time() + 10000
             self.media_player.set_time(current_time)
 
-    def rewind(self):
+    def rewind(self, event=None):
         """
         Rewinds the currently playing video by 5 seconds.
         """
@@ -297,7 +307,7 @@ class MediaPlayerApp(tk.Tk):
             current_time = self.media_player.get_time() - 5000
             self.media_player.set_time(current_time)
 
-    def pause_video(self):
+    def pause_video(self, event=None):
         """
         Pauses or resumes playback of the currently playing video.
         Toggles between pause and resume based on the current playback state.
@@ -381,7 +391,7 @@ class MediaPlayerApp(tk.Tk):
         """
         root = tk.Tk()
         start = session_start if self.session_start is None else self.session_start
-        app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start))
+        app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color)
         root.mainloop()
     
     def center_window(self):

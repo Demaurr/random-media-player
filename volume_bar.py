@@ -26,7 +26,7 @@ class VolumeBar(tk.Scale):
         media_player = ...
 
         # Create a VolumeBar instance and pack it into the window
-        volume_bar = VolumeBar(root, media_player)
+        volume_bar = VolumeBar(root, media_player, bg='white', fg='blue')  # Customize colors here
         volume_bar.pack()
 
         # Start the Tkinter event loop
@@ -63,3 +63,4 @@ class VolumeBar(tk.Scale):
                 If a string is passed, it is expected to be a numerical representation of the volume level.
         """
         self.media_player.audio_set_volume(int(volume))
+
