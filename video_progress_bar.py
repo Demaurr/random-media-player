@@ -1,4 +1,5 @@
 import tkinter as tk
+
 class VideoProgressBar(tk.Scale):
     """A custom progress bar for video playback."""
 
@@ -17,7 +18,7 @@ class VideoProgressBar(tk.Scale):
             from_=0,
             to=100,
             orient=tk.HORIZONTAL,
-            length=600,
+            length=800,
             command=command,
             **kwargs,
         )
