@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## Version [1.1.0] - 2024-03-14
+
+### Added
+- Keyboard Shortcuts for Player Buttons
+
+### Changed
+- App Theme From Bright To Red, White and Black
+- Html File Theme to match App's
+
+## Version [1.0.0]
 
 ### Added
 - Initial project setup
