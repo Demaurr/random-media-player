@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Main_Screen3.PNG)
+![Main Screen Page](Screenshots/Main_Screen4.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -11,7 +11,7 @@
 
 
 ## Introduction
-Random Video Player to Keep Track of Your Watchtime for local Media files. The video extensions supported **avi, mp4, mkv, m4v, webm.**
+Random Video Player to Keep Track of Your Watchtime for local Media files. The video extensions supported **avi, mp4, mkv, m4v, webm**
 
 
 ## Installation
@@ -39,6 +39,7 @@ Random Video Player to Keep Track of Your Watchtime for local Media files. The v
 
 - **Video Playback**: Users can select and play video files from their local directories.
 - **Playback Controls**: Provides controls for play, pause, stop, fast-forward, and rewind.
+- **Saving Favorites**: Save Favorite Media or Screen Capture in Your Defined Folder.
 - **Watch History**: Keeps track of watched videos and their playback durations.
 - **Statistics**: Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
@@ -52,6 +53,8 @@ Random Video Player to Keep Track of Your Watchtime for local Media files. The v
 *   Control video playback using the buttons provided (play, pause, rewind, fast forward, etc.).
 *   **Current Stats** button will show the Statistic uptill that point.
 *   **Play** button will restart the current video.
+*   Save Screen Capture By Using *Keyboard-Shortcut* **Shift-s**.
+*   Add or Remove Files From the Favorites using `Fav +` and `Fav -` Buttons Respectively
 *   Close the application when finished.
 *   After closing The Sessions Watch Statistics Window will be Shown.
 *   These Statistics can be saved by clicking on **Generate Summary** Button.
