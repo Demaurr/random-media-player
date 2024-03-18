@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - Player Window Size from **800x600** to **1000x600**
 - Media Playing by Skiping any File That Doesn't Exist
 - Length of Media Progress Bar from **600** to **800**
+- Displaying Button's Action Feedback by Showing it both on the Media Screen and Console
 
 ## Version [1.1.0] - 2024-03-14
 
