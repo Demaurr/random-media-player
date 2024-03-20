@@ -1,8 +1,8 @@
-import csv
+# import csv
 import tkinter as tk
 # from tkinter import messagebox
 import vlc
-from datetime import timedelta, datetime
+from datetime import timedelta
 import os
 import random
 import timeit
@@ -15,6 +15,8 @@ from favorites_manager import FavoritesManager
 from logs_writer import LogManager
 
 FILES_FOLDER = "Files/" # change this to the folder where you want to get your Watched_History.csv from.
+LOG_PATH = "Logs/Action_Logs.log"
+
 
 class MediaPlayerApp(tk.Tk):
     
@@ -24,7 +26,7 @@ class MediaPlayerApp(tk.Tk):
         self.ensure_folder_exists(FILES_FOLDER)
         self.get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
-        self.logger = LogManager("Logs/Action_Logs.log")
+        self.logger = LogManager(LOG_PATH)
         self.bg_color = "black"
         self.fg_color = "white"
         self.title("Media Player")
@@ -73,8 +75,12 @@ class MediaPlayerApp(tk.Tk):
     def on_close(self):
         self.session_end = timeit.default_timer()
         self.stop()  # Call the stop method when the window is closed
-        self.destroy()
+        # self.destroy()
+        # tk.Tk.quit(self)
         self.show_seassion_stats(self.get_stats())
+        self.withdraw()
+        self.quit()
+        # exit()
         # print(self.watched_videos)
           
 
@@ -82,6 +88,9 @@ class MediaPlayerApp(tk.Tk):
         # self.fav_csv = FILES_FOLDER +"Favorites.csv"
         self.instance = vlc.Instance()
         self.media_player = self.instance.media_player_new()
+
+        self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
+
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
         self.current_file = None
         self.previous_file = None
@@ -270,9 +279,6 @@ class MediaPlayerApp(tk.Tk):
         # Place the feedback label at the top of the window, centered horizontally
         self.feedback_label.place(x=window_width // 2, y=0, anchor="n")
         
-        # Modify message to remove quotation marks
-        # message = message.replace('"', '')
-
         # Set the message and configure label for text wrapping
         self.feedback_var.set(message)
         self.feedback_label.config(wraplength=window_width - 20)  # Adjust wraplength as needed
@@ -453,6 +459,8 @@ class MediaPlayerApp(tk.Tk):
                 self.playing_video = True
                 self.watched_videos.add_watch(self.current_file)
                 self.progress_bar.set(0)
+                # self.update_video_progress()
+                
             else:
                 print(f"The file Doesn't Exists: {self.current_file}")
                 self.logger.error_logs(f"File Not Found: {self.current_file}")
@@ -532,16 +540,27 @@ class MediaPlayerApp(tk.Tk):
         Updates the progress of the currently playing video.
         Updates the time label with the current playback time and total duration.
         """
-        if self.playing_video:
+        if self.playing_video and not self.video_paused:
             total_duration = self.media_player.get_length()
             current_time = self.media_player.get_time()
-            # the following lines are commented inorder to avoid lag in the video which is caused by progress_bar
 
+            # if total_duration - current_time <= 1000:
+            #     self.playing_video = False
+            # print(current_time, total_duration)
+
+            # the following lines are commented inorder to avoid lag in the video which is caused by progress_bar
             # progress_percentage = (current_time / total_duration) * 100
             # self.progress_bar.set(progress_percentage)
+
             current_time_str = str(timedelta(milliseconds=current_time))[:-3]
             total_duration_str = str(timedelta(milliseconds=total_duration))[:-3]
             self.time_label.config(text=f"{current_time_str} / {total_duration_str}")
+            # print(total_duration, current_time)
+            # if total_duration - current_time <= 500 and (total_duration != 0 or not self.video_paused):
+            # if total_duration - current_time <= 500 and (total_duration != 0):
+                # print(total_duration, current_time)
+                # return
+                # return
         self.after(1000, self.update_video_progress)
 
     def get_stats(self):
@@ -557,6 +576,11 @@ class MediaPlayerApp(tk.Tk):
         watched_stats = [{"File Name": key.split("\\")[-1], "Duration Watched": self.get_time_str(value["duration"]), \
                           "Count": value["count"], "Folder": key.rsplit("\\", 1)[0]} for key, value in sorted_by_duration.items()]
         return watched_stats
+    
+
+    def handle_error(self, event):
+        print("Error occurred while playing the media.")
+        self.master.destroy()
     
     def show_seassion_stats(self, video_data, session_start=timeit.default_timer()):
         """
