@@ -68,7 +68,8 @@ class VideoStatsApp:
         self.master.title("Video Stats For This Session")
 
         self.master.configure(bg=bg)
-        self.master.geometry("800x500")  # Set initial window size
+        self.master.geometry("800x500")
+        self.master.protocol("WM_DELETE_WINDOW", self.on_closing)  # Set initial window size
         self.center_window()  # Center the window on the screen
 
         # Frame to hold the heading label and the button
@@ -86,6 +87,9 @@ class VideoStatsApp:
         self.session_time_label.pack(pady=5)
 
         self.create_table()
+
+    def on_closing(self):
+        self.master.quit()
 
     def create_table(self):
         """
@@ -156,6 +160,7 @@ class VideoStatsApp:
         html_content = report_generator.generate_html(session_time=self.format_session_time(self.session_time), date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  
         with open(f"{self.report_folder}summary_report_{current_datetime}.html", "w", encoding="utf-8") as file:
             file.write(html_content)
+        print(f"Summary Report Generated At: {self.report_folder}summary_report_{current_datetime}.html")
 
 
 if __name__ == "__main__":
