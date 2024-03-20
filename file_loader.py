@@ -9,8 +9,10 @@ except ImportError:
     filestatser = None
 
 from datetime import datetime
+from logs_writer import LogManager
 
 CSV_FOLDER = "Files/"
+LOG_PATH = "Logs/Action_Logs.log"
 
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""
@@ -27,6 +29,7 @@ class VideoFileLoader:
         self.video_extensions = media_extensions
         self.csv_path = os.path.join(self.csv_folder, CSV_FOLDER, "Log_Folders.csv")
         self.refresh = []
+        self.logger = LogManager(LOG_PATH)
 
     @staticmethod
     def are_paths_same(path1, path2):
@@ -82,9 +85,10 @@ class VideoFileLoader:
                             video_files.append(os.path.join(root, file))
             except Exception as e:
                 print(f"An error occurred while retrieving video files from folder '{folder_path}': {e}")
+                self.logger.error_logs(f"{e} While Retrieving {folder_path}")
         return video_files
     
-    def update_folder_data_csv(self, folder_paths=[]):
+    def add_folder_data_csv(self, folder_paths=[]):
         try:
             # folders_without_csv, _ = self.seg_with_without_csv(folder_paths)
             # for folder in folders_without_csv:
@@ -99,6 +103,7 @@ class VideoFileLoader:
             return csv_files
         except Exception as e:
             print(f"An error occurred while storing file data: {e}")
+            self.logger.error_logs(f"{e} While Storing {folder}")
             return []
 
     
@@ -181,10 +186,6 @@ class VideoFileLoader:
                         folders.append(folder)
                 else:
                     print(f"The Given Folder Doesn't Exist: {folder}")
-                # csv_file = self.check_folders_path(folder)
-                # cfolder, cleaned_csvs = self.clean_input_paths([csv_file])
-                # folders.extend(cfolder)
-                # csv_files.extend(cleaned_csvs)
             except Exception as e:
                 print(f"An error occurred while checking CSV file for folder '{folder}': {e}")
                 continue
@@ -257,7 +258,7 @@ class VideoFileLoader:
         final_paths = self.strip_string_by_comma(input_string)
         folder_inputs, csv_inputs = self.clean_input_paths(final_paths)
         undocumented_folders, folders_csv = self.seg_with_without_csv(folder_inputs)
-        updated_csv_files = self.update_folder_data_csv(folder_paths=undocumented_folders)
+        updated_csv_files = self.add_folder_data_csv(folder_paths=undocumented_folders)
         total_csvs = updated_csv_files + folders_csv + csv_inputs
         final_videos = self.get_videos_from_csv(total_csvs)
         return final_videos
