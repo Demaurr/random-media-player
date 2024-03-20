@@ -81,5 +81,7 @@ class FavoritesManager:
         with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                favorites.append(os.path.join(row["Source Path"], row["Video Name"]))
+                path = os.path.join(row["Source Path"], row["Video Name"])
+                if os.path.exists(path):
+                    favorites.append(path)
         return favorites

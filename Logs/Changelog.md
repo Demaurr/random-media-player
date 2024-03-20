@@ -1,10 +1,19 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## Version [2.1.1] - 2024-03-21
+
+### Added
+- writing Logs in `file_loader.py` and `watch_history_logger`
+- checking of files existence on retrieval in `favorites_manager.py`
+
+### Bug Fixes
+- Resolved "after script" error in `videoplayer.py`. Might also stop Some Crashing related issues.
+
 
 ## Version [2.0.0] - 2024-03-19
 
-## Added
+### Added
 - Functionality to Save Favorites
 - Saving Logs for Favorites updation and Errors
 - Videos Count in Summary Report
@@ -14,7 +23,7 @@ All notable changes to this project will be documented in this file.
 - Full Screen Functionality
 - Saving Screen Capture of any Playing video.
 
-## Changed
+### Changed
 - Player Window Size from **800x600** to **1000x600**
 - Media Playing by Skiping any File That Doesn't Exist
 - Length of Media Progress Bar from **600** to **800**

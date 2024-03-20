@@ -1,6 +1,9 @@
 from datetime import datetime
 import csv
 import os
+from logs_writer import LogManager
+
+LOG_PATH = "Logs/Action_Logs.log"
 
 class WatchHistoryLogger:
     """A class for logging the history of watched videos."""
@@ -13,6 +16,7 @@ class WatchHistoryLogger:
             csv_file (str): Path to the CSV file for logging watch history.
         """
         self.csv_file = csv_file
+        self.logger = LogManager(LOG_PATH)
         self.fieldnames = ['File Name', 'Total Duration', 'Date Watched', 'Duration Watched']
         self.file_exists = self.check_file_exists()
         if not self.file_exists:
@@ -43,12 +47,17 @@ class WatchHistoryLogger:
             duration_watched (str): Total duration of the video watched.
             video_duration (str): Total duration of the video.
         """
-        date_watched = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.csv_file, 'a', newline='', encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=self.fieldnames)
-            writer.writerow({
-                'File Name': file_name,
-                'Total Duration': total_duration,
-                'Date Watched': date_watched,
-                'Duration Watched': video_duration
-            })
+        try:
+            date_watched = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(self.csv_file, 'a', newline='', encoding="utf-8") as file:
+                writer = csv.DictWriter(file, fieldnames=self.fieldnames)
+                writer.writerow({
+                    'File Name': file_name,
+                    'Total Duration': total_duration,
+                    'Date Watched': date_watched,
+                    'Duration Watched': video_duration
+                })
+        except Exception as e:
+            print(f"Error Occurred While Writing Watch History Logs {e}")
+            self.logger.error_logs(f"{e} While Writing Watch History")
+            
