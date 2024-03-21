@@ -106,7 +106,23 @@ class VideoFileLoader:
             self.logger.error_logs(f"{e} While Storing {folder}")
             return []
 
-    
+    def update_folder_data_csv(self, folder_paths=[]):
+        """
+        Update folder data CSV files for the specified folder paths.
+
+        Args:
+            folder_paths (list): List of folder paths to update CSV files.
+        """
+        try:
+            for folder in folder_paths:
+                # Generate file stats and update CSV
+                csv_file = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv")
+                stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False)
+                stats.generate_file_stats_csv(csv_path=csv_file)
+                # Update CSV path in Log_Folders.csv
+                self.add_to_csv_file(folder, csv_file)
+        except Exception as e:
+            print(f"An error occurred while updating folder data CSV: {e}")    
 
     def add_to_csv_file(self, folder_path, testing_csv_path):
         """
@@ -236,6 +252,21 @@ class VideoFileLoader:
         
         return stripped_strings
     
+    def check_to_refresh(self, folder_paths=[]):
+        folders = []
+        for folder in folder_paths:
+            try:
+                if "--update" in folder:
+                    folder = folder.replace("--update", "").strip()
+                    # folders.append(folder.replace("--update", ""))
+                    self.update_folder_data_csv([folder])
+                folders.append(folder)
+            except Exception as e:
+                self.logger.error_logs(f"{e} While refreshing {folder}")
+                print(f"{e} While refreshing {folder}")
+        return folders
+
+    
     def start_here(self, input_string):
         """
         Process input string to retrieve video files.
@@ -257,7 +288,8 @@ class VideoFileLoader:
         """
         final_paths = self.strip_string_by_comma(input_string)
         folder_inputs, csv_inputs = self.clean_input_paths(final_paths)
-        undocumented_folders, folders_csv = self.seg_with_without_csv(folder_inputs)
+        refreshed_folders = self.check_to_refresh(folder_inputs)
+        undocumented_folders, folders_csv = self.seg_with_without_csv(refreshed_folders)
         updated_csv_files = self.add_folder_data_csv(folder_paths=undocumented_folders)
         total_csvs = updated_csv_files + folders_csv + csv_inputs
         final_videos = self.get_videos_from_csv(total_csvs)
