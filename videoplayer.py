@@ -1,6 +1,4 @@
-# import csv
 import tkinter as tk
-# from tkinter import messagebox
 import vlc
 from datetime import timedelta
 import os
@@ -20,9 +18,8 @@ LOG_PATH = "Logs/Action_Logs.log"
 
 class MediaPlayerApp(tk.Tk):
     
-    def __init__(self, video_files, video_path=None, watch_history_csv=FILES_FOLDER + "Watched_History.csv"):
+    def __init__(self, video_files, random_select=True, video_path=None, watch_history_csv=FILES_FOLDER + "Watched_History.csv"):
         super().__init__()
-        # self.watch_history_csv = self.get_csvfile()
         self.ensure_folder_exists(FILES_FOLDER)
         self.get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
@@ -35,6 +32,10 @@ class MediaPlayerApp(tk.Tk):
         self.configure(bg=self.bg_color)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
+        self.prev_counts = 0
+        self.forward_counts = 0
+        self.random_select = random_select
+        self.video_index = 0
         self.initialize_player(video_files, video_path)
         
 
@@ -75,13 +76,13 @@ class MediaPlayerApp(tk.Tk):
     def on_close(self):
         self.session_end = timeit.default_timer()
         self.stop()  # Call the stop method when the window is closed
-        # self.destroy()
         # tk.Tk.quit(self)
         self.show_seassion_stats(self.get_stats())
+        print("Closing window...")
         self.withdraw()
+        print("Window withdrawn")
         self.quit()
-        # exit()
-        # print(self.watched_videos)
+        print("Application quit")
           
 
     def initialize_player(self, video_files, folder_path):
@@ -99,7 +100,10 @@ class MediaPlayerApp(tk.Tk):
         self.session_start = None
         # self.watched_videos = {}
         self.watched_videos = WatchDict()
-        self.select_random_video()
+        if not self.random_select:
+            self.select_sequential_videos()
+        else:
+            self.select_random_video()
         self.feedback_var = tk.StringVar()
         self.feedback_label = None  # This will hold the label widget
         
@@ -109,6 +113,11 @@ class MediaPlayerApp(tk.Tk):
         """Selects a random video from the list of video files."""
         if self.video_files:
             self.current_file = random.choice(self.video_files)
+
+    def select_sequential_videos(self):
+        if self.video_files:
+            self.current_file = self.video_files[self.video_index]
+            self.video_index += 1
 
 
     def create_widgets(self):
@@ -365,7 +374,7 @@ class MediaPlayerApp(tk.Tk):
     def current_stats(self):
         # self.watched_videos.increment_duration_and_count(self.current_file, self.media_player.get_time())
         self.session_end = timeit.default_timer()
-        self.show_seassion_stats(self.get_stats())
+        self.show_seassion_stats(self.get_stats(), for_current=True)
 
     def play_next(self, event=None):
         """
@@ -379,8 +388,12 @@ class MediaPlayerApp(tk.Tk):
                 self.stop()
             self.previous_file = self.current_file
             # self.current_file = random.choice(self.video_files)
-            self.select_random_video()
+            if not self.random_select:
+                self.select_sequential_videos()
+            else:
+                self.select_random_video()
             self.play_video()
+            self.video_paused = False
         except Exception as e:
             print(f"An Exception Occurred in play_next(): {e}")
     
@@ -454,6 +467,7 @@ class MediaPlayerApp(tk.Tk):
                 self.media_player.set_media(media)
                 self.media_player.set_hwnd(self.media_canvas.winfo_id())
                 self.media_player.play()
+                self.reset_video_counts()
                 self.show_feedback(f"Playing: {self.current_file}")
                 self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
                 self.playing_video = True
@@ -468,7 +482,7 @@ class MediaPlayerApp(tk.Tk):
         except FileNotFoundError as e:
             print(f"An Exception Occurred in play_video: {e}")
             self.show_feedback(f"Error {e} Loading {self.current_file}")
-            self.play_next()
+            # self.play_next()
         except Exception as e:
             print(f"An Exception Occurred in play_video: {e}")
             self.show_feedback(f"An Unexpected Error Occured in play_video: {e}")
@@ -480,14 +494,17 @@ class MediaPlayerApp(tk.Tk):
         Fast-forwards the currently playing video by 10 seconds.
         """
         if self.playing_video:
+            self.forward_counts += 1
             current_time = self.media_player.get_time() + 10000
             self.media_player.set_time(current_time)
+            
 
     def rewind(self, event=None):
         """
         Rewinds the currently playing video by 5 seconds.
         """
         if self.playing_video:
+            self.prev_counts += 1
             current_time = self.media_player.get_time() - 5000
             self.media_player.set_time(current_time)
 
@@ -517,7 +534,10 @@ class MediaPlayerApp(tk.Tk):
             total_duration = self.get_time_str(self.media_player.get_time())
             self.watch_history_logger.log_watch_history(self.current_file, duration_watched, total_duration)
             # self.watched_videos[self.current_file] =  self.watched_videos.get(self.current_file, 0) + self.media_player.get_time()
-            self.watched_videos.increment_duration_and_count(self.current_file, self.media_player.get_time())
+            skipped_time = (self.prev_counts * 5000) - (self.forward_counts * 10000)
+            print(f"Skipped Time: {self.get_time_str(skipped_time)}")
+            print(f"Prev Counts: {self.prev_counts}, Forward Counts: {self.forward_counts}")
+            self.watched_videos.increment_duration_and_count(self.current_file, self.media_player.get_time()+skipped_time)
             self.media_player.stop()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
@@ -582,7 +602,7 @@ class MediaPlayerApp(tk.Tk):
         print("Error occurred while playing the media.")
         self.master.destroy()
     
-    def show_seassion_stats(self, video_data, session_start=timeit.default_timer()):
+    def show_seassion_stats(self, video_data, session_start=timeit.default_timer(), for_current=False):
         """
         Displays statistics for watched videos in a separate window.
 
@@ -592,7 +612,7 @@ class MediaPlayerApp(tk.Tk):
         """
         root = tk.Tk()
         start = session_start if self.session_start is None else self.session_start
-        app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color)
+        app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color, for_current=for_current)
         root.mainloop()
     
     def center_window(self):
@@ -609,6 +629,10 @@ class MediaPlayerApp(tk.Tk):
 
         # Positions the window in the center of the page.
         self.geometry("+{}+{}".format(position_right, position_down))
+
+    def reset_video_counts(self):
+        self.prev_counts = 0
+        self.forward_counts = 0
 
     def print_sessions_stats(self):
         pass

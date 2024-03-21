@@ -53,7 +53,7 @@ class VideoStatsApp:
         root.mainloop()
     """
 
-    def __init__(self, master, report_folder, video_data, session_time=0, fg="black", bg="white"):
+    def __init__(self, master, report_folder, video_data, session_time=0, fg="black", bg="white", for_current=False):
         """
         Initializes the VideoStatsApp with the specified parameters and default settings.
         Args:
@@ -69,7 +69,8 @@ class VideoStatsApp:
 
         self.master.configure(bg=bg)
         self.master.geometry("800x500")
-        self.master.protocol("WM_DELETE_WINDOW", self.on_closing)  # Set initial window size
+        if not for_current:
+            self.master.protocol("WM_DELETE_WINDOW", self.on_closing)  # Set initial window size
         self.center_window()  # Center the window on the screen
 
         # Frame to hold the heading label and the button
@@ -89,6 +90,8 @@ class VideoStatsApp:
         self.create_table()
 
     def on_closing(self):
+        # self.master.destroy()
+        # self.master.withdraw()
         self.master.quit()
 
     def create_table(self):
