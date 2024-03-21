@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## Version [2.1.2] - 2024-03-22
+
+### Added
+- functionality in `file_loader` to refresh `path(s)` if files are moved using **--update** after Path.
+- sequential search check to play media as retrieved (sequentially)
+
+### Changed
+- Calculation of Watch time with Previous and Forward Counts For More Precision.
+
+### Bug Fixes
+- Fixed Closing  Mediaplayer after Current Stats Window is Closed.
+
 ## Version [2.1.1] - 2024-03-21
 
 ### Added
