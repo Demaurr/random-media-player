@@ -257,7 +257,7 @@ class VideoFileLoader:
         for folder in folder_paths:
             try:
                 if "--update" in folder:
-                    folder = folder.replace("--update", "").strip()
+                    folder = self.normalise_path(folder.replace("--update", "").strip())
                     # folders.append(folder.replace("--update", ""))
                     self.update_folder_data_csv([folder])
                 folders.append(folder)
