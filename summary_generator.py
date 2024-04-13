@@ -1,4 +1,4 @@
-STYLE_FILE = "../Styles/style.css"
+from player_constants import STYLE_FILE
 
 class HTMLSummaryReport:
     def __init__(self, data):

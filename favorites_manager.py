@@ -1,9 +1,9 @@
 import os
 import csv
 from datetime import datetime
+from player_constants import DEFAULT_FAV
 import hashlib
 
-DEFAULT_FAV= "Files/Favorites.csv"
 
 class FavoritesManager:
     def __init__(self, fav_csv=None):

@@ -10,9 +10,7 @@ except ImportError:
 
 from datetime import datetime
 from logs_writer import LogManager
-
-CSV_FOLDER = "Files/"
-LOG_PATH = "Logs/Action_Logs.log"
+from player_constants import CSV_FOLDER, LOG_PATH
 
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""

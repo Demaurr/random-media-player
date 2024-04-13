@@ -2,8 +2,7 @@ from datetime import datetime
 import csv
 import os
 from logs_writer import LogManager
-
-LOG_PATH = "Logs/Action_Logs.log"
+from player_constants import LOG_PATH
 
 class WatchHistoryLogger:
     """A class for logging the history of watched videos."""
