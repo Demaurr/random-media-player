@@ -4,4 +4,6 @@ __pycache__/
 test_main.py
 Screentshots/Main_Screen.PNG
 Screentshots/Main_Sceenn2.PNG
+*.ipynb
+watch_analyzer.py
 *.log
