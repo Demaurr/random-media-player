@@ -4,7 +4,7 @@ FILES_FOLDER = CSV_FOLDER = "Files/" # change this to the folder where you want 
 
 LOG_PATH = "Logs/Action_Logs.log"
 FAV_PATH = "Files/fav_paths.txt"
-
+WATCHED_HISTORY_LOG_PATH = "Files/Watched_History.csv"
 
 STYLE_FILE = "../Styles/style.css"
 DEFAULT_FAV= "Files/Favorites.csv"
