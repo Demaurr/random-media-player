@@ -1,8 +1,8 @@
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
+from player_constants import FAV_PATH
 
-FAV_PATHS = "Files/fav_paths.txt"
 
 if __name__ == "__main__":
     folder_path_string = input("Enter folder path(s) separated by comma: ").strip()
@@ -12,7 +12,7 @@ if __name__ == "__main__":
             favs = FavoritesManager()
             video_files = favs.get_favorites()
         elif folder_path_string == "show favs":
-            with open("Files/fav_paths.txt", "r", encoding="utf-8") as file:
+            with open(FAV_PATH, "r", encoding="utf-8") as file:
                 reader = file.readlines()
                 # print(reader)
             folder_path_string = input("Enter folder path(s) or Your Favs: ").strip()
