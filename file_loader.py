@@ -40,7 +40,7 @@ class VideoFileLoader:
     
     @staticmethod
     def normalise_path(path):
-        return path.replace("\\", "/")
+        return path.replace("/", "\\")
     
     @staticmethod
     def hash_string(input_string, hash_length=64):
