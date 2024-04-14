@@ -85,3 +85,32 @@ class FavoritesManager:
                 if os.path.exists(path):
                     favorites.append(path)
         return favorites
+    
+    def update_path_and_hash(self):
+        updated_rows = []
+        hashes = set()
+        with open(self.fav_csv, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                # Update the Source Path by replacing "/" with "\"
+                updated_path = row['Source Path'].replace('/', '\\')
+                # Recalculate the hash based on the updated path and video name
+                updated_hash = self.hash_string(row['Video Name'] + updated_path, hash_length=32)
+                hashes.add(updated_hash)
+                # Update the row with the new path and hash
+                row['Source Path'] = updated_path
+                row['Hash'] = updated_hash
+                updated_rows.append(row)
+        print(updated_rows)
+        print(len(updated_rows))
+        print(len(hashes))
+
+        # Write the updated data back to the CSV file
+        with open(self.fav_csv, 'w', newline='', encoding='utf-8') as file:
+            writer = csv.DictWriter(file, fieldnames=reader.fieldnames)
+            writer.writeheader()
+            writer.writerows(updated_rows)
+if __name__ == "__main__":
+    # favs = FavoritesManager()
+    # favs.update_path_and_hash()
+    pass
