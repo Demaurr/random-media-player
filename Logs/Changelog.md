@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [2.2.0] - 2024-04-14
+
+### Added
+- `gui_main.py` file which doesn't require the passing of path through the cmd, instead the path can be provided through the input in the gui app.
+
+### Changed
+- Contants Setting. Now Stores the Contants in a Separate File `player_contants.py`
+- Changed Closing of Stats App from window.quit() to window.destroy()
+- Changed Closing of Mediaplayer App, causing the "(after script)" issue again(Nothing serious).
+- Changed the setting of feedback. Now using vlc's **marquee** method to display this.
+- Changed the Loading of Files by normalising paths with **\\** instead of **/**.
+
 ## Version [2.1.2] - 2024-03-22
 
 ### Added
