@@ -11,14 +11,11 @@ from watch_dictionary import WatchDict
 from video_stats import VideoStatsApp
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
-
-FILES_FOLDER = "Files/" # change this to the folder where you want to get your Watched_History.csv from.
-LOG_PATH = "Logs/Action_Logs.log"
-
+from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH
 
 class MediaPlayerApp(tk.Tk):
     
-    def __init__(self, video_files, random_select=True, video_path=None, watch_history_csv=FILES_FOLDER + "Watched_History.csv"):
+    def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
         self.ensure_folder_exists(FILES_FOLDER)
         self.get_history_csvfile(watch_history_csv)
@@ -36,7 +33,7 @@ class MediaPlayerApp(tk.Tk):
         self.forward_counts = 0
         self.random_select = random_select
         self.video_index = 0
-        self.initialize_player(video_files, video_path)
+        self.initialize_player(video_files, video_path, cur_file=current_file)
         
 
     def get_history_csvfile(self, watch_history_csv):
@@ -78,14 +75,14 @@ class MediaPlayerApp(tk.Tk):
         self.stop()  # Call the stop method when the window is closed
         # tk.Tk.quit(self)
         self.show_seassion_stats(self.get_stats())
-        print("Closing window...")
-        self.withdraw()
-        print("Window withdrawn")
-        self.quit()
-        print("Application quit")
+        # print("Closing window...")
+        # self.withdraw()
+        # print("Window withdrawn")
+        # self.quit()
+        # print("Application quit")
           
 
-    def initialize_player(self, video_files, folder_path):
+    def initialize_player(self, video_files, folder_path, cur_file=None):
         # self.fav_csv = FILES_FOLDER +"Favorites.csv"
         self.instance = vlc.Instance()
         self.media_player = self.instance.media_player_new()
@@ -93,21 +90,23 @@ class MediaPlayerApp(tk.Tk):
         self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
-        self.current_file = None
+        self.current_file = cur_file
         self.previous_file = None
         self.playing_video = False
         self.video_paused = False
         self.session_start = None
         # self.watched_videos = {}
         self.watched_videos = WatchDict()
-        if not self.random_select:
-            self.select_sequential_videos()
-        else:
-            self.select_random_video()
         self.feedback_var = tk.StringVar()
         self.feedback_label = None  # This will hold the label widget
         
         self.create_widgets()
+        if not self.random_select:
+            self.select_sequential_videos()
+        elif self.current_file is None:
+            self.select_random_video()
+        else:
+            self.play_video()
 
     def select_random_video(self):
         """Selects a random video from the list of video files."""
@@ -266,22 +265,34 @@ class MediaPlayerApp(tk.Tk):
         """Adds the currently playing video to favorites."""
         if self.current_file:
             if self.favorites_manager.add_to_favorites(self.current_file):
-                self.show_feedback(f"Added {self.current_file} to favorites")
+                # self.show_feedback(f"Added {self.current_file} to favorites")
+                self.show_marquee(f"Added {self.current_file} from favorites")
                 self.logger.update_logs(f"[ADDED] to Favorites", self.current_file)
             else:
-                self.show_feedback("Video is already in favorites!")
+                # self.show_feedback("Video is already in favorites!")
+                self.show_marquee("Video is already in favorites!")
 
     def remove_from_favorites(self, event=None):
         """Removes the currently playing video from favorites."""
         if self.current_file:
             if self.favorites_manager.delete_from_favorites(self.current_file):
-                self.show_feedback(f"Removed {self.current_file} from favorites")
+                # self.show_feedback(f"Removed {self.current_file} from favorites")
+                self.show_marquee(f"Removed {self.current_file} from favorites")
                 self.logger.update_logs(f"[DELETED] from Favorites", self.current_file)
             else:
-                self.show_feedback("Video is not in favorites!")
+                # self.show_feedback("Video is not in favorites!")
+                self.show_marquee("Video is not in favorites!")
+
+    def show_marquee(self, text):
+        self.media_player.video_set_marquee_string(vlc.VideoMarqueeOption.Text, text.encode('utf-8'))
+        self.media_player.video_set_marquee_int(vlc.VideoMarqueeOption.Enable, 1)
+        self.media_player.video_set_marquee_int(vlc.VideoMarqueeOption.Timeout, 1000)  # 10 seconds
 
     def show_feedback(self, message):
-        """Displays feedback message on top of the window."""
+        """
+        Deprecated
+        Displays feedback message on top of the window.
+        """
         # Calculate the width of the window
         window_width = self.winfo_width()
 
@@ -296,7 +307,10 @@ class MediaPlayerApp(tk.Tk):
         self.after(3000, self.clear_feedback)
 
     def clear_feedback(self):
-        """Clears the feedback message."""
+        """
+        Deprecated
+        Clears the feedback message
+        """
         self.feedback_var.set('')
         self.feedback_label.pack_forget()
         # self.feedback_label.config(textvariable='')
@@ -468,7 +482,8 @@ class MediaPlayerApp(tk.Tk):
                 self.media_player.set_hwnd(self.media_canvas.winfo_id())
                 self.media_player.play()
                 self.reset_video_counts()
-                self.show_feedback(f"Playing: {self.current_file}")
+                # self.show_feedback(f"Playing: {self.current_file}")
+                self.show_marquee(f"Playing: {self.current_file}")
                 self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
                 self.playing_video = True
                 self.watched_videos.add_watch(self.current_file)
@@ -610,6 +625,9 @@ class MediaPlayerApp(tk.Tk):
             video_data (list): A list containing statistics for watched videos.
                             Each element in the list is a dictionary with keys 'File Name', 'Duration Watched', 'Count', and 'Folder'.
         """
+        if not for_current:
+            self.destroy()
+            self.quit()
         root = tk.Tk()
         start = session_start if self.session_start is None else self.session_start
         app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color, for_current=for_current)
