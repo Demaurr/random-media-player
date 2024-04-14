@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots\Gui_Main_Screen.PNG)
+![Main Screen Page](Screenshots/Gui_Main_Screen.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
