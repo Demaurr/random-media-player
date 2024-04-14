@@ -90,9 +90,11 @@ class VideoStatsApp:
         self.create_table()
 
     def on_closing(self):
-        # self.master.destroy()
+        self.master.destroy()
         # self.master.withdraw()
-        self.master.quit()
+        # self.master.withdraw()
+        # self.master.quit()
+        # self.master.quit()
 
     def create_table(self):
         """
@@ -123,7 +125,6 @@ class VideoStatsApp:
 
         self.tree.pack(side="left", fill="both", expand=True, padx=20, pady=10)
 
-        # Add a vertical scrollbar
         scrollbar = ttk.Scrollbar(self.master, orient="vertical", command=self.tree.yview)
         scrollbar.pack(side="right", fill="y")
 
@@ -134,7 +135,7 @@ class VideoStatsApp:
         Centers the application window on the screen.
         """
         window_width = 800
-        window_height = 600
+        window_height = 500
 
         position_right = int(self.master.winfo_screenwidth() / 2 - window_width / 2)
         position_down = int(self.master.winfo_screenheight() / 2 - window_height / 2)
@@ -177,6 +178,6 @@ if __name__ == "__main__":
     ]
 
     root = tk.Tk()
-    app = VideoStatsApp(root, video_data)
+    app = VideoStatsApp(root, "Files/", video_data)
     root.mainloop()
 
