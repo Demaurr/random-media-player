@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Main_Screen4.PNG)
+![Main Screen Page](Screenshots\Gui_Main_Screen.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -45,16 +45,21 @@ Random Video Player to Keep Track of Your Watchtime for local Media files. The v
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
 
 ## Usage
-*   Change the ***CONSTANT VARIABLES*** in `videoplayer.py`, `summary_generator.py` to set the Path you want to store record files.
-*   (Optional) create a `file_info.txt` and store a path for **Watched_History.csv** to be stored someother place.
-*   Then Run `main.py`, through `py main.py`, to launch the application.
+*   Change the ***CONSTANT VARIABLES*** in `player_constants.py` and defined you PATHS for respective files.
+### For Using **gui_main.py** (Optional)
+*   (Optional) Run `gui_main.py` if you don't want to interact through cmd and provide path in the app's search.
+*   (Optional) after `gui_main.py` double-click on any file you want to start player from.
+*   All The functionalities working with main.py would Also Work with this (like Screen Captures, Adding Favs etc.)
+
+### For Using main.py
+*   Run `main.py`, through `py main.py`, to launch the application.
 *   Provide a **Folder Path(s)** To Search media files under the Path **cmd** as input.
 *   Use the interface to select video files from your directories.
 *   Control video playback using the buttons provided (play, pause, rewind, fast forward, etc.).
 *   **Current Stats** button will show the Statistic uptill that point.
 *   **Play** button will restart the current video.
-*   Save Screen Capture By Using *Keyboard-Shortcut* **Shift-s**.
-*   Add or Remove Files From the Favorites using `Fav +` and `Fav -` Buttons Respectively
+*   Save Screen Capture By Using *Keyboard-Shortcut* **Shift-S**.
+*   Add or Remove Files From the Favorites using `Fav +` and `Fav -` Buttons Respectively, Or Use Keyboard Shorcuts (defined [here](Documentations\Documentation.md))
 *   Close the application when finished.
 *   After closing The Sessions Watch Statistics Window will be Shown.
 *   These Statistics can be saved by clicking on **Generate Summary** Button.
@@ -65,6 +70,6 @@ Contributions to the Media Player Application are welcome! If you have any sugge
 
 ## Acknowledgments
 
-Special thanks to the developers of the Tkinter and python-vlc libraries and [makeuseof](https://www.makeuseof.com/python-video-media-player-how-to-build/) site for their contributions to open-source software.
+Special thanks to the developers of the Tkinter and python-vlc libraries and [makeuseof](https://www.makeuseof.com/python-video-media-player-how-to-build/) for their contributions to open-source software.
 
 
