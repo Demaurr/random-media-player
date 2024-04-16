@@ -32,7 +32,7 @@ class MediaPlayerApp(tk.Tk):
         self.prev_counts = 0
         self.forward_counts = 0
         self.random_select = random_select
-        self.video_index = 0
+        self.video_index = 0 if not current_file else video_files.index(current_file)
         self.initialize_player(video_files, video_path, cur_file=current_file)
         
 
@@ -101,11 +101,12 @@ class MediaPlayerApp(tk.Tk):
         self.feedback_label = None  # This will hold the label widget
         
         self.create_widgets()
-        if not self.random_select:
-            self.select_sequential_videos()
-        elif self.current_file is None:
+        if self.random_select:
             self.select_random_video()
-        else:
+        elif not self.random_select:
+            self.select_sequential_videos()
+        if cur_file:
+            self.current_file = cur_file
             self.play_video()
 
     def select_random_video(self):
