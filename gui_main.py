@@ -26,26 +26,39 @@ class FileExplorerApp:
     def _keybinding(self):
         # Bind Enter key to on_enter_pressed method
         self.entry.bind('<Return>', self.on_enter_pressed)
+        self.search_entry.bind('<Return>', self.on_search_pressed)
         # self.root.bind('<Double-1>', self.on_double_click)
         self.file_table.bind('<Double-1>', self.on_double_click)
         self.file_table.bind('<Return>', self.on_double_click)
 
     def create_widgets(self):
         # Create heading label
-        self.heading_label = tk.Label(self.root, text="Random Media Player", bg="black", fg="red", font=("Open Sans", 40, "bold"))
+        self.heading_label = tk.Label(self.root, text="Random Media Player", bg="black", fg="red", font=("Open Sans", 44, "bold"))
         self.heading_label.pack(side="top", pady=(10, 5))
 
         # Create search frame
-        self.search_frame = tk.Frame(self.root, bg="black")
-        self.search_frame.pack(side="top", pady=20)
+        self.input_frame = tk.Frame(self.root, bg="black")
+        self.input_frame.pack(side="top", pady=(15, 5))
 
         # Create search bar
-        self.entry = tk.Entry(self.search_frame, bg="white", fg="black", width=60, bd=6, relief=tk.FLAT, font=("Arial", 12))
+        self.entry = tk.Entry(self.input_frame, bg="white", fg="black", width=60, bd=6, relief=tk.FLAT, font=("Arial", 12))
         self.entry.pack(side="left", padx=(10, 5), pady=5)
 
         # Create enter button
-        self.enter_button = tk.Button(self.search_frame, text="Get", command=self.on_enter_pressed, bg="red", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
+        self.enter_button = tk.Button(self.input_frame, text="Get", command=self.on_enter_pressed, bg="red", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
         self.enter_button.pack(side="left", padx=(0, 10), pady=5)
+
+        # Create search frame
+        self.search_frame = tk.Frame(self.root, bg="black")
+        self.search_frame.pack(side="top", pady=(0, 10))
+
+        # Create search bar
+        self.search_entry = tk.Entry(self.search_frame, bg="white", fg="black", width=30, bd=2, relief=tk.FLAT, font=("Arial", 12))
+        self.search_entry.pack(side="left", padx=(10, 5), pady=0)
+
+        # Create search button
+        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
+        self.search_button.pack(side="left", padx=(0, 10), pady=0)
 
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
@@ -75,15 +88,18 @@ class FileExplorerApp:
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
         file_list = []
+        self.file_path = []
         for root, dirs, files in os.walk(directory):
             for file in files:
                 file_path = os.path.join(root, file)
                 # tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)  # Apply alternate colors to rows
                 # self.file_table.insert("", tk.END, values=(file, file_path), tags=tags)
                 file_list.append((file, file_path))
+                self.file_path.append(file_path)
         self.insert_to_table(file_list)
 
     def file_path_tuple(self, files: list):
+        """converts the video paths list to list of tuples contaiting filenaem, filepath"""
         temp_files = []
         for file in files:
             temp_files.append((os.path.basename(file),file))
@@ -119,16 +135,45 @@ class FileExplorerApp:
         print(f"Total Videos Found: {len(self.video_files)}")
         self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
 
+    def on_search_pressed(self, event=None):
+        query = self.search_entry.get().lower()
+        self.file_table.delete(*self.file_table.get_children())
+        file_list = []
+        try:
+            for file in self.video_files:
+                if query in file.lower():  # Check if query matches file name
+                    file_name = os.path.basename(file)
+                    file_list.append((file_name, file))
+            print(f"Total Files for {query}: {len(file_list)}")
+            self.insert_to_table(sorted(file_list))
+        except AttributeError:
+            print("No videos found to search from.")
+        except Exception as e:
+            print(f"An Error {e} Occurred")
+
     def on_double_click(self, event=None):
         item = self.file_table.selection()[0]
         file_path = self.file_table.item(item, "values")[1]
-        if self.video_files:
-            print(f"Total Videos Found: {len(self.video_files)}")
-            app = MediaPlayerApp(self.video_files, current_file=file_path,random_select=True)
+        self.files = sorted(self.get_files_from_table())
+        # if self.video_files:
+        if self.files:
+            print(f"Total Videos Found: {len(self.files)}")
+            app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
             app.update_video_progress()
             app.mainloop()
         else:
             print("No video files found in the specified folder path(s).")
+
+    def get_files_from_table(self):
+        """
+        Get file paths from the file_table.
+        Returns a list of file paths.
+        """
+        file_paths = []
+        for item in self.file_table.get_children():
+            file_path = self.file_table.item(item, "values")[1]
+            file_paths.append(file_path)
+        return file_paths
 
 if __name__ == "__main__":
     root = tk.Tk()
