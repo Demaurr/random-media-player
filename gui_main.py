@@ -48,7 +48,7 @@ class FileExplorerApp:
         self.entry.pack(side="left", padx=(10, 5), pady=5)
 
         # Create enter button
-        self.enter_button = tk.Button(self.input_frame, text="Search", command=self.on_enter_pressed, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
+        self.enter_button = tk.Button(self.input_frame, text="Get", command=self.on_enter_pressed, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
         self.enter_button.pack(side="left", padx=(0, 10), pady=5)
 
         # Create search frame
