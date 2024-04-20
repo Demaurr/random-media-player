@@ -7,7 +7,7 @@ LOG_PATH = "Logs\\Action_Logs.log"
 FAV_PATH = "Files\\fav_paths.txt"
 WATCHED_HISTORY_LOG_PATH = "Files\\Watched_History.csv"
 
-STYLE_FILE = "..\\Styles\\style.css"
+STYLE_FILE = "..\\..\\Styles\style.css"
 DEFAULT_FAV= "Files\\Favorites.csv"
 
 
