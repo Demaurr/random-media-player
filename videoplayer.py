@@ -11,13 +11,15 @@ from watch_dictionary import WatchDict
 from video_stats import VideoStatsApp
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
-from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH
+from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH, SCREENSHOTS_FOLDER, REPORTS_FOLDER
 
 class MediaPlayerApp(tk.Tk):
     
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
         self.ensure_folder_exists(FILES_FOLDER)
+        self.ensure_folder_exists(SCREENSHOTS_FOLDER)
+        self.ensure_folder_exists(REPORTS_FOLDER)
         self.get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
         self.logger = LogManager(LOG_PATH)
@@ -33,6 +35,7 @@ class MediaPlayerApp(tk.Tk):
         self.forward_counts = 0
         self.random_select = random_select
         self.video_index = 0 if not current_file else video_files.index(current_file)
+        self._keybinding()
         self.initialize_player(video_files, video_path, cur_file=current_file)
         
 
@@ -107,6 +110,7 @@ class MediaPlayerApp(tk.Tk):
             self.select_sequential_videos()
         if cur_file:
             self.current_file = cur_file
+        if self.video_files:
             self.play_video()
 
     def select_random_video(self):
@@ -123,11 +127,11 @@ class MediaPlayerApp(tk.Tk):
     def create_widgets(self):
         """Creates the GUI elements for the media player."""
         self.media_canvas = tk.Canvas(self, bg="black", width=800, height=400)
-        self.media_canvas.pack(pady=10, fill=tk.BOTH, expand=True)
+        self.media_canvas.pack(pady=(5, 0), fill=tk.BOTH, expand=True)
 
         # Frame to contain control buttons and duration label
         control_frame = tk.Frame(self, bg="black")
-        control_frame.pack(pady=0, fill=tk.X)
+        control_frame.pack(pady=(5, 0), fill=tk.X)
 
         self.feedback_label = tk.Label(
             self,
@@ -241,10 +245,14 @@ class MediaPlayerApp(tk.Tk):
         self.progress_bar = VideoProgressBar(
             self, self.set_video_position, bg=self.bg_color, highlightthickness=0
         )
-        self.progress_bar.pack(side=tk.LEFT, padx=5, pady=5)
+        self.progress_bar.pack(side=tk.LEFT, padx=5, pady=0)
         self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=5)
+        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
 
+    def _keybinding(self):
+        """
+        All the keys Shortcuts binded into the player
+        """
         self.bind("<Shift-KeyPress-Left>", self.play_previous)
         self.bind("<KeyPress-Left>", self.rewind)
         self.bind("<KeyPress-space>", self.pause_video)
@@ -257,10 +265,13 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<KeyPress-f>", self.toggle_fullscreen)
         self.bind("<KeyPress-F>", self.toggle_fullscreen)
         self.bind("<Shift-KeyPress-S>", self.save_screenshot)
+        self.bind("<Shift-KeyPress-s>", self.save_screenshot)
         self.bind("<Control-f>", self.add_to_favorites)
         self.bind("<Control-F>", self.add_to_favorites)
         self.bind("<Control-d>", self.remove_from_favorites)
         self.bind("<Control-D>", self.remove_from_favorites)
+        self.bind("<Control-Right>", self.play_im_next)
+        self.bind("<Control-Left>", self.play_im_previous)
         
     def add_to_favorites(self, event=None):
         """Adds the currently playing video to favorites."""
@@ -331,7 +342,8 @@ class MediaPlayerApp(tk.Tk):
             # Pack widgets with custom padding individually
             # self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
             self.progress_bar.pack(side=tk.LEFT, padx=5, pady=0)
-            self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=5)
+            self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
+            # self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
         else:
             for widget in widgets_with_default_padding:
                 widget.pack_forget()
@@ -340,6 +352,7 @@ class MediaPlayerApp(tk.Tk):
             # self.time_label.pack_forget()
             self.progress_bar.pack_forget()
             self.volume_bar.pack_forget()
+            # self.time_label.pack_forget()
 
 
 
@@ -358,10 +371,10 @@ class MediaPlayerApp(tk.Tk):
 
     def save_screenshot(self, event):
         """Saves a screenshot of the video frame."""
-        self.ensure_folder_exists("Files/Screenshots/")
+        # self.ensure_folder_exists(SCREENSHOTS_FOLDER)
         filename = self.current_file.split('\\')[-1]
-        length = self.get_duration_str
-        screenshot_path = f"Files/Screenshots/screenshot_{filename}_{self.media_player.get_time()}.png"
+        # length = self.get_duration_str
+        screenshot_path = f"{SCREENSHOTS_FOLDER}screenshot_{filename}_{self.media_player.get_time()}.png"
         self.media_player.video_take_snapshot(0, screenshot_path, 0, 0)
 
     def volume_increase(self, event):
@@ -369,6 +382,8 @@ class MediaPlayerApp(tk.Tk):
         current_volume = self.media_player.audio_get_volume()
         new_volume = min(current_volume + 5, 100)  # Increase volume by 5%, up to 100%
         # self.media_player.audio_set_volume(new_volume)
+        self.media_player.audio_set_volume(int(new_volume))
+        self.show_marquee(f"Volume: {new_volume}")
         self.volume_bar.set(new_volume)  # Update volume bar
 
     def volume_decrease(self, event):
@@ -376,6 +391,8 @@ class MediaPlayerApp(tk.Tk):
         current_volume = self.media_player.audio_get_volume()
         new_volume = max(current_volume - 5, 0)  # Decrease volume by 10%, down to 0%
         # self.media_player.audio_set_volume(new_volume)
+        self.media_player.audio_set_volume(int(new_volume))
+        self.show_marquee(f"Volume: {new_volume}")
         self.volume_bar.set(new_volume)  # Update volume bar
 
 
@@ -470,6 +487,27 @@ class MediaPlayerApp(tk.Tk):
                 video_files.append(os.path.join(folder_path, file))
         return video_files
 
+    def play_im_next(self, event=None):
+        if self.random_select:
+            self.random_select = False
+            current_index = self.video_files.index(self.current_file)
+            self.video_index = current_index + 1 if current_index < len(self.video_files) else 0
+            self.play_next()
+            self.random_select = True
+        else:
+            self.play_next()
+    
+    def play_im_previous(self, event=None):
+        if self.random_select:
+            self.random_select = False
+            current_index = self.video_files.index(self.current_file) 
+            self.previous_file = self.video_files[current_index - 1] if current_index > 0 else self.video_files[len(self.video_files) - 1]
+            self.play_previous()
+            self.random_select = True
+        else:
+            self.play_next()
+        
+
     def play_video(self):
         """
         Plays the currently selected video file.
@@ -483,13 +521,11 @@ class MediaPlayerApp(tk.Tk):
                 self.media_player.set_hwnd(self.media_canvas.winfo_id())
                 self.media_player.play()
                 self.reset_video_counts()
-                # self.show_feedback(f"Playing: {self.current_file}")
                 self.show_marquee(f"Playing: {self.current_file}")
                 self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
                 self.playing_video = True
                 self.watched_videos.add_watch(self.current_file)
                 self.progress_bar.set(0)
-                # self.update_video_progress()
                 
             else:
                 print(f"The file Doesn't Exists: {self.current_file}")
@@ -513,6 +549,7 @@ class MediaPlayerApp(tk.Tk):
             self.forward_counts += 1
             current_time = self.media_player.get_time() + 10000
             self.media_player.set_time(current_time)
+            self.show_marquee(f"{self.current_time_str} / {self.total_duration_str}")
             
 
     def rewind(self, event=None):
@@ -523,6 +560,7 @@ class MediaPlayerApp(tk.Tk):
             self.prev_counts += 1
             current_time = self.media_player.get_time() - 5000
             self.media_player.set_time(current_time)
+            self.show_marquee(f"{self.current_time_str} / {self.total_duration_str}")
 
     def pause_video(self, event=None):
         """
@@ -588,16 +626,16 @@ class MediaPlayerApp(tk.Tk):
             # progress_percentage = (current_time / total_duration) * 100
             # self.progress_bar.set(progress_percentage)
 
-            current_time_str = str(timedelta(milliseconds=current_time))[:-3]
-            total_duration_str = str(timedelta(milliseconds=total_duration))[:-3]
-            self.time_label.config(text=f"{current_time_str} / {total_duration_str}")
+            self.current_time_str = str(timedelta(milliseconds=current_time))[:-3]
+            self.total_duration_str = str(timedelta(milliseconds=total_duration))[:-3]
+            self.time_label.config(text=f"{self.current_time_str} / {self.total_duration_str}")
             # print(total_duration, current_time)
             # if total_duration - current_time <= 500 and (total_duration != 0 or not self.video_paused):
             # if total_duration - current_time <= 500 and (total_duration != 0):
                 # print(total_duration, current_time)
                 # return
                 # return
-        self.after(1000, self.update_video_progress)
+        self.after(100, self.update_video_progress)
 
     def get_stats(self):
         """
@@ -631,7 +669,7 @@ class MediaPlayerApp(tk.Tk):
             self.quit()
         root = tk.Tk()
         start = session_start if self.session_start is None else self.session_start
-        app = VideoStatsApp(root, FILES_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color, for_current=for_current)
+        app = VideoStatsApp(root, REPORTS_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color, for_current=for_current)
         root.mainloop()
     
     def center_window(self):
