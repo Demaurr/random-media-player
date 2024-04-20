@@ -2,17 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [2.3.0] - 2024-04-20
+
+## Added
+- Added support for *.wmv* file-type.
+- Added Search Bar for filtering videos returned from the given path in `gui_main.py`.
+- Added Marquee Display for media functionalities and volume inc/dec.
+- Added Playing Immediate Next/Previous file in the returned files_list in `gui_main.py`.
+- Added Keyboard Shorcuts For `gui_main.py` to directly play a random file on search using *`Ctrl+Enter`*.
+
+## Changed
+- The Paths in `player_constants.py` to have **\\** rather than **/**.
+- The Logic of random and sequential playing.
+
+## Fixed
+- Volume Controls in FullScreen Mode.
+
 ## Version [2.2.0] - 2024-04-14
 
 ### Added
 - `gui_main.py` file which doesn't require the passing of path through the cmd, instead the path can be provided through the input in the gui app.
 
 ### Changed
-- Contants Setting. Now Stores the Contants in a Separate File `player_contants.py`
-- Changed Closing of Stats App from window.quit() to window.destroy()
-- Changed Closing of Mediaplayer App, causing the "(after script)" issue again(Nothing serious).
-- Changed the setting of feedback. Now using vlc's **marquee** method to display this.
-- Changed the Loading of Files by normalising paths with **\\** instead of **/**.
+- Contants Setting. Now Stores the Constants in a Separate File `player_contants.py`
+- Closing of Stats App from window.quit() to window.destroy()
+- Closing of Mediaplayer App, causing the "(after script)" issue again(Nothing serious).
+- The setting of feedback. Now using vlc's **marquee** method to display this.
+- The Loading of Files by normalising paths with **\\** instead of **/**.
 
 ## Version [2.1.2] - 2024-03-22
 
