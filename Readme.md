@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Gui_Main_Screen.PNG)
+![Main Screen Page](Screenshots/Main_Screen5.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -11,7 +11,7 @@
 
 
 ## Introduction
-Random Video Player to Keep Track of Your Watchtime for local Media files. The video extensions supported **avi, mp4, mkv, m4v, webm**
+Random Video Player to Keep Track of Your Watchtime for local Media Consumption. The video extensions supported **avi, mp4, mkv, m4v, webm, wvm**
 
 
 ## Installation
@@ -46,20 +46,23 @@ Random Video Player to Keep Track of Your Watchtime for local Media files. The v
 
 ## Usage
 *   Change the ***CONSTANT VARIABLES*** in `player_constants.py` and defined you PATHS for respective files.
-### For Using **gui_main.py** (Optional)
-*   (Optional) Run `gui_main.py` if you don't want to interact through cmd and provide path in the app's search.
-*   (Optional) after `gui_main.py` double-click on any file you want to start player from.
+### For Using **gui_main.py** (Recommended)
+*   Run `gui_main.py` if you don't want to interact through cmd and provide **path(s)** in the app's search entry in order to list all the Media Under it.
+*   (Optional) You can input **play favs** in order to list/play from your saved favorites.
+*   After `gui_main.py` double-click on any file you want to start player from.
 *   All The functionalities working with main.py would Also Work with this (like Screen Captures, Adding Favs etc.)
+*   Use the Keyboard Shortcuts Stated in Documentation for easier Playing Controls.
 
 ### For Using main.py
 *   Run `main.py`, through `py main.py`, to launch the application.
 *   Provide a **Folder Path(s)** To Search media files under the Path **cmd** as input.
-*   Use the interface to select video files from your directories.
+*   (Optional) input **play favs** to start playing random media from your saved favorites.
+*   Use the cmd interface to select video files from your directories.
 *   Control video playback using the buttons provided (play, pause, rewind, fast forward, etc.).
 *   **Current Stats** button will show the Statistic uptill that point.
 *   **Play** button will restart the current video.
 *   Save Screen Capture By Using *Keyboard-Shortcut* **Shift-S**.
-*   Add or Remove Files From the Favorites using `Fav +` and `Fav -` Buttons Respectively, Or Use Keyboard Shorcuts (defined [here](Documentations\Documentation.md))
+*   Add or Remove Files From the Favorites using `Fav +` and `Fav -` Buttons Respectively, Or Use Keyboard Shorcuts (defined [here](Documentations/documentation.md))
 *   Close the application when finished.
 *   After closing The Sessions Watch Statistics Window will be Shown.
 *   These Statistics can be saved by clicking on **Generate Summary** Button.
