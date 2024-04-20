@@ -30,6 +30,9 @@ class FileExplorerApp:
         # self.root.bind('<Double-1>', self.on_double_click)
         self.file_table.bind('<Double-1>', self.on_double_click)
         self.file_table.bind('<Return>', self.on_double_click)
+        self.entry.bind("<Control-Return>", self.random_play)
+        self.search_entry.bind("<Control-Return>", self.random_play)
+
 
     def create_widgets(self):
         # Create heading label
@@ -45,7 +48,7 @@ class FileExplorerApp:
         self.entry.pack(side="left", padx=(10, 5), pady=5)
 
         # Create enter button
-        self.enter_button = tk.Button(self.input_frame, text="Get", command=self.on_enter_pressed, bg="red", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
+        self.enter_button = tk.Button(self.input_frame, text="Search", command=self.on_enter_pressed, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
         self.enter_button.pack(side="left", padx=(0, 10), pady=5)
 
         # Create search frame
@@ -53,7 +56,7 @@ class FileExplorerApp:
         self.search_frame.pack(side="top", pady=(0, 10))
 
         # Create search bar
-        self.search_entry = tk.Entry(self.search_frame, bg="white", fg="black", width=30, bd=2, relief=tk.FLAT, font=("Arial", 12))
+        self.search_entry = tk.Entry(self.search_frame, bg="white", fg="black", width=30, bd=3, relief=tk.FLAT, font=("Arial", 12))
         self.search_entry.pack(side="left", padx=(10, 5), pady=0)
 
         # Create search button
@@ -159,6 +162,16 @@ class FileExplorerApp:
         if self.files:
             print(f"Total Videos Found: {len(self.files)}")
             app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
+            app.update_video_progress()
+            app.mainloop()
+        else:
+            print("No video files found in the specified folder path(s).")
+
+    def random_play(self, event=None):
+        self.on_enter_pressed()
+        self.files = sorted(self.get_files_from_table())
+        if self.files:
+            app = MediaPlayerApp(self.files, random_select=True)
             app.update_video_progress()
             app.mainloop()
         else:
