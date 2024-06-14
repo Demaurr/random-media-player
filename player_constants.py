@@ -2,6 +2,7 @@
 FILES_FOLDER = CSV_FOLDER = "Files\\" # change this to the folder where you want to get your Watched_History.csv from.
 SCREENSHOTS_FOLDER = "Files\\Screenshots\\"
 REPORTS_FOLDER = "Files\\Reports\\"
+FOLDER_LOGS = CSV_FOLDER + "\\Log_Folders.csv"
 
 LOG_PATH = "Logs\\Action_Logs.log"
 FAV_PATH = "Files\\fav_paths.txt"
