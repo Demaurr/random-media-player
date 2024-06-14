@@ -1,10 +1,11 @@
 import os
+import csv
 import tkinter as tk
 from tkinter import ttk
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
-from player_constants import FAV_PATH
+from player_constants import FAV_PATH, FOLDER_LOGS
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -88,6 +89,10 @@ class FileExplorerApp:
         # Configure Treeview to use vertical scrollbar
         self.file_table.configure(yscrollcommand=self.scrollbar.set)
 
+    def update_entry_text(self, text):
+        self.entry.delete(0, tk.END)  # Clear the current text in the entry
+        self.entry.insert(0, text)    # Insert the new text
+
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
         file_list = []
@@ -117,13 +122,19 @@ class FileExplorerApp:
     def on_enter_pressed(self, event=None):
         folder_path_string = self.entry.get()
         vf_loader = VideoFileLoader()
+        self.play_folder = False
         try:
             if folder_path_string == "play favs":
                 favs = FavoritesManager()
                 self.video_files = sorted(favs.get_favorites())
-            elif folder_path_string == "show favs":
-                with open(FAV_PATH, "r", encoding="utf-8") as file:
-                    reader = file.readlines()
+            elif folder_path_string == "show paths":
+                self.play_folder = True
+                with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
+                    reader = csv.DictReader(file)
+                    self.folders = list(set((row["Folder Path"], row["Csv Path"]) for row in reader))
+                self.video_files = []
+                # print(self.folders)
+                
                     # print(reader)
                 # folder_path_string = input("Enter folder path(s) or Your Favs: ").strip()
                 # self.video_files = vf_loader.start_here(folder_path_string)
@@ -135,8 +146,12 @@ class FileExplorerApp:
         except Exception as e:
             print(f"An Unknown Error Occurred {e}")
             return
-        print(f"Total Videos Found: {len(self.video_files)}")
-        self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+        if not self.play_folder:
+            print(f"Total Videos Found: {len(self.video_files)}")
+            self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+        elif self.play_folder:
+            print(f"Total Folders in Search History: {len(self.folders)}")
+            self.insert_to_table(sorted(self.folders))
 
     def on_search_pressed(self, event=None):
         query = self.search_entry.get().lower()
@@ -157,15 +172,24 @@ class FileExplorerApp:
     def on_double_click(self, event=None):
         item = self.file_table.selection()[0]
         file_path = self.file_table.item(item, "values")[1]
-        self.files = sorted(self.get_files_from_table())
-        # if self.video_files:
-        if self.files:
-            print(f"Total Videos Found: {len(self.files)}")
-            app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
-            app.update_video_progress()
-            app.mainloop()
+        if self.play_folder:
+            folder_path = self.file_table.item(item, "values")[0]
+            self.play_folder = False
+            vf_load = VideoFileLoader()
+            self.video_files = vf_load.start_here(file_path)
+            print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
+            self.update_entry_text(folder_path)
+            self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
         else:
-            print("No video files found in the specified folder path(s).")
+            self.files = sorted(self.get_files_from_table())
+            # if self.video_files:
+            if self.files:
+                print(f"Total Videos Found: {len(self.files)}")
+                app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
+                app.update_video_progress()
+                app.mainloop()
+            else:
+                print("No video files found in the specified folder path(s).")
 
     def random_play(self, event=None):
         self.on_enter_pressed()
