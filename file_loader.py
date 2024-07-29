@@ -10,7 +10,7 @@ except ImportError:
 
 from datetime import datetime
 from logs_writer import LogManager
-from player_constants import CSV_FOLDER, LOG_PATH
+from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_FOLDER
 
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""
@@ -28,6 +28,12 @@ class VideoFileLoader:
         self.csv_path = os.path.join(self.csv_folder, CSV_FOLDER, "Log_Folders.csv")
         self.refresh = []
         self.logger = LogManager(LOG_PATH)
+
+    @staticmethod
+    def load_image_files():
+        stats = filestatser.FileStatsCollector(SCREENSHOTS_FOLDER, media_extensions=[".jpeg", ".jpg", ".PNG", ".png", ".JPG"], all_files=False)
+        image_files = [file["Source Folder"] + "/" + file["File Name"] for file in stats.file_stats]
+        return image_files
 
     @staticmethod
     def are_paths_same(path1, path2):
