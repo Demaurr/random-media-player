@@ -1,11 +1,12 @@
 import os
 import csv
 import tkinter as tk
-from tkinter import ttk
+from tkinter import Toplevel, ttk
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
-from player_constants import FAV_PATH, FOLDER_LOGS
+from image_player import ImageViewer
+from player_constants import FAV_PATH, FOLDER_LOGS, SCREENSHOTS_FOLDER
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -13,6 +14,8 @@ class FileExplorerApp:
         self.root.title("MediaPlayer")
         self.root.configure(bg="black")
         self.root.geometry("900x600")
+        self.play_images = False
+        self.play_folder = False
         self.center_window()
         self.create_widgets()
         self._keybinding()
@@ -62,7 +65,10 @@ class FileExplorerApp:
 
         # Create search button
         self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
-        self.search_button.pack(side="left", padx=(0, 10), pady=0)
+        self.search_button.pack(side="left", padx=(0, 5), pady=0)
+
+        self.show_caps = tk.Button(self.search_frame, text="Caps", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"),width=7, bd=0.5, relief=tk.RAISED)
+        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
 
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
@@ -158,14 +164,16 @@ class FileExplorerApp:
         self.file_table.delete(*self.file_table.get_children())
         file_list = []
         try:
-            for file in self.video_files:
+            search_files = self.image_files if self.play_images else self.video_files
+            for file in search_files:
                 if query in file.lower():  # Check if query matches file name
                     file_name = os.path.basename(file)
                     file_list.append((file_name, file))
             print(f"Total Files for {query}: {len(file_list)}")
             self.insert_to_table(sorted(file_list))
-        except AttributeError:
+        except AttributeError as e:
             print("No videos found to search from.")
+            print(f"An Exception is raised {e}")
         except Exception as e:
             print(f"An Error {e} Occurred")
 
@@ -180,6 +188,15 @@ class FileExplorerApp:
             print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
             self.update_entry_text(folder_path)
             self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+        elif self.play_images:
+            viewer_window = Toplevel(self.root)
+            viewer_window.title("Image Viewer")
+            self.play_images = False
+            image_viewer_width = 900
+            image_viewer_height = 600
+            # ImageViewer instance with the specified width and height
+            ImageViewer(viewer_window, self.image_files,index=self.image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
+
         else:
             self.files = sorted(self.get_files_from_table())
             # if self.video_files:
@@ -211,7 +228,14 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[1]
             file_paths.append(file_path)
         return file_paths
+    
+    def display_caps(self):
+        self.play_images = True
+        self.image_files = VideoFileLoader.load_image_files()
+        self.update_entry_text(SCREENSHOTS_FOLDER)
+        self.insert_to_table(self.file_path_tuple(self.image_files))
 
+        
 if __name__ == "__main__":
     root = tk.Tk()
     app = FileExplorerApp(root)
