@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Main_Screen5.PNG)
+![Main Screen Page](Screenshots/Gui_Main_Screen2.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -41,7 +41,8 @@ Random Video Player to Keep Track of Your Watchtime for local Media Consumption.
 - **Playback Controls**: Provides controls for play, pause, stop, fast-forward, and rewind.
 - **Saving Favorites**: Save Favorite Media or Screen Capture in Your Defined Folder.
 - **Watch History**: Keeps track of watched videos and their playback durations.
-- **Statistics**: Displays statistics on watched videos, including total duration watched and frequency of playback.
+- **Image Viewing**: View Screen Captures in a Separate Image Viewer.
+- **Statistics**(TBA): Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
 
 ## Usage
@@ -49,11 +50,12 @@ Random Video Player to Keep Track of Your Watchtime for local Media Consumption.
 ### For Using **gui_main.py** (Recommended)
 *   Run `gui_main.py` if you don't want to interact through cmd and provide **path(s)** in the app's search entry in order to list all the Media Under it.
 *   (Optional) You can input **play favs** in order to list/play from your saved favorites.
+* Viewing the Images from Your Stated Folder ***default is SCREENSHOTS_FOLDER***.
 *   After `gui_main.py` double-click on any file you want to start player from.
 *   All The functionalities working with main.py would Also Work with this (like Screen Captures, Adding Favs etc.)
 *   Use the Keyboard Shortcuts Stated in Documentation for easier Playing Controls.
 
-### For Using main.py
+### For Using main.py (Deprecated)
 *   Run `main.py`, through `py main.py`, to launch the application.
 *   Provide a **Folder Path(s)** To Search media files under the Path **cmd** as input.
 *   (Optional) input **play favs** to start playing random media from your saved favorites.
