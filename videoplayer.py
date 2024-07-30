@@ -548,8 +548,9 @@ class MediaPlayerApp(tk.Tk):
         if self.playing_video:
             self.forward_counts += 1
             current_time = self.media_player.get_time() + 10000
+            current_time_str = str(timedelta(milliseconds=current_time))[:-3]
             self.media_player.set_time(current_time)
-            self.show_marquee(f"{self.current_time_str} / {self.total_duration_str}")
+            self.show_marquee(f"{current_time_str} / {self.total_duration_str}")
             
 
     def rewind(self, event=None):
