@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [2.5.0] 2024-7-30
+
+## Added
+- An Image Player to View Saved Image Captures from the Videos through the Class ImageViewer in `image_player.py`.
+- An Static method in ***file_loader.py*** to get Screenshots(Captures) files from the Screenshots folder defined in ***player_constants.py***.
+- Added a Separate Button in `Videoplayer.py` to Directly Access the Screen Captures from the gui and display all the File in the File/Folder table.
+
+## Updated
+- The on_double_click, on_search_pressed and on_enter_pressed methods to comply with the image viewing and searching options.
+
+## Version [2.4.1] - 2024-06-15
+
+## Added
+- A Functionality to Show Previously Recorded/Searched Paths For Ease of Displaying and Playing videos from it.
+- A method update_entry() to update the entry input box with a given text value.
+- A Seperate Log_Folders constant to access this Folder Log File from anywhere easily.
+
+## Updated
+- The on_double_click method to comply with the show paths options and display the videos from the path through double click or ```Return``` Press.
+
+## Fixed
+- Displaying of Duration in the Marquee when user forwards or backwards a video. This now displayes the changed Duration Correctly.
+
 ## Version [2.3.0] - 2024-04-20
 
 ## Added
