@@ -515,7 +515,8 @@ class MediaPlayerApp(tk.Tk):
         # print(self.winfo_width())
         try:
             if os.path.exists(self.current_file):
-                self.title(self.current_file.split("\\")[-1])
+                title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
+                self.title(title)
                 media = self.instance.media_new(self.current_file)
                 self.media_player.set_media(media)
                 self.media_player.set_hwnd(self.media_canvas.winfo_id())
