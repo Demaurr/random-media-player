@@ -2,6 +2,7 @@ import os
 import csv
 import tkinter as tk
 from tkinter import Toplevel, ttk
+from tkinter import messagebox
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
@@ -16,6 +17,9 @@ class FileExplorerApp:
         self.root.geometry("900x600")
         self.play_images = False
         self.play_folder = False
+        self.total_files = 0
+        self.total_size = 0
+        self.total_search_results = 0
         self.center_window()
         self.create_widgets()
         self._keybinding()
@@ -37,6 +41,18 @@ class FileExplorerApp:
         self.entry.bind("<Control-Return>", self.random_play)
         self.search_entry.bind("<Control-Return>", self.random_play)
 
+    @staticmethod
+    def convert_bytes(bytes_size):
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        index = 0
+        size = float(bytes_size)
+
+        while size >= 1024 and index < len(units) - 1:
+            size /= 1024
+            index += 1
+
+        return f"{size:.2f} {units[index]}"
+
 
     def create_widgets(self):
         # Create heading label
@@ -50,7 +66,7 @@ class FileExplorerApp:
         # Create search bar
         self.entry = tk.Entry(self.input_frame, bg="white", fg="black", width=60, bd=6, relief=tk.FLAT, font=("Arial", 12))
         self.entry.pack(side="left", padx=(10, 5), pady=5)
-
+        
         # Create enter button
         self.enter_button = tk.Button(self.input_frame, text="Get", command=self.on_enter_pressed, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
         self.enter_button.pack(side="left", padx=(0, 10), pady=5)
@@ -64,23 +80,38 @@ class FileExplorerApp:
         self.search_entry.pack(side="left", padx=(10, 5), pady=0)
 
         # Create search button
-        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
+        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),
+                                       width=10, bd=0.5, relief=tk.RAISED)
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.show_caps = tk.Button(self.search_frame, text="Caps", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"),width=7, bd=0.5, relief=tk.RAISED)
+        self.show_caps = tk.Button(self.search_frame, text="CapShots", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
         self.show_caps.pack(side="left", padx=(0, 5), pady=0)
+
+        self.stats_frame = tk.Frame(self.root, bg="black")
+        self.stats_frame.pack(side="top", pady=0)
+
+        self.total_files_label = tk.Label(self.stats_frame, text="Total Files: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.total_files_label.pack(side="left", padx=(10, 10))
+
+        self.search_results_label = tk.Label(self.stats_frame, text="Search Results: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.search_results_label.pack(side="left", padx=(0, 10))
+
+        self.total_size_label = tk.Label(self.stats_frame, text="Total Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.total_size_label.pack(side="left", padx=(0, 10))
 
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
 
         # Create file table
-        self.file_table = ttk.Treeview(self.root, columns=("File Name", "Folder Path"), show="headings")
+        self.file_table = ttk.Treeview(self.root, columns=("#", "File Name", "Folder Path"), show="headings")
+        self.file_table.heading("#", text="#")
         self.file_table.heading("File Name", text="File Name")
         self.file_table.heading("Folder Path", text="Folder Path")
         self.file_table.pack(side="left", fill="both", expand=True, padx=20, pady=10)
 
         # change the width to have scroller with the window
-        self.file_table.column("File Name", width=400)  # Align columns to center
+        self.file_table.column("#", width=30)  # Align columns to center
+        self.file_table.column("File Name", width=370)  # Align columns to center
         self.file_table.column("Folder Path", width=400)  # Align columns to center
 
         # Set alternate colors for even and odd rows
@@ -98,6 +129,11 @@ class FileExplorerApp:
     def update_entry_text(self, text):
         self.entry.delete(0, tk.END)  # Clear the current text in the entry
         self.entry.insert(0, text)    # Insert the new text
+
+    def update_stats(self):
+            self.total_files_label.config(text=f"Total Files: {self.total_files}")
+            self.total_size_label.config(text=f"Total Size: {self.total_size}")
+            self.search_results_label.config(text=f"Search Results: {self.total_search_results}")
 
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
@@ -123,7 +159,7 @@ class FileExplorerApp:
         self.file_table.delete(*self.file_table.get_children())
         for idx, (file, file_path) in enumerate(files):
             tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)  # Apply alternate colors to rows
-            self.file_table.insert("", tk.END, values=(file, file_path), tags=tags)
+            self.file_table.insert("", tk.END, values=(idx, file, file_path), tags=tags)
 
     def on_enter_pressed(self, event=None):
         folder_path_string = self.entry.get()
@@ -133,6 +169,9 @@ class FileExplorerApp:
             if folder_path_string == "play favs":
                 favs = FavoritesManager()
                 self.video_files = sorted(favs.get_favorites())
+                self.total_files = len(self.video_files)
+                self.total_size = 0
+                self.update_stats()
             elif folder_path_string == "show paths":
                 self.play_folder = True
                 with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
@@ -146,6 +185,9 @@ class FileExplorerApp:
                 # self.video_files = vf_loader.start_here(folder_path_string)
             else:
                 self.video_files = vf_loader.start_here(folder_path_string)
+                self.total_size= self.convert_bytes(vf_loader.total_size_in_bytes)
+                self.total_files = len(self.video_files)
+                self.update_stats()
         except ImportError as e:
             print(f"An Import Error Occurred: {e}")
             self.video_files = vf_loader.get_videos_from_paths(folder_paths=folder_path_string.split(","))
@@ -170,43 +212,53 @@ class FileExplorerApp:
                     file_name = os.path.basename(file)
                     file_list.append((file_name, file))
             print(f"Total Files for {query}: {len(file_list)}")
+            self.total_search_results = len(file_list)
+            self.update_stats()
             self.insert_to_table(sorted(file_list))
         except AttributeError as e:
             print("No videos found to search from.")
             print(f"An Exception is raised {e}")
         except Exception as e:
             print(f"An Error {e} Occurred")
+            messagebox.showerror("Error", f"Exception: {e}")
 
     def on_double_click(self, event=None):
-        item = self.file_table.selection()[0]
-        file_path = self.file_table.item(item, "values")[1]
-        if self.play_folder:
-            folder_path = self.file_table.item(item, "values")[0]
-            self.play_folder = False
-            vf_load = VideoFileLoader()
-            self.video_files = vf_load.start_here(file_path)
-            print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
-            self.update_entry_text(folder_path)
-            self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
-        elif self.play_images:
-            viewer_window = Toplevel(self.root)
-            viewer_window.title("Image Viewer")
-            self.play_images = False
-            image_viewer_width = 900
-            image_viewer_height = 600
-            # ImageViewer instance with the specified width and height
-            ImageViewer(viewer_window, self.image_files,index=self.image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
+        try:
+            item = self.file_table.selection()[0]
+            file_path = self.file_table.item(item, "values")[2]
+            if self.play_folder:
+                folder_path = self.file_table.item(item, "values")[1]
+                vf_load = VideoFileLoader()
+                self.play_folder = False
+                self.play_images = False
+                self.video_files = vf_load.start_here(file_path)
+                self.total_size = self.convert_bytes(vf_load.total_size_in_bytes)
+                self.total_files = len(self.video_files)
+                self.update_stats()
+                print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
+                self.update_entry_text(folder_path)
+                self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+            elif self.play_images:
+                viewer_window = Toplevel(self.root)
+                viewer_window.title("Image Viewer")
+                image_viewer_width = 900
+                image_viewer_height = 600
+                image_files = self.get_files_from_table()
+                # ImageViewer instance with the specified width and height
+                ImageViewer(viewer_window, image_files,index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
 
-        else:
-            self.files = sorted(self.get_files_from_table())
-            # if self.video_files:
-            if self.files:
-                print(f"Total Videos Found: {len(self.files)}")
-                app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
-                app.update_video_progress()
-                app.mainloop()
             else:
-                print("No video files found in the specified folder path(s).")
+                self.files = sorted(self.get_files_from_table())
+                print(f"Total Videos Found: {len(self.files)}")
+                if self.files:
+                    self.play_images = False
+                    app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
+                    app.update_video_progress()
+                    app.mainloop()
+                else:
+                    print("No video files found in the specified folder path(s).")
+        except IndexError as e:
+            messagebox.showerror("Error", f"{e}")
 
     def random_play(self, event=None):
         self.on_enter_pressed()
@@ -225,7 +277,7 @@ class FileExplorerApp:
         """
         file_paths = []
         for item in self.file_table.get_children():
-            file_path = self.file_table.item(item, "values")[1]
+            file_path = self.file_table.item(item, "values")[2]
             file_paths.append(file_path)
         return file_paths
     
