@@ -51,30 +51,33 @@ class ImageViewer:
         self.master.geometry(f"{width}x{height}+{x_offset}+{y_offset}")
 
     def load_image(self):
-        image_path = self.image_files[self.current_index]
-        image = Image.open(image_path)
+        try:
+            image_path = self.image_files[self.current_index]
+            image = Image.open(image_path)
 
-        # Resize the image to fit the window size while maintaining the aspect ratio
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image.thumbnail((canvas_width, canvas_height))
+            # Resize the image to fit the window size while maintaining the aspect ratio
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
+            image.thumbnail((canvas_width, canvas_height))
 
-        image = image.resize((int(image.width * self.scale_factor), int(image.height * self.scale_factor)), Image.Resampling.LANCZOS)
-        self.photo = ImageTk.PhotoImage(image)
+            image = image.resize((int(image.width * self.scale_factor), int(image.height * self.scale_factor)), Image.Resampling.LANCZOS)
+            self.photo = ImageTk.PhotoImage(image)
 
-        # Calculate the position to centerize the image in the window
-        image_width, image_height = image.size
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
+            # Calculate the position to centerize the image in the window
+            image_width, image_height = image.size
+            x_offset = (canvas_width - image_width) // 2
+            y_offset = (canvas_height - image_height) // 2
 
-        self.canvas.delete("all")
-        self.canvas.create_image(x_offset, y_offset, anchor=NW, image=self.photo)
-        self.canvas.image = self.photo
+            self.canvas.delete("all")
+            self.canvas.create_image(x_offset, y_offset, anchor=NW, image=self.photo)
+            self.canvas.image = self.photo
 
-        # Update window title with image name and zoom level
-        self.zoom_level = round(self.scale_factor * 100)
-        self.image_name = os.path.basename(image_path)
-        self.master.title(f"{self.image_name} [{self.current_index + 1} / {self.total_files}] - Zoom: {self.zoom_level}%")
+            # Update window title with image name and zoom level
+            self.zoom_level = round(self.scale_factor * 100)
+            self.image_name = os.path.basename(image_path)
+            self.master.title(f"{self.image_name} [{self.current_index + 1} / {self.total_files}] - Zoom: {self.zoom_level}%")
+        except FileNotFoundError as e:
+            messagebox.showerror("FileNotFound", f"{e}")
 
     def next_image(self, event=None):
         if self.current_index < len(self.image_files) - 1:

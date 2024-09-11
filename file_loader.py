@@ -22,12 +22,14 @@ class VideoFileLoader:
         Args:
             media_extensions (list, optional): List of media file extensions to consider as video files. 
             Defaults to [".avi", ".mp4", ".mkv", ".m4v", ".webm"].
+            sets the var of total_size in bytes
         """
         self.csv_folder = os.path.dirname(os.path.abspath(__file__)) if csv_folder is None else csv_folder
         self.video_extensions = media_extensions
         self.csv_path = os.path.join(self.csv_folder, CSV_FOLDER, "Log_Folders.csv")
         self.refresh = []
         self.logger = LogManager(LOG_PATH)
+        self.total_size_in_bytes = 0
 
     @staticmethod
     def load_image_files():
@@ -233,10 +235,14 @@ class VideoFileLoader:
                             file_name = row.get("File Name", "")
                             if source_folder and file_name:
                                 video_files.append(os.path.join(source_folder, file_name))
+                                self.total_size_in_bytes += float(row.get("File Size (Bytes)", 0))
             except (FileNotFoundError, csv.Error) as e:
                 print(f"Error reading CSV file '{csv_file}': {e}")
+            except TypeError as e:
+                print(f"Exception {e} Occurred")
             except Exception as e:
                 print(f"Exception {e} Occurred. File Might Not Exists")
+                continue
         return video_files
     
     def strip_string_by_comma(self, input_string):
