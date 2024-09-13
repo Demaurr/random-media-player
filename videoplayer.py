@@ -12,6 +12,7 @@ from video_stats import VideoStatsApp
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
 from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH, SCREENSHOTS_FOLDER, REPORTS_FOLDER
+from static_methods import mark_for_deletion
 
 class MediaPlayerApp(tk.Tk):
     
@@ -272,6 +273,7 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<Control-D>", self.remove_from_favorites)
         self.bind("<Control-Right>", self.play_im_next)
         self.bind("<Control-Left>", self.play_im_previous)
+        self.bind("<Delete>", self.delete_video)
         
     def add_to_favorites(self, event=None):
         """Adds the currently playing video to favorites."""
@@ -408,6 +410,13 @@ class MediaPlayerApp(tk.Tk):
         self.session_end = timeit.default_timer()
         self.show_seassion_stats(self.get_stats(), for_current=True)
 
+    def delete_video(self, event=None):
+        """Marks the currently playing video for deletion."""
+        if self.current_file:
+            mark_for_deletion(self.current_file)
+            self.show_marquee(f"Marked {self.current_file} for deletion")
+            # self.logger.update_logs(f"[MARKED FOR DELETION]", self.current_file)
+
     def play_next(self, event=None):
         """
         Plays the next video in the playlist.
@@ -527,7 +536,6 @@ class MediaPlayerApp(tk.Tk):
                 self.playing_video = True
                 self.watched_videos.add_watch(self.current_file)
                 self.progress_bar.set(0)
-                
             else:
                 print(f"The file Doesn't Exists: {self.current_file}")
                 self.logger.error_logs(f"File Not Found: {self.current_file}")
