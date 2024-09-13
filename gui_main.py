@@ -3,11 +3,14 @@ import csv
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
+from send2trash import send2trash
+from logs_writer import LogManager
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
 from image_player import ImageViewer
-from player_constants import FAV_PATH, FOLDER_LOGS, SCREENSHOTS_FOLDER
+from player_constants import FAV_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
+from static_methods import create_csv_file, mark_for_deletion, remove_from_deletion
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -20,6 +23,8 @@ class FileExplorerApp:
         self.total_files = 0
         self.total_size = 0
         self.total_search_results = 0
+        self.logger = LogManager(LOG_PATH)
+        create_csv_file(["File Path", "Delete_Status"], DELETE_FILES_CSV)
         self.center_window()
         self.create_widgets()
         self._keybinding()
@@ -40,6 +45,56 @@ class FileExplorerApp:
         self.file_table.bind('<Return>', self.on_double_click)
         self.entry.bind("<Control-Return>", self.random_play)
         self.search_entry.bind("<Control-Return>", self.random_play)
+        
+        # Bind Delete key to delete_selected_files with direct_delete=False
+        self.file_table.bind('<Delete>', lambda event: self.delete_selected_files(direct_delete=False, event=event))
+        
+        # Bind Shift+Delete to delete_selected_files with direct_delete=True
+        self.file_table.bind('<Shift-Delete>', lambda event: self.delete_selected_files(direct_delete=True, event=event))
+        self.file_table.bind('<Control-Shift-Delete>', lambda event: remove_from_deletion(self.get_selected_video(), event))
+
+    def get_selected_video(self):
+        selected_item = self.file_table.selection()
+        if not selected_item:
+            messagebox.showinfo("No Selection", "Please select files to mark for deletion.")
+            return -1
+        elif len(selected_item) > 1:
+            messagebox.showerror("Multiple Selected", "Select Only One File")
+            return -1
+        
+        file_path = self.file_table.item(selected_item, "values")[2]
+        return file_path
+        
+
+
+    def delete_selected_files(self, direct_delete=False, event=None):
+        """Marks selected files from the file table for deletion."""
+        selected_items = self.file_table.selection()
+        status = "ToDelete"
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Please select files to mark for deletion.")
+            return
+        if direct_delete:
+            status = "Deleted"
+
+        confirm_message = "mark" if not direct_delete else "delete"
+        confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to {confirm_message} {len(selected_items)} file(s)?")
+        if not confirm:
+            return
+
+        for item in selected_items:
+            file_path = self.file_table.item(item, "values")[2]
+            if direct_delete:
+                file_path = VideoFileLoader.normalise_path(file_path)
+                send2trash(file_path)
+                self.file_table.delete(item)
+            mark_for_deletion(file_path, status)
+            if direct_delete:
+                self.logger.update_logs("[FILE DELETED]", file_path)
+            else:
+                self.logger.update_logs("[MARKED FOR DELETION]", file_path)
+
+        messagebox.showinfo("Deletion Marked", f"{len(selected_items)} file(s) marked for deletion.")
 
     @staticmethod
     def convert_bytes(bytes_size):
@@ -86,6 +141,9 @@ class FileExplorerApp:
 
         self.show_caps = tk.Button(self.search_frame, text="CapShots", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
         self.show_caps.pack(side="left", padx=(0, 5), pady=0)
+
+        self.delete_button = tk.Button(self.search_frame, text="Delete Marked", command=self.delete_files_in_csv, bg="red", fg="black", font=("Arial", 12, "bold"))
+        self.delete_button.pack(pady=10)
 
         self.stats_frame = tk.Frame(self.root, bg="black")
         self.stats_frame.pack(side="top", pady=0)
@@ -172,34 +230,51 @@ class FileExplorerApp:
                 self.total_files = len(self.video_files)
                 self.total_size = 0
                 self.update_stats()
+            
             elif folder_path_string == "show paths":
                 self.play_folder = True
                 with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
                     reader = csv.DictReader(file)
                     self.folders = list(set((row["Folder Path"], row["Csv Path"]) for row in reader))
                 self.video_files = []
-                # print(self.folders)
-                
-                    # print(reader)
-                # folder_path_string = input("Enter folder path(s) or Your Favs: ").strip()
-                # self.video_files = vf_loader.start_here(folder_path_string)
+            
+            elif folder_path_string == "show deletes":
+                # Show files marked as "ToDelete"
+                self.show_deletes()
+
             else:
                 self.video_files = vf_loader.start_here(folder_path_string)
-                self.total_size= self.convert_bytes(vf_loader.total_size_in_bytes)
+                self.total_size = self.convert_bytes(vf_loader.total_size_in_bytes)
                 self.total_files = len(self.video_files)
                 self.update_stats()
+        
         except ImportError as e:
             print(f"An Import Error Occurred: {e}")
             self.video_files = vf_loader.get_videos_from_paths(folder_paths=folder_path_string.split(","))
+        
         except Exception as e:
             print(f"An Unknown Error Occurred {e}")
             return
+        
         if not self.play_folder:
             print(f"Total Videos Found: {len(self.video_files)}")
             self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
         elif self.play_folder:
             print(f"Total Folders in Search History: {len(self.folders)}")
             self.insert_to_table(sorted(self.folders))
+
+    def get_files_marked_for_deletion(self):
+        """Retrieves files marked as 'ToDelete' from the DELETE_FILES_CSV."""
+        delete_files = []
+        try:
+            with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if row and row[1] == "ToDelete":
+                        delete_files.append(row[0])  # Append the file path
+        except FileNotFoundError:
+            messagebox.showinfo("No Files", "No files marked for deletion.")
+        return delete_files
 
     def on_search_pressed(self, event=None):
         query = self.search_entry.get().lower()
@@ -218,9 +293,10 @@ class FileExplorerApp:
         except AttributeError as e:
             print("No videos found to search from.")
             print(f"An Exception is raised {e}")
+            messagebox.showerror("Attribute Error", f"Error in Search Pressed: {e}")
         except Exception as e:
             print(f"An Error {e} Occurred")
-            messagebox.showerror("Error", f"Exception: {e}")
+            messagebox.showerror("Error", f"Exception in Search Pressed: {e}")
 
     def on_double_click(self, event=None):
         try:
@@ -238,37 +314,124 @@ class FileExplorerApp:
                 print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
                 self.update_entry_text(folder_path)
                 self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+            
             elif self.play_images:
+                # Disable the main window
+                # self.root.wm_attributes("-disabled", True)
                 viewer_window = Toplevel(self.root)
                 viewer_window.title("Image Viewer")
                 image_viewer_width = 900
                 image_viewer_height = 600
                 image_files = self.get_files_from_table()
-                # ImageViewer instance with the specified width and height
-                ImageViewer(viewer_window, image_files,index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
+
+                # Create ImageViewer instance with the specified width and height
+                ImageViewer(viewer_window, image_files, index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
+                
+                # Re-enable the main window when the image viewer window is closed
+                # viewer_window.protocol("WM_DELETE_WINDOW", lambda: self._on_close_viewer(viewer_window))
 
             else:
                 self.files = sorted(self.get_files_from_table())
                 print(f"Total Videos Found: {len(self.files)}")
                 if self.files:
+                    # Disable the main window
+                    # self.root.wm_attributes("-disabled", True)
                     self.play_images = False
-                    app = MediaPlayerApp(self.files, current_file=file_path,random_select=True)
+                    app = MediaPlayerApp(self.files, current_file=file_path, random_select=True)
                     app.update_video_progress()
+                    
+                    # Re-enable the main window when the player window is closed
+                    # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
+
+                    # Start the media player loop
                     app.mainloop()
                 else:
                     print("No video files found in the specified folder path(s).")
+        
         except IndexError as e:
             messagebox.showerror("Error", f"{e}")
+
+    def _on_close_player(self, player_window): # Not Working as Expecteed
+        """Callback to re-enable the main window after the player window is closed."""
+        player_window.destroy()  # Destroy the player window
+        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
+
+    def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
+        """Callback to re-enable the main window after the image viewer window is closed."""
+        viewer_window.destroy()  # Destroy the viewer window
+        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
 
     def random_play(self, event=None):
         self.on_enter_pressed()
         self.files = sorted(self.get_files_from_table())
         if self.files:
+            # self.root.wm_attributes("-disabled", True)
             app = MediaPlayerApp(self.files, random_select=True)
             app.update_video_progress()
+            # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
             app.mainloop()
         else:
             print("No video files found in the specified folder path(s).")
+
+    def show_deletes(self):
+        self.video_files = self.get_files_marked_for_deletion()
+        self.total_files = len(self.video_files)
+        self.total_size = 0  # You can calculate the size if needed
+        self.update_stats()
+
+    def delete_files_in_csv(self):
+        """Deletes files marked 'ToDelete' in the CSV and updates the status to 'Deleted'."""
+        # Ask for confirmation
+        confirm_delete = messagebox.askyesno("Confirm Deletion", 
+                                            "Are you sure you want to delete all marked files?")
+        
+        if not confirm_delete:
+            # If the user selects 'No', they can choose to view the files marked for deletion
+            show_deletes = messagebox.askyesno("View Deletes", 
+                                            "Do you want to view the files marked for deletion instead?")
+            if show_deletes:
+                self.show_deletes()  # Assumes you have a method to show the 'ToDelete' files
+                self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+            return
+
+        rows = []
+        
+        # Open and read the CSV file
+        try:
+            with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                rows = list(reader)  # Read all rows into a list
+        except FileNotFoundError:
+            messagebox.showwarning("File Not Found", "The deletion list CSV file was not found.")
+            return
+
+        # Iterate over the rows and check the "Delete_Status"
+        for row in rows:
+            file_path = row["File Path"]
+            status = row["Delete_Status"]
+            
+            if status == "ToDelete":
+                try:
+                    send2trash(file_path)  # Move the file to the recycle bin
+                    row["Delete_Status"] = "Deleted"  # Update status to 'Deleted'
+                    print(f"{file_path} has been deleted.")
+                    self.logger.update_logs('[FILE DELETED]', file_path)
+                except Exception as e:
+                    print(f"Error deleting {file_path}: {e}")
+                    self.logger.error_logs(f'Error Deleting This File: {e}')
+
+        # Write the updated rows back to the CSV
+        with open(DELETE_FILES_CSV, mode='w', newline='', encoding='utf-8') as file:
+            fieldnames = ["File Path", "Delete_Status"]
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            
+            # Write the header
+            writer.writeheader()
+            
+            # Write all the updated rows
+            writer.writerows(rows)
+
+        messagebox.showinfo("Deletion Complete", "All 'ToDelete' files have been deleted and moved to the recycle bin.")
 
     def get_files_from_table(self):
         """
