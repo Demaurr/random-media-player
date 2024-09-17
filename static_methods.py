@@ -2,7 +2,7 @@ import csv
 import os
 from tkinter import messagebox
 from send2trash import send2trash
-from player_constants import DELETE_FILES_CSV, LOG_PATH
+from player_constants import DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
 from logs_writer import LogManager
 
 logger = LogManager(LOG_PATH)
@@ -25,8 +25,25 @@ def create_csv_file(headers=None, filename="New_CSV.csv"):
 def normalise_path(path):
         return path.replace("/", "\\")
 
+def get_favs_folder():
+    """
+    Reads the favorite folder path from Extra_Paths.txt.
+    Expected format: FAV_FOLDER: E:\\New folder\\New folder (2)\\
+    """
+    with open(FILES_FOLDER + "\\" + "Extra_Paths.txt", "r", encoding='utf-8') as file:
+        for line in file:
+            if line.startswith("FAV_FOLDER:"):
+                # Split only on the first occurrence of ':'
+                parts = line.split(":", 1)
+                if len(parts) > 1:
+                    return parts[1].strip()
+    return None  # Return None if the FAV_FOLDER entry is not found
+
 def mark_for_deletion(video_file, status="ToDelete", event=None):
-    """Marks the given video file for deletion by adding it to the CSV, avoiding duplicates."""
+    """
+    Deprecated: Use deletion_manager for this
+    Marks the given video file for deletion by adding it to the CSV, avoiding duplicates.
+    """
     video_file = normalise_path(video_file)
 
     # Read existing entries into a dictionary
@@ -68,8 +85,11 @@ def mark_for_deletion(video_file, status="ToDelete", event=None):
 
 
 def remove_from_deletion(video_file, event=None):
-    """Removes the given video file from the deletion list if marked for deletion (ToDelete).
-       Notifies if the file is already deleted and cannot be undeleted."""
+    """
+    Deprecated: Use deletion_manager for this
+    Removes the given video file from the deletion list if marked for deletion (ToDelete).
+       Notifies if the file is already deleted and cannot be undeleted.
+    """
     video_file = normalise_path(video_file)
 
     # Read existing entries into a dictionary
