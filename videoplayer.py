@@ -4,26 +4,29 @@ from datetime import timedelta
 import os
 import random
 import timeit
+from static_methods import ensure_folder_exists
 from watch_history_logger import WatchHistoryLogger
 from volume_bar import VolumeBar
 from video_progress_bar import VideoProgressBar
 from watch_dictionary import WatchDict
 from video_stats import VideoStatsApp
 from favorites_manager import FavoritesManager
+from deletion_manager import DeletionManager
 from logs_writer import LogManager
 from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH, SCREENSHOTS_FOLDER, REPORTS_FOLDER
-from static_methods import mark_for_deletion
+
 
 class MediaPlayerApp(tk.Tk):
     
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
-        self.ensure_folder_exists(FILES_FOLDER)
-        self.ensure_folder_exists(SCREENSHOTS_FOLDER)
-        self.ensure_folder_exists(REPORTS_FOLDER)
+        ensure_folder_exists(FILES_FOLDER)
+        ensure_folder_exists(SCREENSHOTS_FOLDER)
+        ensure_folder_exists(REPORTS_FOLDER)
         self.get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
         self.logger = LogManager(LOG_PATH)
+        self.deleter = DeletionManager()
         self.bg_color = "black"
         self.fg_color = "white"
         self.title("Media Player")
@@ -51,28 +54,6 @@ class MediaPlayerApp(tk.Tk):
                 self.watch_history_csv = watch_history_csv
         except FileNotFoundError:
             self.watch_history_csv = watch_history_csv
-
-    @staticmethod
-    def ensure_folder_exists(folder_path):
-        """
-        Checks whether a folder exists at the specified path.
-        If it doesn't exist, creates the folder.
-        
-        Parameters:
-            folder_path (str): The path of the folder to check/create.
-            
-        Returns:
-            None
-        """
-        if not os.path.exists(folder_path):  # Check if folder doesn't exist
-            try:
-                os.makedirs(folder_path)  # Create the folder and any missing parent directories
-                print(f"Folder created at {folder_path}")
-            except OSError as e:
-                print(f"Error creating folder at {folder_path}: {e}")
-        else:
-            print(f"Folder already exists at {folder_path}")
-            return True
     
     def on_close(self):
         self.session_end = timeit.default_timer()
@@ -413,7 +394,7 @@ class MediaPlayerApp(tk.Tk):
     def delete_video(self, event=None):
         """Marks the currently playing video for deletion."""
         if self.current_file:
-            mark_for_deletion(self.current_file)
+            self.deleter.mark_for_deletion(self.current_file)
             self.show_marquee(f"Marked {self.current_file} for deletion")
             # self.logger.update_logs(f"[MARKED FOR DELETION]", self.current_file)
 
