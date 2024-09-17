@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Gui_Main_Screen2.PNG)
+![Main Screen Page](Screenshots/Gui_Main_Screen3.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -11,7 +11,7 @@
 
 
 ## Introduction
-Random Video Player to Keep Track of Your Watchtime for local Media Consumption. The video extensions supported **avi, mp4, mkv, m4v, webm, wvm**
+Random Video Player to Keep Track of Your Watchtime for local Media Consumption. The video extensions supported **avi, mp4, mkv, m4v, mov, webm, wvm**
 
 
 ## Installation
@@ -44,6 +44,7 @@ Random Video Player to Keep Track of Your Watchtime for local Media Consumption.
 - **Image Viewing**: View Screen Captures in a Separate Image Viewer.
 - **Statistics**(TBA): Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
+- **Deletion**: Users can Delete a file and queue it to deletion_list and send it to the recyclebin when feels right.
 
 ## Usage
 *   Change the ***CONSTANT VARIABLES*** in `player_constants.py` and defined you PATHS for respective files.

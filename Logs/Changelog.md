@@ -2,43 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [2.7.4] 2024-9-18
+
+### Added 
+- Handling of deleting files that are in favorites
+- A new videotype `'.mov'`
+- An Extra_Paths file in the **"`FILES_FOLDER`"** which contains FAV_FOLDER to move the favorites file (set for delelion) to this if a folder is not provided by user.
+
+
+### Changed
+- Managing of Deletion Now It's Done Through separate **DeletionManager** from **`deletion_manager.py`**
+- Using of methods like ensure_folder_exists and other from ***`static_methods.py`***
+
+## Version [2.7.2] 2024-9-11
+
+### Added
+- File position in the video title in videoplayer.
+- A '**#**' column in the file table to Display the position no. of the files.
+- `stats_frame` in the gui to display stats related to ***Total Size***, ***No. of Videos*** and ***Search Results***.
+- Displaying of error messages encountered in the main methods using the tkinter's **messagebox**.
+- A method for converting of bytes into a Human Readable Formats.
+- A messagebox in **`image_player`** and **`videoplayer`** to display error encountered in core functions.
+- Methods for File Deletion Functionality with Separate **Delete Marked** Button and Keybinding like '`<Delete>`', '`<Shift-Delete>`', '`<Control-Shift-Delete>`'.
+- Marking a video For deletion in a csv and moving it to the recycle bin using lib '***`send2trash`***'.
+- '**show deletes**' command to display the files marked for Deletion in ***DELETE_FILES_CSV***.
+- Method for pausing the main root window (Unused).
+- Using static files from ***`static_methods.py`*** to mark, delete and check for file existence.
+
+### Updated
+- requirements.txt with library used to send to recyclebin, '***`send2trash`***'
+
+### Fixed
+- the position of the play_images tag, now works fine with the '`CapShots`'.
+
 ## Version [2.5.0] 2024-7-30
 
-## Added
+### Added
 - An Image Player to View Saved Image Captures from the Videos through the Class ImageViewer in `image_player.py`.
 - An Static method in ***file_loader.py*** to get Screenshots(Captures) files from the Screenshots folder defined in ***player_constants.py***.
 - Added a Separate Button in `Videoplayer.py` to Directly Access the Screen Captures from the gui and display all the File in the File/Folder table.
 
-## Updated
+### Updated
 - The on_double_click, on_search_pressed and on_enter_pressed methods to comply with the image viewing and searching options.
 
 ## Version [2.4.1] - 2024-06-15
 
-## Added
+### Added
 - A Functionality to Show Previously Recorded/Searched Paths For Ease of Displaying and Playing videos from it.
 - A method update_entry() to update the entry input box with a given text value.
 - A Seperate Log_Folders constant to access this Folder Log File from anywhere easily.
 
-## Updated
+### Updated
 - The on_double_click method to comply with the show paths options and display the videos from the path through double click or ```Return``` Press.
 
-## Fixed
+### Fixed
 - Displaying of Duration in the Marquee when user forwards or backwards a video. This now displayes the changed Duration Correctly.
 
 ## Version [2.3.0] - 2024-04-20
 
-## Added
+### Added
 - Added support for *.wmv* file-type.
 - Added Search Bar for filtering videos returned from the given path in `gui_main.py`.
 - Added Marquee Display for media functionalities and volume inc/dec.
 - Added Playing Immediate Next/Previous file in the returned files_list in `gui_main.py`.
 - Added Keyboard Shorcuts For `gui_main.py` to directly play a random file on search using *`Ctrl+Enter`*.
 
-## Changed
+### Changed
 - The Paths in `player_constants.py` to have **\\** rather than **/**.
 - The Logic of random and sequential playing.
 
-## Fixed
+### Fixed
 - Volume Controls in FullScreen Mode.
 
 ## Version [2.2.0] - 2024-04-14
