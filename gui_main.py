@@ -3,14 +3,14 @@ import csv
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
-from send2trash import send2trash
 from logs_writer import LogManager
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
+from deletion_manager import DeletionManager
 from image_player import ImageViewer
-from player_constants import FAV_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, mark_for_deletion, remove_from_deletion
+from player_constants import FILES_FOLDER, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
+from static_methods import create_csv_file, ensure_folder_exists, get_favs_folder
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -23,6 +23,9 @@ class FileExplorerApp:
         self.total_files = 0
         self.total_size = 0
         self.total_search_results = 0
+
+        # Instantiate DeletionManager
+        self.deletion_manager = DeletionManager()
         self.logger = LogManager(LOG_PATH)
         create_csv_file(["File Path", "Delete_Status"], DELETE_FILES_CSV)
         self.center_window()
@@ -50,8 +53,8 @@ class FileExplorerApp:
         self.file_table.bind('<Delete>', lambda event: self.delete_selected_files(direct_delete=False, event=event))
         
         # Bind Shift+Delete to delete_selected_files with direct_delete=True
-        self.file_table.bind('<Shift-Delete>', lambda event: self.delete_selected_files(direct_delete=True, event=event))
-        self.file_table.bind('<Control-Shift-Delete>', lambda event: remove_from_deletion(self.get_selected_video(), event))
+        # self.file_table.bind('<Shift-Delete>', lambda event: self.delete_selected_files(direct_delete=True, event=event))
+        self.file_table.bind('<Control-Shift-Delete>', lambda event: self.remove_from_deletion(self.get_selected_video(), event))
 
     def get_selected_video(self):
         selected_item = self.file_table.selection()
@@ -68,7 +71,7 @@ class FileExplorerApp:
 
 
     def delete_selected_files(self, direct_delete=False, event=None):
-        """Marks selected files from the file table for deletion."""
+        """Marks selected files from the file table for deletion or deletes them directly."""
         selected_items = self.file_table.selection()
         status = "ToDelete"
         if not selected_items:
@@ -84,17 +87,24 @@ class FileExplorerApp:
 
         for item in selected_items:
             file_path = self.file_table.item(item, "values")[2]
-            if direct_delete:
-                file_path = VideoFileLoader.normalise_path(file_path)
-                send2trash(file_path)
-                self.file_table.delete(item)
-            mark_for_deletion(file_path, status)
-            if direct_delete:
-                self.logger.update_logs("[FILE DELETED]", file_path)
-            else:
-                self.logger.update_logs("[MARKED FOR DELETION]", file_path)
-
+            self.deletion_manager.mark_for_deletion(file_path, status)
+        
+        # Use the DeletionManager to handle deletion or marking
+        if direct_delete:
+            self.deletion_manager.delete_files_in_csv(skip_confirmation=True)
+        
         messagebox.showinfo("Deletion Marked", f"{len(selected_items)} file(s) marked for deletion.")
+
+    def remove_from_deletion(self, file, event=None):
+        self.deletion_manager.remove_from_deletion(file)
+        messagebox.showinfo("Removed Marked", f"{file} file is removed from deletion list.")
+
+    def delete_files_in_csv(self):
+        """Deletes files marked as 'ToDelete' using the DeletionManager."""
+        try:
+            self.deletion_manager.delete_files_in_csv()
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred during deletion in gui_main: {str(e)}")
 
     @staticmethod
     def convert_bytes(bytes_size):
@@ -378,60 +388,6 @@ class FileExplorerApp:
         self.total_files = len(self.video_files)
         self.total_size = 0  # You can calculate the size if needed
         self.update_stats()
-
-    def delete_files_in_csv(self):
-        """Deletes files marked 'ToDelete' in the CSV and updates the status to 'Deleted'."""
-        # Ask for confirmation
-        confirm_delete = messagebox.askyesno("Confirm Deletion", 
-                                            "Are you sure you want to delete all marked files?")
-        
-        if not confirm_delete:
-            # If the user selects 'No', they can choose to view the files marked for deletion
-            show_deletes = messagebox.askyesno("View Deletes", 
-                                            "Do you want to view the files marked for deletion instead?")
-            if show_deletes:
-                self.show_deletes()  # Assumes you have a method to show the 'ToDelete' files
-                self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
-            return
-
-        rows = []
-        
-        # Open and read the CSV file
-        try:
-            with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                rows = list(reader)  # Read all rows into a list
-        except FileNotFoundError:
-            messagebox.showwarning("File Not Found", "The deletion list CSV file was not found.")
-            return
-
-        # Iterate over the rows and check the "Delete_Status"
-        for row in rows:
-            file_path = row["File Path"]
-            status = row["Delete_Status"]
-            
-            if status == "ToDelete":
-                try:
-                    send2trash(file_path)  # Move the file to the recycle bin
-                    row["Delete_Status"] = "Deleted"  # Update status to 'Deleted'
-                    print(f"{file_path} has been deleted.")
-                    self.logger.update_logs('[FILE DELETED]', file_path)
-                except Exception as e:
-                    print(f"Error deleting {file_path}: {e}")
-                    self.logger.error_logs(f'Error Deleting This File: {e}')
-
-        # Write the updated rows back to the CSV
-        with open(DELETE_FILES_CSV, mode='w', newline='', encoding='utf-8') as file:
-            fieldnames = ["File Path", "Delete_Status"]
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            
-            # Write the header
-            writer.writeheader()
-            
-            # Write all the updated rows
-            writer.writerows(rows)
-
-        messagebox.showinfo("Deletion Complete", "All 'ToDelete' files have been deleted and moved to the recycle bin.")
 
     def get_files_from_table(self):
         """
