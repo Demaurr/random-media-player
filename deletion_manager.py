@@ -45,7 +45,7 @@ class DeletionManager:
                 confirm_delete = messagebox.askyesno("File Already Marked", 
                                                      f"{video_file} is already marked for deletion. Do you want to delete it now?")
                 if confirm_delete:
-                    if self.delete_file(video_file):
+                    if self.delete_file(video_file, file_status_dict):
                         file_status_dict[video_file] = "Deleted"
                         self.logger.update_logs('[FILE DELETED]', video_file)
         else:
@@ -78,7 +78,7 @@ class DeletionManager:
         if not skip_confirmation:
             confirm_delete = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete all marked files?")
             if not confirm_delete:
-                messagebox.showinfo("SKipped", "Skipping Files marked for deletion.")
+                messagebox.showinfo("Skipped", "Skipping Files marked for deletion.")
                 return
 
         file_status_dict = self.read_csv_file()
@@ -88,7 +88,7 @@ class DeletionManager:
                 if self.fav_manager.check_favorites(current_file=file_path):
                     self.handle_favorites(file_path, file_status_dict)
                 else:
-                    self.delete_file(file_path, handle_favs=False)
+                    self.delete_file(file_path, file_status_dict, handle_favs=False)
                     file_status_dict[file_path] = "Deleted"
 
         self.write_csv_file(file_status_dict)
@@ -97,18 +97,19 @@ class DeletionManager:
 
     def handle_favorites(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
+        if not self.fav_manager.check_favorites(file_path):
+            return True # Delete the file
         # Ask the user if they want to move the favorite file instead of deleting
         move_to_favorites = messagebox.askyesno("File in Favorites", 
                                                 f"{file_path} is in your favorites. Do you want to move it to the backup folder instead of deleting?")
         if move_to_favorites:
             # Get the default favorites folder
-            default_favorites_folder = ensure_folder_exists(get_favs_folder())
+            default_favorites_folder = get_favs_folder()
             use_default_folder = messagebox.askyesno("Select Folder", 
                                                     f"Do you want to move the file to the default folder: {default_favorites_folder}?")
 
             if use_default_folder:
                 self.move_file_to_folder(file_path, default_favorites_folder, file_status_dict)
-                self.remove_from_deletion(file_path)
                 return False  # Indicating that the file was moved, not deleted
             else:
                 # Ask the user for a new folder if they don't want to use the default one
@@ -128,7 +129,7 @@ class DeletionManager:
         """Moves a file to the specified folder."""
         ensure_folder_exists(folder)
         try:
-            new_path = os.path.join(folder, os.path.basename(file_path))
+            new_path = normalise_path(os.path.join(folder, os.path.basename(file_path)))
             os.rename(file_path, new_path)
             file_status_dict[file_path] = "Moved to Favorites Backup"
             self.logger.update_logs('[FILE MOVED]', f"{file_path} to {new_path}")
@@ -140,15 +141,15 @@ class DeletionManager:
     def remove_from_favorites_and_delete(self, file_path, file_status_dict):
         """Removes a file from favorites and deletes it."""
         self.fav_manager.delete_from_favorites(file_path)
-        if self.delete_file(file_path, handle_favs=False):
+        if self.delete_file(file_path, file_status_dict, handle_favs=False):
             file_status_dict[file_path] = "Deleted"
+        self.logger.update_logs(f"[DELETED] from Favorites", file_path)
 
-    def delete_file(self, file_path, handle_favs=True):
+    def delete_file(self, file_path, file_status_dict, handle_favs=True):
         """Deletes a file by moving it to the recycle bin, checking if it's in favorites first."""
         try:
             # Use handle_favorites to decide how to handle favorites
             if handle_favs:
-                file_status_dict = self.read_csv_file()
                 if not self.handle_favorites(file_path, file_status_dict):
                     print(f"Skipping deletion of {file_path} because it's a favorite and not removed.")
                     return False
