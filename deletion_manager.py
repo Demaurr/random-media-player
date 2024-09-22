@@ -3,14 +3,14 @@ import csv
 from send2trash import send2trash
 from tkinter import messagebox, filedialog
 from static_methods import get_favs_folder, normalise_path, ensure_folder_exists
-from player_constants import DEFAULT_FAV, DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
+from player_constants import FAV_FILES, DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
 from logs_writer import LogManager
 from favorites_manager import FavoritesManager
 
 class DeletionManager:
     def __init__(self):
         self.delete_csv = DELETE_FILES_CSV  # Path to the CSV file tracking deletions
-        self.fav_manager = FavoritesManager(DEFAULT_FAV)  # FavoritesManager instance
+        self.fav_manager = FavoritesManager(FAV_FILES)  # FavoritesManager instance
         self.logger = LogManager(LOG_PATH)  # Logger instance for logging operations
 
     def read_csv_file(self):
@@ -162,3 +162,23 @@ class DeletionManager:
             
         except Exception as e:
             self.logger.error_logs(f'Error deleting {file_path}: {e}')
+
+    def update_file_name_in_csv(self, old_name, new_name):
+        """Updates the file name in the CSV for a file marked 'ToDelete'."""
+        old_name = normalise_path(old_name)
+        new_name = normalise_path(new_name)
+        
+        file_status_dict = self.read_csv_file()
+
+        if old_name in file_status_dict:
+            if file_status_dict[old_name] == "ToDelete":
+                # Update the file name in the dictionary
+                file_status_dict[new_name] = file_status_dict.pop(old_name)
+                self.logger.update_logs('[DELETION-LIST]: ', f"{old_name} -> {new_name}")
+            else:
+                print(f"{old_name} is not marked for deletion.")
+        else:
+            print(f"{old_name} is not in the deletion list.")
+
+        # Write the updated dictionary back to the CSV
+        self.write_csv_file(file_status_dict)
