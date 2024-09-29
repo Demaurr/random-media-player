@@ -7,3 +7,5 @@ Screentshots/Main_Sceenn2.PNG
 *.ipynb
 watch_analyzer.py
 *.log
+*.txt
+*.csv
