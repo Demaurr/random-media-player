@@ -1,9 +1,9 @@
 import tkinter as tk
 import vlc
-from datetime import timedelta
 import os
 import random
 import timeit
+from datetime import timedelta
 from static_methods import ensure_folder_exists
 from watch_history_logger import WatchHistoryLogger
 from volume_bar import VolumeBar
@@ -255,6 +255,12 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<Control-Right>", self.play_im_next)
         self.bind("<Control-Left>", self.play_im_previous)
         self.bind("<Delete>", self.delete_video)
+        self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
+
+    def remove_from_deletion(self, event=None):
+        self.deleter.remove_from_deletion(self.current_file)
+        self.show_marquee(f"Removed Marked {self.current_file} file from deletion list.")
+        
         
     def add_to_favorites(self, event=None):
         """Adds the currently playing video to favorites."""
@@ -262,7 +268,7 @@ class MediaPlayerApp(tk.Tk):
             if self.favorites_manager.add_to_favorites(self.current_file):
                 # self.show_feedback(f"Added {self.current_file} to favorites")
                 self.show_marquee(f"Added {self.current_file} from favorites")
-                self.logger.update_logs(f"[ADDED] to Favorites", self.current_file)
+                # self.logger.update_logs(f"[ADDED] to Favorites", self.current_file)
             else:
                 # self.show_feedback("Video is already in favorites!")
                 self.show_marquee("Video is already in favorites!")
@@ -273,7 +279,7 @@ class MediaPlayerApp(tk.Tk):
             if self.favorites_manager.delete_from_favorites(self.current_file):
                 # self.show_feedback(f"Removed {self.current_file} from favorites")
                 self.show_marquee(f"Removed {self.current_file} from favorites")
-                self.logger.update_logs(f"[DELETED] from Favorites", self.current_file)
+                # self.logger.update_logs(f"[DELETED] from Favorites", self.current_file)
             else:
                 # self.show_feedback("Video is not in favorites!")
                 self.show_marquee("Video is not in favorites!")
@@ -406,6 +412,7 @@ class MediaPlayerApp(tk.Tk):
         sets it as the current video, and starts playing it.
         """
         try:
+            # time.sleep(0.2)
             if self.playing_video:
                 self.stop()
             self.previous_file = self.current_file
@@ -427,6 +434,7 @@ class MediaPlayerApp(tk.Tk):
         and starts playing it.
         """
         # print(self.previous_file)
+        # time.sleep(0.2)
         if self.playing_video:
             self.stop()  # Stop the current video
         # Select the previous video
@@ -576,13 +584,15 @@ class MediaPlayerApp(tk.Tk):
         if self.playing_video:
             # Log watch history before stopping
             duration_watched = self.get_duration_str()
-            total_duration = self.get_time_str(self.media_player.get_time())
-            self.watch_history_logger.log_watch_history(self.current_file, duration_watched, total_duration)
             # self.watched_videos[self.current_file] =  self.watched_videos.get(self.current_file, 0) + self.media_player.get_time()
-            skipped_time = (self.prev_counts * 5000) - (self.forward_counts * 10000)
+            skipped_time = (self.prev_counts * 4990) - (self.forward_counts * 9990)
             print(f"Skipped Time: {self.get_time_str(skipped_time)}")
             print(f"Prev Counts: {self.prev_counts}, Forward Counts: {self.forward_counts}")
-            self.watched_videos.increment_duration_and_count(self.current_file, self.media_player.get_time()+skipped_time)
+            actual_time_duration = self.media_player.get_time()+skipped_time
+            total_duration = self.get_time_str(actual_time_duration)
+            self.watch_history_logger.log_watch_history(self.current_file, duration_watched, total_duration)
+            # print("total_duration:", total_duration, "\n", "Duration Watched(wng):", duration_watched, "\n", "Duration Watched(cor):", self.get_time_str(self.media_player.get_time()+skipped_time))
+            self.watched_videos.increment_duration_and_count(self.current_file, actual_time_duration)
             self.media_player.stop()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())

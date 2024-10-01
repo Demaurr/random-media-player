@@ -1,5 +1,7 @@
 import csv
+from datetime import datetime
 import os
+import re
 from tkinter import messagebox
 from send2trash import send2trash
 from player_constants import DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
@@ -141,8 +143,80 @@ def ensure_folder_exists(folder_path):
             try:
                 os.makedirs(folder_path)  # Create the folder and any missing parent directories
                 print(f"Folder created at {folder_path}")
+                return True
             except OSError as e:
                 print(f"Error creating folder at {folder_path}: {e}")
+                return True
         else:
             print(f"Folder already exists at {folder_path}")
             return True
+
+def rename_if_exists(filename):
+    base_name, extension = os.path.splitext(filename)
+    base_name = remove_number_suffix(base_name)  # Remove (number) suffix if exists
+    counter = 1
+    new_filename = filename
+    
+    while os.path.exists(new_filename):
+        new_filename = f"{base_name}({counter}){extension}"
+        counter += 1
+
+    return new_filename
+
+def remove_number_suffix(basename):
+    match = re.match(r'^(.*?)\(\d+\)$', basename)
+    if match:
+        return match.group(1)
+    return basename
+
+def get_file_size(file_path):
+    """
+    Returns the size of the file in bytes.
+    
+    :param file_path: The path to the file.
+    :return: The size of the file in bytes, or None if the file does not exist.
+    """
+    try:
+        return os.path.getsize(file_path)
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return None
+    
+def convert_date_format(file_path):
+    """
+    Updates the date format in the 'Date Watched' column of a CSV file.
+    Input format: 'M/d/yyyy H:m'
+    Output format: 'yyyy-MM-dd H:m:ss'
+    Used in Watched_history csv file
+    """
+    rows = []
+    row_count = 0
+
+    with open(file_path, 'r', encoding='utf-8') as input_csv:
+        reader = csv.DictReader(input_csv)
+        for row in reader:
+            row_count += 1
+            try:
+                # Convert the date string to a datetime object
+                date_watched = datetime.strptime(row['Date Watched'], '%m/%d/%Y %H:%M')
+
+                # Convert the datetime object to the desired format
+                row['Date Watched'] = datetime.strftime(date_watched, '%Y-%m-%d %H:%M:%S')
+
+                # Add the updated row to the list
+                rows.append(row)
+            except ValueError:
+                rows.append(row)
+                print(f"Warning: Invalid date format in row {row_count}. Skipping: {row['Date Watched']}")
+                continue
+
+    # Overwrite the original file with the updated rows
+    with open(file_path, 'w', newline='', encoding='utf-8') as output_csv:
+        writer = csv.DictWriter(output_csv, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"Date format update complete. File: {file_path}")

@@ -1,14 +1,17 @@
 import os
 import csv
 from datetime import datetime
-from player_constants import DEFAULT_FAV
-from static_methods import normalise_path
+from logs_writer import LogManager
+from player_constants import FAV_FILES, LOG_PATH
+from static_methods import get_file_size, normalise_path
 import hashlib
 
 
 class FavoritesManager:
     def __init__(self, fav_csv=None):
-        self.fav_csv = fav_csv if fav_csv is not None else DEFAULT_FAV
+        self.fav_csv = fav_csv if fav_csv is not None else FAV_FILES
+        self.logger = LogManager(LOG_PATH)
+        self.total_size = 0.0
 
     @staticmethod
     def hash_string(input_string, hash_length=32):
@@ -37,6 +40,7 @@ class FavoritesManager:
                     writer.writeheader()  # Write header if file is empty
                 writer.writerow({"Hash": hashed_string, "Video Name": video_name, "Source Path": source_path, "Date Added": date_added})
                 print(f"ADDED {current_file} to Favorites\n")
+                self.logger.update_logs(f"[FAVORITES ADDED]", current_file)
             return True
         return False
 
@@ -51,7 +55,6 @@ class FavoritesManager:
             reader = csv.DictReader(file)
             for row in reader:
                 if row["Hash"] == hash_value:
-                    print(f"ALREADY {row['Video Name']} is listed in Favorites")
                     return True
         return False
 
@@ -74,6 +77,7 @@ class FavoritesManager:
 
             os.replace(temp_csv, self.fav_csv)
             print(f"REMOVED {current_file} from Favorites.\n")
+            self.logger.update_logs(f"[FAVORITES REMOVED]", current_file)
             return True
         return False
 
@@ -86,6 +90,7 @@ class FavoritesManager:
                 path = os.path.join(row["Source Path"], row["Video Name"])
                 if os.path.exists(path):
                     favorites.append(path)
+                    self.total_size += get_file_size(path)
         return favorites
     
     def update_path_and_hash(self):
@@ -120,8 +125,8 @@ class FavoritesManager:
             return False
 
         video_name = os.path.basename(old_path)
-        old_source_path = os.path.dirname(old_path)
-        new_source_path = os.path.dirname(new_path)
+        old_source_path = normalise_path(os.path.dirname(old_path))
+        new_source_path = normalise_path(os.path.dirname(new_path))
         old_hash = self.hash_string(video_name + old_source_path)
         new_hash = self.hash_string(video_name + new_source_path)
 
@@ -140,7 +145,8 @@ class FavoritesManager:
                     row["Source Path"] = new_source_path
                     row["Hash"] = new_hash
                     updated = True
-                    print(f"Updated favorite: {video_name} moved from {old_path} to {new_path}")
+                    print(f"[UPDATED FAVORITE]: {video_name} moved from {old_path} to {new_path}")
+                    self.logger.update_logs(f"[FAVORITES UPDATED]", f"{video_name} changed from {old_path} to {new_path}")
                 writer.writerow(row)
 
         if updated:

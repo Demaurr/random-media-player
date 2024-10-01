@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [3.0.2] 2024-9-29
+
+### Added
+- A new videotype **`.flv`**
+- Logs writing in **`favorites_manager.py`** and calculation of Total Size of favorite files.
+- Normalisation of paths in multiple places through the whole project to be consistent with the paths stored.
+- A Context Menu in the **`gui_main.py`** to move or delete the selected files.
+- Removal and addition to favorites through main ***file_table*** for easily maintaining files without playing each of them.
+- ***Delete-All*** and ***Refresh-Delete*** Button to manage deletion easily and mark any file which is **un-deleted** or **deleted** outside this app.
+- Filtering of favorites in the listed files in the **file_table** for easily maintaining and viewing of the favorites.
+- Commands "`show deleted`" and "`show history`" to get deleted flies and watched history of the past 30 days.
+- Moving files from one Directory to another and Updating the file_paths in the favorites and deletion_list.
+- Handling of the Renaming of Files and maintaining the file_tranfer_log.csv and keep records of every transfer.
+- More Keybindings in the `file_table` of **`gui_main.py`** to manage moving and favorites easily.
+- Removal of file from deletion from within the videoplayer and Displaying of feedback marquee.
+- More helpful methods in **`static_methods.py`** for renaming, covnerting data format and getting file size.
+
+
+### Changed
+- The Layout of the ***gui_main*** with more logical button placing and better **stats** info.
+- Calculating the Duration Watched, now works with more precision by considering the forward and backward counts before storing in the **watched_history_csv**.
+- Logs writing for favorite files in videoplayer and other places, now the logs are written within the methods in `Favorites_Manager` class.
+- The Path strings in the player_constants, now follow a more consistent and easily changable method.
+- `get_selected_video` in **`gui_main.py`**, now allows multiple selections.
+
+
+### Fixed
+- Deletion list wrting bugs in an event of an error.
+- Date format in the **Watched_History_Csv** to follow a consistent format.
+
 ## Version [2.7.4] 2024-9-18
 
 ### Added 

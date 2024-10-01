@@ -1,16 +1,20 @@
+from datetime import datetime, timedelta
 import os
 import csv
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
+from tkinter import filedialog
 from logs_writer import LogManager
 from videoplayer import MediaPlayerApp
 from file_loader import VideoFileLoader
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
+from file_manager import FileManager
 from image_player import ImageViewer
-from player_constants import FILES_FOLDER, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, ensure_folder_exists, get_favs_folder
+from player_constants import WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
+from static_methods import create_csv_file, normalise_path
+import cProfile
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -23,14 +27,16 @@ class FileExplorerApp:
         self.total_files = 0
         self.total_size = 0
         self.total_search_results = 0
+        self.total_duration_watched = 0.0
 
         # Instantiate DeletionManager
         self.deletion_manager = DeletionManager()
         self.logger = LogManager(LOG_PATH)
-        create_csv_file(["File Path", "Delete_Status"], DELETE_FILES_CSV)
+        create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         self.center_window()
         self.create_widgets()
         self._keybinding()
+        self.create_context_menu()
 
     def center_window(self):
         screen_width = self.root.winfo_screenwidth()
@@ -43,14 +49,28 @@ class FileExplorerApp:
         # Bind Enter key to on_enter_pressed method
         self.entry.bind('<Return>', self.on_enter_pressed)
         self.search_entry.bind('<Return>', self.on_search_pressed)
-        # self.root.bind('<Double-1>', self.on_double_click)
         self.file_table.bind('<Double-1>', self.on_double_click)
+
+        # context menu on right-click
+        self.file_table.bind("<Button-3>", self.on_right_click)
+
         self.file_table.bind('<Return>', self.on_double_click)
         self.entry.bind("<Control-Return>", self.random_play)
         self.search_entry.bind("<Control-Return>", self.random_play)
         
         # Bind Delete key to delete_selected_files with direct_delete=False
         self.file_table.bind('<Delete>', lambda event: self.delete_selected_files(direct_delete=False, event=event))
+
+        # Move the Selected Items in a Folder
+        self.file_table.bind('<Control-m>', self.move_selected_files)
+        self.file_table.bind('<Control-M>', self.move_selected_files)
+
+        # Adding Files to Favorites from the Main Gui
+        self.file_table.bind('<Control-d>', self.remove_from_favorites)
+        self.file_table.bind('<Control-D>', self.remove_from_favorites)
+        self.file_table.bind('<Control-f>', self.add_to_favorites)
+        self.file_table.bind('<Control-F>', self.add_to_favorites)
+
         
         # Bind Shift+Delete to delete_selected_files with direct_delete=True
         # self.file_table.bind('<Shift-Delete>', lambda event: self.delete_selected_files(direct_delete=True, event=event))
@@ -61,12 +81,82 @@ class FileExplorerApp:
         if not selected_item:
             messagebox.showinfo("No Selection", "Please select files to mark for deletion.")
             return -1
-        elif len(selected_item) > 1:
-            messagebox.showerror("Multiple Selected", "Select Only One File")
-            return -1
-        
-        file_path = self.file_table.item(selected_item, "values")[2]
+        file_path = []
+        for selection in selected_item:
+            file_path.append(self.file_table.item(selection, "values")[2])
         return file_path
+    
+    def remove_from_favorites(self, event=None):
+        selected_items = self.file_table.selection()
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Select a File To Remove from Favs.")
+            return
+        fav_manager = FavoritesManager()
+        for item in selected_items:
+            file_path = normalise_path(self.file_table.item(item, "values")[2])
+            try:
+                if fav_manager.check_favorites(file_path):  # Move the selected file
+                    fav_manager.delete_from_favorites(file_path)  # Optionally remove from table after moving
+                else:
+                    messagebox.showerror("Removal Failed", f"Failed to remove file: {file_path} from Favorites.")
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred in Favorites Removal: {e}")
+                continue
+
+        messagebox.showinfo("File Removed From Favorites", f"{len(selected_items)} unfavorited successfully.")
+
+    def add_to_favorites(self, event=None):
+        selected_items = self.file_table.selection()
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Select a File To Add-To Favs.")
+            return
+        
+        confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to add {len(selected_items)} file(s) to Favorites?")
+        if not confirm:
+            return
+        
+        fav_manager = FavoritesManager()
+        for item in selected_items:
+            file_path = normalise_path(self.file_table.item(item, "values")[2])
+            try:
+                if not fav_manager.check_favorites(file_path):  # Move the selected file
+                    fav_manager.add_to_favorites(file_path)
+                else:
+                    messagebox.showerror("Addition Failed", f"Failed to Add file: {file_path} To Favorites.")
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred while Adding {file_path} To Favorites: {e}")
+                continue
+
+        messagebox.showinfo("File(s) Added To Favorites", f"{len(selected_items)} file(s) Added-To Favorites successfully.")
+
+    def create_context_menu(self):
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Move", command=self.move_selected_files)  # Add Move option
+        self.context_menu.add_command(label="Move to Recycle Bin", command=self.delete_selected_files)
+        # self.context_menu.add_separator()
+        # self.context_menu.add_command(label="Properties", command=self.show_properties)
+
+    def move_selected_files(self, event=None):
+        selected_items = self.file_table.selection()
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Please select files to move.")
+            return
+
+        dest_folder = filedialog.askdirectory(title="Select Destination Folder")
+        if not dest_folder:
+            return
+        file_manager = FileManager()  # Create an instance of FileManager
+        for item in selected_items:
+            file_path = self.file_table.item(item, "values")[2]
+            try:
+                if file_manager.move_file(file_path, dest_folder):  # Move the selected file
+                    self.file_table.delete(item)  # Optionally remove from table after moving
+                else:
+                    messagebox.showerror("Move Failed", f"Failed to move file: {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred: {e}")
+
+        messagebox.showinfo("Move Complete", f"{len(selected_items)} file(s) moved successfully.")
         
 
 
@@ -96,15 +186,21 @@ class FileExplorerApp:
         messagebox.showinfo("Deletion Marked", f"{len(selected_items)} file(s) marked for deletion.")
 
     def remove_from_deletion(self, file, event=None):
-        self.deletion_manager.remove_from_deletion(file)
-        messagebox.showinfo("Removed Marked", f"{file} file is removed from deletion list.")
+        selected_items = self.file_table.selection()
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Please select files to move.")
+            return
+        for item in selected_items:
+            file_path = self.file_table.item(item, "values")[2]
+            try:
+                self.deletion_manager.remove_from_deletion(file_path)      
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred: {e}")
+        messagebox.showinfo("Removed Marked", f"{len(selected_items)} file(s) removed from deletion list.")
 
     def delete_files_in_csv(self):
         """Deletes files marked as 'ToDelete' using the DeletionManager."""
-        try:
-            self.deletion_manager.delete_files_in_csv()
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred during deletion in gui_main: {str(e)}")
+        self.deletion_manager.delete_files_in_csv()
 
     @staticmethod
     def convert_bytes(bytes_size):
@@ -149,11 +245,17 @@ class FileExplorerApp:
                                        width=10, bd=0.5, relief=tk.RAISED)
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.show_caps = tk.Button(self.search_frame, text="CapShots", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=0.5, relief=tk.RAISED)
-        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
+        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.on_filter_fav, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.filter_favs.pack(side="left", pady=0)
 
-        self.delete_button = tk.Button(self.search_frame, text="Delete Marked", command=self.delete_files_in_csv, bg="red", fg="black", font=("Arial", 12, "bold"))
-        self.delete_button.pack(pady=10)
+        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 12, "bold"))
+        self.delete_button.pack(side="left", padx=5, pady=5)
+
+        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 12, "bold"),bd=0.5)
+        self.refresh_deleted.pack(side="left", pady=5, padx=(0,5))
+
+        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.show_caps.pack(side="left", pady=0)
 
         self.stats_frame = tk.Frame(self.root, bg="black")
         self.stats_frame.pack(side="top", pady=0)
@@ -166,6 +268,9 @@ class FileExplorerApp:
 
         self.total_size_label = tk.Label(self.stats_frame, text="Total Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
         self.total_size_label.pack(side="left", padx=(0, 10))
+
+        self.total_duration_label = tk.Label(self.stats_frame, text="Durations: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.total_duration_label.pack(side="left", padx=(10, 10))
 
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
@@ -202,6 +307,7 @@ class FileExplorerApp:
             self.total_files_label.config(text=f"Total Files: {self.total_files}")
             self.total_size_label.config(text=f"Total Size: {self.total_size}")
             self.search_results_label.config(text=f"Search Results: {self.total_search_results}")
+            self.total_duration_label.config(text=f"Durations (hours): {self.total_duration_watched}")
 
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
@@ -238,22 +344,33 @@ class FileExplorerApp:
                 favs = FavoritesManager()
                 self.video_files = sorted(favs.get_favorites())
                 self.total_files = len(self.video_files)
-                self.total_size = 0
+                self.total_size = self.convert_bytes(favs.total_size)
                 self.update_stats()
             
             elif folder_path_string == "show paths":
                 self.play_folder = True
                 with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
                     reader = csv.DictReader(file)
-                    self.folders = list(set((row["Folder Path"], row["Csv Path"]) for row in reader))
+
+                    self.folders = list(set((normalise_path(row["Folder Path"]), normalise_path(row["Csv Path"])) for row in reader if os.path.isdir(row["Folder Path"])))
                 self.video_files = []
             
             elif folder_path_string == "show deletes":
                 # Show files marked as "ToDelete"
                 self.show_deletes()
+            
+            elif folder_path_string == "show deleted":
+                # Show files marked as "ToDelete"
+                self.show_deletes(deleted=True)
+
+            elif folder_path_string == "show history":
+                self.video_files = self.get_history_files()
+                self.total_files = len(self.video_files)
+                self.update_stats()
+                self.total_duration_watched = 0
 
             else:
-                self.video_files = vf_loader.start_here(folder_path_string)
+                self.video_files = vf_loader.start_here(normalise_path(folder_path_string))
                 self.total_size = self.convert_bytes(vf_loader.total_size_in_bytes)
                 self.total_files = len(self.video_files)
                 self.update_stats()
@@ -273,17 +390,59 @@ class FileExplorerApp:
             print(f"Total Folders in Search History: {len(self.folders)}")
             self.insert_to_table(sorted(self.folders))
 
+    def refresh_deletions(self):
+        self.deletion_manager.check_deleted()
+        self.show_deletes(deleted=True)
+        self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+
+
+    def on_right_click(self, event):
+        """ Handle right-click to open context menu """
+        # Check if the file is already selected
+        item = self.file_table.identify_row(event.y)
+        
+        if item not in self.file_table.selection():
+            # If the item is not part of the current selection, keep the old selection
+            self.file_table.selection_set(item)
+
+        self.selected_item = item
+        try:
+            self.context_menu.post(event.x_root, event.y_root)
+        except IndexError:
+            pass
+    
     def get_files_marked_for_deletion(self):
         """Retrieves files marked as 'ToDelete' from the DELETE_FILES_CSV."""
         delete_files = []
+        self.total_size = 0
         try:
             with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
                 reader = csv.reader(file)
                 for row in reader:
                     if row and row[1] == "ToDelete":
                         delete_files.append(row[0])  # Append the file path
+                        if row[2] != "N/A":
+                            self.total_size += float(row[2])
         except FileNotFoundError:
             messagebox.showinfo("No Files", "No files marked for deletion.")
+        self.total_size = self.convert_bytes(self.total_size)
+        return delete_files
+    
+    def get_files_deleted(self):
+        """Retrieves files marked as 'Deleted' from the DELETE_FILES_CSV."""
+        delete_files = []
+        self.total_size = 0
+        try:
+            with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if row and row[1] == "Deleted":
+                        delete_files.append(row[0])  # Append the file path
+                        if row[2] != "N/A":
+                            self.total_size += float(row[2])
+        except FileNotFoundError:
+            messagebox.showinfo("No Files", "No files marked for deletion.")
+        self.total_size = self.convert_bytes(self.total_size)
         return delete_files
 
     def on_search_pressed(self, event=None):
@@ -307,6 +466,16 @@ class FileExplorerApp:
         except Exception as e:
             print(f"An Error {e} Occurred")
             messagebox.showerror("Error", f"Exception in Search Pressed: {e}")
+
+    def on_filter_fav(self, event=None):
+        files = self.get_files_from_table()
+        favs = FavoritesManager()
+        if files:
+            files = [normalise_path(file) for file in files if favs.check_favorites(file)]
+            self.total_search_results = len(files)
+            self.insert_to_table(self.file_path_tuple(files))
+            self.update_stats()
+
 
     def on_double_click(self, event=None):
         try:
@@ -383,11 +552,84 @@ class FileExplorerApp:
         else:
             print("No video files found in the specified folder path(s).")
 
-    def show_deletes(self):
-        self.video_files = self.get_files_marked_for_deletion()
+    def show_deletes(self, deleted=False):
+        self.video_files = self.get_files_marked_for_deletion() if not deleted else self.get_files_deleted()
         self.total_files = len(self.video_files)
-        self.total_size = 0  # You can calculate the size if needed
         self.update_stats()
+
+    def get_history_files(self, days=30):
+        file_path = WATCHED_HISTORY_LOG_PATH
+        thirty_days_ago = datetime.now() - timedelta(days=days)
+        
+        unique_file_names = set()
+        self.total_duration_watched = 0  # Initialize total duration watched in seconds
+        row_count = 0
+        
+        with open(file_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            
+            for row in reader:
+                row_count += 1
+                
+                # Parse the date from the 'Date Watched' column
+                try:
+                    date_watched = datetime.strptime(row['Date Watched'], '%Y-%m-%d %H:%M:%S')  # Adjust format if needed
+                except ValueError:
+                    print(f"Warning: Invalid date format in row {row_count}. Skipping.")
+                    continue
+                
+                # Only calculate for rows watched within the last 'days' days
+                if date_watched >= thirty_days_ago:
+                    # Parse and accumulate the duration watched in seconds
+                    try:
+                        duration_watched = self.calculate_duration_in_seconds(row['Duration Watched'])
+                        self.total_duration_watched += duration_watched
+                    except ValueError:
+                        print(f"Warning: Invalid duration format in row {row_count}. Skipping.")
+                        continue
+                    
+                    # Add the file name to the unique set
+                    unique_file_names.add(row['File Name'])
+                
+                # Print progress every 1000 rows
+                if row_count % 1000 == 0:
+                    print(f"Processed {row_count} rows...")
+
+        
+        self.total_duration_watched = round(self.total_duration_watched / 3600, 2)
+        print(f"Total rows processed: {row_count}")
+        print(f"Total duration watched in the last {days} days: {self.total_duration_watched:.2f} hours")
+        
+        return unique_file_names
+
+    def calculate_duration_in_seconds(self, duration_str):
+        """
+        Convert a duration string (e.g., '00:10.8' or '00:00:10.8') to seconds.
+        """
+        if '.' in duration_str:
+            duration_parts = duration_str.split('.')
+            if ':' in duration_parts[0]:
+                # Handles the case where format is HH:MM:SS.microseconds
+                time_part = datetime.strptime(duration_parts[0], '%H:%M:%S')
+            else:
+                # Handles the case where format is MM:SS.microseconds
+                time_part = datetime.strptime(duration_parts[0], '%M:%S')
+            
+            # Calculate the total time in seconds with microseconds converted to decimal seconds
+            seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second + float(f"0.{duration_parts[1]}")
+        else:
+            if ':' in duration_str:
+                # Handles the case where format is HH:MM:SS
+                time_part = datetime.strptime(duration_str, '%H:%M:%S')
+            else:
+                # Handles the case where format is MM:SS
+                time_part = datetime.strptime(duration_str, '%M:%S')
+            
+            # Convert the total time to seconds
+            seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second
+        
+        return seconds
+        
 
     def get_files_from_table(self):
         """
@@ -407,7 +649,11 @@ class FileExplorerApp:
         self.insert_to_table(self.file_path_tuple(self.image_files))
 
         
-if __name__ == "__main__":
+def run_app():
     root = tk.Tk()
     app = FileExplorerApp(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    # cProfile.run('run_app()')
+    run_app()

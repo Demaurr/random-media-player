@@ -15,7 +15,7 @@ from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_FOLDER
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""
 
-    def __init__(self, csv_folder=None, media_extensions=[".avi", ".mov",".mp4", ".mkv", ".m4v", ".webm", ".wmv"]):
+    def __init__(self, csv_folder=None, media_extensions=[".avi", ".mov",".mp4", ".mkv", ".m4v", ".webm", ".wmv", ".flv"]):
         """
         Initializes the VideoFileLoader.
 
