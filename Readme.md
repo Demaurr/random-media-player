@@ -1,6 +1,6 @@
 
 # Random Media Player
-![Main Screen Page](Screenshots/Gui_Main_Screen3.PNG)
+![Main Screen Page](Screenshots/Gui_Main_Screen4.PNG)
 ## Table of Contents 
  - [Introduction](#introduction) 
  - [Installation](#installation)  
@@ -11,7 +11,7 @@
 
 
 ## Introduction
-Random Video Player to Keep Track of Your Watchtime for local Media Consumption. The video extensions supported **avi, mp4, mkv, m4v, mov, webm, wvm**
+Random Video Player to Keep Track of Your Watchtime for local Media Consumption. The video extensions supported **avi, mp4, mkv, m4v, mov, webm, wvm, flv**
 
 
 ## Installation
@@ -45,12 +45,13 @@ Random Video Player to Keep Track of Your Watchtime for local Media Consumption.
 - **Statistics**(TBA): Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
 - **Deletion**: Users can Delete a file and queue it to deletion_list and send it to the recyclebin when feels right.
+- **Moving**: Users can Move a file to any directory within this app without affecting file's status, if it's in a favorites or deletion list then moving won't affect them.
 
 ## Usage
 *   Change the ***CONSTANT VARIABLES*** in `player_constants.py` and defined you PATHS for respective files.
 ### For Using **gui_main.py** (Recommended)
 *   Run `gui_main.py` if you don't want to interact through cmd and provide **path(s)** in the app's search entry in order to list all the Media Under it.
-*   (Optional) You can input **play favs** in order to list/play from your saved favorites.
+*  You can input **play favs** in order to list/play from your saved favorites.
 * Viewing the Images from Your Stated Folder ***default is SCREENSHOTS_FOLDER***.
 *   After `gui_main.py` double-click on any file you want to start player from.
 *   All The functionalities working with main.py would Also Work with this (like Screen Captures, Adding Favs etc.)
