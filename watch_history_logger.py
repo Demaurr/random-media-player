@@ -2,7 +2,8 @@ from datetime import datetime
 import csv
 import os
 from logs_writer import LogManager
-from player_constants import LOG_PATH
+from player_constants import LOG_PATH, WATCHED_HISTORY_LOG_PATH
+from static_methods import convert_date_format
 
 class WatchHistoryLogger:
     """A class for logging the history of watched videos."""
@@ -59,4 +60,8 @@ class WatchHistoryLogger:
         except Exception as e:
             print(f"Error Occurred While Writing Watch History Logs {e}")
             self.logger.error_logs(f"{e} While Writing Watch History")
+
+
+if __name__ == "__main__":
+    convert_date_format(WATCHED_HISTORY_LOG_PATH)
             
