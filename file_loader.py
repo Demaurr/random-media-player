@@ -255,7 +255,9 @@ class VideoFileLoader:
         # Iterate through each substring obtained after the first split
         for substr in split_by_comma_space:
             # Split each substring by ","
+            substr = substr.strip()
             split_by_comma = substr.split(",")
+            # print(substr)
             
             # Extend the stripped_strings list with the split substrings
             stripped_strings.extend(split_by_comma)
