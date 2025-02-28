@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 import vlc
 import os
 import random
@@ -423,6 +424,8 @@ class MediaPlayerApp(tk.Tk):
                 self.select_random_video()
             self.play_video()
             self.video_paused = False
+        except IndexError:
+            messagebox.showerror("Index Error", f"Videos Finished")
         except Exception as e:
             print(f"An Exception Occurred in play_next(): {e}")
     

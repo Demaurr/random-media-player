@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import os
 import csv
+from pprint import pprint
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
@@ -13,7 +14,8 @@ from deletion_manager import DeletionManager
 from file_manager import FileManager
 from image_player import ImageViewer
 from player_constants import WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, normalise_path
+from static_methods import create_csv_file, normalise_path, get_file_size
+from get_aspects import VideoProcessor
 import cProfile
 
 class FileExplorerApp:
@@ -28,6 +30,7 @@ class FileExplorerApp:
         self.total_size = 0
         self.total_search_results = 0
         self.total_duration_watched = 0.0
+        self.search_size = 0
 
         # Instantiate DeletionManager
         self.deletion_manager = DeletionManager()
@@ -241,21 +244,27 @@ class FileExplorerApp:
         self.search_entry.pack(side="left", padx=(10, 5), pady=0)
 
         # Create search button
-        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),
+        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 10, "bold"),
                                        width=10, bd=0.5, relief=tk.RAISED)
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.on_filter_fav, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.on_filter_fav, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.filter_favs.pack(side="left", pady=0)
 
-        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 12, "bold"))
+        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.delete_button.pack(side="left", padx=5, pady=5)
 
-        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 12, "bold"),bd=0.5)
+        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 10, "bold"),bd=0.5, relief=tk.RAISED)
         self.refresh_deleted.pack(side="left", pady=5, padx=(0,5))
 
-        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.show_caps.pack(side="left", pady=0)
+
+        self.show_verticals = tk.Button(self.search_frame, text="V", command=self.get_verticals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
+        self.show_verticals.pack(side="left", padx=5, pady=0)
+
+        self.show_horizontals = tk.Button(self.search_frame, text="L", command=self.get_horizontals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
+        self.show_horizontals.pack(side="left", padx=0, pady=0)
 
         self.stats_frame = tk.Frame(self.root, bg="black")
         self.stats_frame.pack(side="top", pady=0)
@@ -268,6 +277,9 @@ class FileExplorerApp:
 
         self.total_size_label = tk.Label(self.stats_frame, text="Total Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
         self.total_size_label.pack(side="left", padx=(0, 10))
+
+        self.search_size_label = tk.Label(self.stats_frame, text="S-Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.search_size_label.pack(side="left", padx=(0, 10))
 
         self.total_duration_label = tk.Label(self.stats_frame, text="Durations: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
         self.total_duration_label.pack(side="left", padx=(10, 10))
@@ -308,6 +320,7 @@ class FileExplorerApp:
             self.total_size_label.config(text=f"Total Size: {self.total_size}")
             self.search_results_label.config(text=f"Search Results: {self.total_search_results}")
             self.total_duration_label.config(text=f"Durations (hours): {self.total_duration_watched}")
+            self.search_size_label.config(text=f"S-Size: {self.search_size}")
 
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
@@ -456,6 +469,10 @@ class FileExplorerApp:
                     file_name = os.path.basename(file)
                     file_list.append((file_name, file))
             print(f"Total Files for {query}: {len(file_list)}")
+            if query == '':
+                self.search_size = self.total_size
+            elif not self.entry.get() in ["show deleted"]:
+                self.update_search_size([file[1] for file in file_list])
             self.total_search_results = len(file_list)
             self.update_stats()
             self.insert_to_table(sorted(file_list))
@@ -473,6 +490,7 @@ class FileExplorerApp:
         if files:
             files = [normalise_path(file) for file in files if favs.check_favorites(file)]
             self.total_search_results = len(files)
+            self.update_search_size(files)
             self.insert_to_table(self.file_path_tuple(files))
             self.update_stats()
 
@@ -529,6 +547,46 @@ class FileExplorerApp:
         
         except IndexError as e:
             messagebox.showerror("Error", f"{e}")
+
+    def update_search_size(self, file_list):
+        self.search_size = 0
+        size = 0
+        for file in file_list:
+             size += get_file_size(file)
+
+        self.search_size = self.convert_bytes(size)
+
+    def get_verticals(self):
+        try:
+            file_list = self.get_files_from_table()
+            # pprint(file_list)
+            video_processor = VideoProcessor(file_list)
+            verticals = video_processor.get_vertical_videos()
+            print(f"Total Verticals Files: {len(verticals)}")
+            self.total_search_results = len(verticals)
+            self.update_search_size(verticals)
+            self.update_stats()
+            self.insert_to_table(self.file_path_tuple(sorted(verticals)))
+            messagebox.showinfo("Total Files Found", f"Total Vertical Videos Found: {self.total_search_results}")
+        except Exception as e:
+            print(f"An Error {e} Occurred")
+            messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
+
+    def get_horizontals(self):
+        try:
+            file_list = self.get_files_from_table()
+            # pprint(file_list)
+            video_processor = VideoProcessor(file_list)
+            horizontals = video_processor.get_horizontal_videos()
+            print(f"Total Verticals Files: {len(horizontals)}")
+            self.total_search_results = len(horizontals)
+            self.update_search_size(horizontals)
+            self.update_stats()
+            self.insert_to_table(self.file_path_tuple(sorted(horizontals)))
+            messagebox.showinfo("Total Files Found", f"Total Vertical Videos Found: {self.total_search_results}")
+        except Exception as e:
+            print(f"An Error {e} Occurred")
+            messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
 
     def _on_close_player(self, player_window): # Not Working as Expecteed
         """Callback to re-enable the main window after the player window is closed."""

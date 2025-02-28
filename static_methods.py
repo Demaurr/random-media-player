@@ -180,10 +180,10 @@ def get_file_size(file_path):
         return os.path.getsize(file_path)
     except FileNotFoundError:
         print(f"File not found: {file_path}")
-        return None
+        return 0
     except Exception as e:
         print(f"An error occurred: {str(e)}")
-        return None
+        return 0
     
 def convert_date_format(file_path):
     """
@@ -220,3 +220,23 @@ def convert_date_format(file_path):
         writer.writerows(rows)
 
     print(f"Date format update complete. File: {file_path}")
+
+
+def compare_folders(filepath, folderpath):
+    # Get the directory path from the full filepath
+    file_directory = os.path.dirname(filepath)
+    print(file_directory)
+    
+    # Normalize both paths to handle different path separators and remove trailing slashes
+    file_directory = os.path.normpath(file_directory)
+    folderpath = os.path.normpath(folderpath)
+    
+    # Compare the paths
+    if file_directory == folderpath:
+        print("The folders match!")
+        return True
+    else:
+        # print("The folders don't match!")
+        # print(f"File directory: {file_directory}")
+        # print(f"Folder path: {folderpath}")
+        return False
