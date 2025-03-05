@@ -3,13 +3,14 @@ import csv
 from datetime import datetime
 from logs_writer import LogManager
 from player_constants import FAV_FILES, LOG_PATH
-from static_methods import get_file_size, normalise_path
+from static_methods import create_csv_file, get_file_size, normalise_path
 import hashlib
 
 
 class FavoritesManager:
-    def __init__(self, fav_csv=None):
-        self.fav_csv = fav_csv if fav_csv is not None else FAV_FILES
+    def __init__(self, fav_csv=FAV_FILES):
+        create_csv_file(["Hash", "Video Name", "Source Path", "Date Added"], FAV_FILES)
+        self.fav_csv = fav_csv
         self.logger = LogManager(LOG_PATH)
         self.total_size = 0.0
 
