@@ -20,9 +20,6 @@ class MediaPlayerApp(tk.Tk):
     
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
-        ensure_folder_exists(FILES_FOLDER)
-        ensure_folder_exists(SCREENSHOTS_FOLDER)
-        ensure_folder_exists(REPORTS_FOLDER)
         self.get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
         self.logger = LogManager(LOG_PATH)

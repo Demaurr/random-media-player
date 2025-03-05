@@ -12,8 +12,8 @@ from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
 from file_manager import FileManager
 from image_player import ImageViewer
-from player_constants import WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, normalise_path
+from player_constants import FILES_FOLDER, REPORTS_FOLDER, WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
+from static_methods import create_csv_file, ensure_folder_exists, normalise_path
 import cProfile
 
 class FileExplorerApp:
@@ -30,6 +30,9 @@ class FileExplorerApp:
         self.total_duration_watched = 0.0
 
         # Instantiate DeletionManager
+        ensure_folder_exists(FILES_FOLDER)
+        ensure_folder_exists(SCREENSHOTS_FOLDER)
+        ensure_folder_exists(REPORTS_FOLDER)
         self.deletion_manager = DeletionManager()
         self.logger = LogManager(LOG_PATH)
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
