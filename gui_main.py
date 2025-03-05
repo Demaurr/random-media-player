@@ -34,7 +34,9 @@ class FileExplorerApp:
 
         # Instantiate DeletionManager
         self.deletion_manager = DeletionManager()
+        self.fav_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
+        self.video_processor = VideoProcessor
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         self.center_window()
         self.create_widgets()
@@ -248,7 +250,7 @@ class FileExplorerApp:
                                        width=10, bd=0.5, relief=tk.RAISED)
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.on_filter_fav, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
+        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.check_update_favs, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.filter_favs.pack(side="left", pady=0)
 
         self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
@@ -486,13 +488,30 @@ class FileExplorerApp:
 
     def on_filter_fav(self, event=None):
         files = self.get_files_from_table()
-        favs = FavoritesManager()
+        favs = self.fav_manager
         if files:
             files = [normalise_path(file) for file in files if favs.check_favorites(file)]
             self.total_search_results = len(files)
             self.update_search_size(files)
             self.insert_to_table(self.file_path_tuple(files))
             self.update_stats()
+
+    def check_update_favs(self, event=None):
+        files = self.file_path_tuple(self.get_files_from_table())
+        favs = self.fav_manager.get_favorites_by_name()
+        fav_files = []
+        if files:
+            for file in files:
+                if file[0] in favs.keys() and file[1] in favs.values():
+                    fav_files.append(file)
+                elif file[0] in favs.keys():
+                    self.fav_manager.add_to_favorites(normalise_path(file[1]))
+                    fav_files.append(file)
+            self.total_search_results = len(fav_files)
+            self.update_search_size([file[1] for file in fav_files])
+            self.insert_to_table(fav_files)
+            self.update_stats()
+                    
 
 
     def on_double_click(self, event=None):
@@ -560,7 +579,8 @@ class FileExplorerApp:
         try:
             file_list = self.get_files_from_table()
             # pprint(file_list)
-            video_processor = VideoProcessor(file_list)
+            # video_processor = VideoProcessor(file_list)
+            video_processor = self.video_processor(file_list)
             verticals = video_processor.get_vertical_videos()
             print(f"Total Verticals Files: {len(verticals)}")
             self.total_search_results = len(verticals)
@@ -576,7 +596,8 @@ class FileExplorerApp:
         try:
             file_list = self.get_files_from_table()
             # pprint(file_list)
-            video_processor = VideoProcessor(file_list)
+            # video_processor = VideoProcessor(file_list)
+            video_processor = self.video_processor(file_list)
             horizontals = video_processor.get_horizontal_videos()
             print(f"Total Verticals Files: {len(horizontals)}")
             self.total_search_results = len(horizontals)
@@ -588,15 +609,15 @@ class FileExplorerApp:
             print(f"An Error {e} Occurred")
             messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
 
-    def _on_close_player(self, player_window): # Not Working as Expecteed
-        """Callback to re-enable the main window after the player window is closed."""
-        player_window.destroy()  # Destroy the player window
-        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
+    # def _on_close_player(self, player_window): # Not Working as Expecteed
+    #     """Callback to re-enable the main window after the player window is closed."""
+    #     player_window.destroy() 
+    #     self.root.wm_attributes("-disabled", False)
 
-    def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
-        """Callback to re-enable the main window after the image viewer window is closed."""
-        viewer_window.destroy()  # Destroy the viewer window
-        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
+    # def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
+    #     """Callback to re-enable the main window after the image viewer window is closed."""
+    #     viewer_window.destroy()  
+    #     self.root.wm_attributes("-disabled", False)  # Re-enable the main window
 
     def random_play(self, event=None):
         self.on_enter_pressed()
@@ -699,6 +720,7 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[2]
             file_paths.append(file_path)
         return file_paths
+    
     
     def display_caps(self):
         self.play_images = True

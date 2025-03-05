@@ -5,7 +5,7 @@ from logs_writer import LogManager
 from player_constants import FAV_FILES, LOG_PATH
 from static_methods import get_file_size, normalise_path
 import hashlib
-
+from pprint import pprint
 
 class FavoritesManager:
     def __init__(self, fav_csv=None):
@@ -93,6 +93,29 @@ class FavoritesManager:
                     self.total_size += get_file_size(path)
         return favorites
     
+    def get_favorites_by_name(self) -> dict:
+        """Returns a dictionary with video names as keys and sets of valid source paths as values."""
+        favorites_dict = {}
+        try:
+            with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    video_name = row["Video Name"]
+                    source_path = row["Source Path"]
+                    full_path = os.path.join(source_path, video_name)
+                    
+                    # Only process entries where the file exists
+                    if os.path.exists(full_path):
+                        # Initialize the set if the video isn't in the dict yet
+                        if video_name not in favorites_dict:
+                            favorites_dict[video_name] = set()
+                        # Add the valid source path
+                        favorites_dict[video_name].add(source_path)
+        except FileNotFoundError:
+            print(f"Favorites file {self.fav_csv} not found.")
+            self.logger.error_logs(f"Favorites file {self.fav_csv} not found.")
+        return favorites_dict
+
     def update_path_and_hash(self):
         updated_rows = []
         hashes = set()
@@ -203,5 +226,11 @@ if __name__ == "__main__":
     fav_manager = FavoritesManager()
 
     # Normalize paths and update hashes in the favorites CSV
-    fav_manager.normalize_favorites_paths_and_hashes()
+    # fav_manager.normalize_favorites_paths_and_hashes()
+    favorites_by_name = fav_manager.get_favorites_by_name()
+    # for video_name, paths in favorites_by_name.items():
+    #     if len(paths) > 1:
+    #         print(f"Video: {video_name}, Paths: {paths}")
+
+    pprint(favorites_by_name)
     pass
