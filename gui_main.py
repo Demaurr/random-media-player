@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import os
 import csv
+from pprint import pprint
 import tkinter as tk
 from tkinter import Toplevel, ttk
 from tkinter import messagebox
@@ -13,7 +14,8 @@ from deletion_manager import DeletionManager
 from file_manager import FileManager
 from image_player import ImageViewer
 from player_constants import FILES_FOLDER, REPORTS_FOLDER, WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, ensure_folder_exists, normalise_path
+from static_methods import create_csv_file, ensure_folder_exists, normalise_path, get_file_size
+from get_aspects import VideoProcessor
 import cProfile
 
 class FileExplorerApp:
@@ -28,13 +30,16 @@ class FileExplorerApp:
         self.total_size = 0
         self.total_search_results = 0
         self.total_duration_watched = 0.0
+        self.search_size = 0
 
         # Instantiate DeletionManager
         ensure_folder_exists(FILES_FOLDER)
         ensure_folder_exists(SCREENSHOTS_FOLDER)
         ensure_folder_exists(REPORTS_FOLDER)
         self.deletion_manager = DeletionManager()
+        self.fav_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
+        self.video_processor = VideoProcessor
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         self.center_window()
         self.create_widgets()
@@ -244,21 +249,27 @@ class FileExplorerApp:
         self.search_entry.pack(side="left", padx=(10, 5), pady=0)
 
         # Create search button
-        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 12, "bold"),
+        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 10, "bold"),
                                        width=10, bd=0.5, relief=tk.RAISED)
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.on_filter_fav, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.check_update_favs, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.filter_favs.pack(side="left", pady=0)
 
-        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 12, "bold"))
+        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.delete_button.pack(side="left", padx=5, pady=5)
 
-        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 12, "bold"),bd=0.5)
+        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 10, "bold"),bd=0.5, relief=tk.RAISED)
         self.refresh_deleted.pack(side="left", pady=5, padx=(0,5))
 
-        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 12, "bold"), bd=0.5, relief=tk.RAISED)
+        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
         self.show_caps.pack(side="left", pady=0)
+
+        self.show_verticals = tk.Button(self.search_frame, text="V", command=self.get_verticals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
+        self.show_verticals.pack(side="left", padx=5, pady=0)
+
+        self.show_horizontals = tk.Button(self.search_frame, text="L", command=self.get_horizontals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
+        self.show_horizontals.pack(side="left", padx=0, pady=0)
 
         self.stats_frame = tk.Frame(self.root, bg="black")
         self.stats_frame.pack(side="top", pady=0)
@@ -271,6 +282,9 @@ class FileExplorerApp:
 
         self.total_size_label = tk.Label(self.stats_frame, text="Total Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
         self.total_size_label.pack(side="left", padx=(0, 10))
+
+        self.search_size_label = tk.Label(self.stats_frame, text="S-Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.search_size_label.pack(side="left", padx=(0, 10))
 
         self.total_duration_label = tk.Label(self.stats_frame, text="Durations: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
         self.total_duration_label.pack(side="left", padx=(10, 10))
@@ -311,6 +325,7 @@ class FileExplorerApp:
             self.total_size_label.config(text=f"Total Size: {self.total_size}")
             self.search_results_label.config(text=f"Search Results: {self.total_search_results}")
             self.total_duration_label.config(text=f"Durations (hours): {self.total_duration_watched}")
+            self.search_size_label.config(text=f"S-Size: {self.search_size}")
 
     def list_files(self, directory):
         # self.file_table.delete(*self.file_table.get_children())
@@ -459,6 +474,10 @@ class FileExplorerApp:
                     file_name = os.path.basename(file)
                     file_list.append((file_name, file))
             print(f"Total Files for {query}: {len(file_list)}")
+            if query == '':
+                self.search_size = self.total_size
+            elif not self.entry.get() in ["show deleted"]:
+                self.update_search_size([file[1] for file in file_list])
             self.total_search_results = len(file_list)
             self.update_stats()
             self.insert_to_table(sorted(file_list))
@@ -472,12 +491,30 @@ class FileExplorerApp:
 
     def on_filter_fav(self, event=None):
         files = self.get_files_from_table()
-        favs = FavoritesManager()
+        favs = self.fav_manager
         if files:
             files = [normalise_path(file) for file in files if favs.check_favorites(file)]
             self.total_search_results = len(files)
+            self.update_search_size(files)
             self.insert_to_table(self.file_path_tuple(files))
             self.update_stats()
+
+    def check_update_favs(self, event=None):
+        files = self.file_path_tuple(self.get_files_from_table())
+        favs = self.fav_manager.get_favorites_by_name()
+        fav_files = []
+        if files:
+            for file in files:
+                if file[0] in favs.keys() and file[1] in favs.values():
+                    fav_files.append(file)
+                elif file[0] in favs.keys():
+                    self.fav_manager.add_to_favorites(normalise_path(file[1]))
+                    fav_files.append(file)
+            self.total_search_results = len(fav_files)
+            self.update_search_size([file[1] for file in fav_files])
+            self.insert_to_table(fav_files)
+            self.update_stats()
+                    
 
 
     def on_double_click(self, event=None):
@@ -533,15 +570,57 @@ class FileExplorerApp:
         except IndexError as e:
             messagebox.showerror("Error", f"{e}")
 
-    def _on_close_player(self, player_window): # Not Working as Expecteed
-        """Callback to re-enable the main window after the player window is closed."""
-        player_window.destroy()  # Destroy the player window
-        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
+    def update_search_size(self, file_list):
+        self.search_size = 0
+        size = 0
+        for file in file_list:
+             size += get_file_size(file)
 
-    def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
-        """Callback to re-enable the main window after the image viewer window is closed."""
-        viewer_window.destroy()  # Destroy the viewer window
-        self.root.wm_attributes("-disabled", False)  # Re-enable the main window
+        self.search_size = self.convert_bytes(size)
+
+    def get_verticals(self):
+        try:
+            file_list = self.get_files_from_table()
+            # pprint(file_list)
+            # video_processor = VideoProcessor(file_list)
+            video_processor = self.video_processor(file_list)
+            verticals = video_processor.get_vertical_videos()
+            print(f"Total Verticals Files: {len(verticals)}")
+            self.total_search_results = len(verticals)
+            self.update_search_size(verticals)
+            self.update_stats()
+            self.insert_to_table(self.file_path_tuple(sorted(verticals)))
+            messagebox.showinfo("Total Files Found", f"Total Vertical Videos Found: {self.total_search_results}")
+        except Exception as e:
+            print(f"An Error {e} Occurred")
+            messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
+
+    def get_horizontals(self):
+        try:
+            file_list = self.get_files_from_table()
+            # pprint(file_list)
+            # video_processor = VideoProcessor(file_list)
+            video_processor = self.video_processor(file_list)
+            horizontals = video_processor.get_horizontal_videos()
+            print(f"Total Verticals Files: {len(horizontals)}")
+            self.total_search_results = len(horizontals)
+            self.update_search_size(horizontals)
+            self.update_stats()
+            self.insert_to_table(self.file_path_tuple(sorted(horizontals)))
+            messagebox.showinfo("Total Files Found", f"Total Vertical Videos Found: {self.total_search_results}")
+        except Exception as e:
+            print(f"An Error {e} Occurred")
+            messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
+
+    # def _on_close_player(self, player_window): # Not Working as Expecteed
+    #     """Callback to re-enable the main window after the player window is closed."""
+    #     player_window.destroy() 
+    #     self.root.wm_attributes("-disabled", False)
+
+    # def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
+    #     """Callback to re-enable the main window after the image viewer window is closed."""
+    #     viewer_window.destroy()  
+    #     self.root.wm_attributes("-disabled", False)  # Re-enable the main window
 
     def random_play(self, event=None):
         self.on_enter_pressed()
@@ -644,6 +723,7 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[2]
             file_paths.append(file_path)
         return file_paths
+    
     
     def display_caps(self):
         self.play_images = True

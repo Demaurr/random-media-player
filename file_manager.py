@@ -6,7 +6,7 @@ from player_constants import FILE_TRANSFER_LOG, LOG_PATH
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
-from static_methods import create_csv_file, ensure_folder_exists, rename_if_exists
+from static_methods import create_csv_file, ensure_folder_exists, rename_if_exists, compare_folders
 
 class FileManager:
     def __init__(self):
@@ -29,6 +29,9 @@ class FileManager:
 
             # Ensure destination directory exists
             ensure_folder_exists(dest)
+            if compare_folders(src, dest):
+                print(f"Source and Destination is Same: {dest} {src}")
+                return False
             
             # Get the full destination path (retain the filename in the new directory)
             dest_path = os.path.join(dest, os.path.basename(src))
