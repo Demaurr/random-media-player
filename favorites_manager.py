@@ -105,13 +105,10 @@ class FavoritesManager:
                     source_path = row["Source Path"]
                     full_path = os.path.join(source_path, video_name)
                     
-                    # Only process entries where the file exists
-                    if os.path.exists(full_path):
-                        # Initialize the set if the video isn't in the dict yet
-                        if video_name not in favorites_dict:
-                            favorites_dict[video_name] = set()
-                        # Add the valid source path
-                        favorites_dict[video_name].add(source_path)
+                    # if os.path.exists(full_path):
+                    if video_name not in favorites_dict:
+                        favorites_dict[video_name] = set()
+                    favorites_dict[video_name].add(source_path)
         except FileNotFoundError:
             print(f"Favorites file {self.fav_csv} not found.")
             self.logger.error_logs(f"Favorites file {self.fav_csv} not found.")

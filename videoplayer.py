@@ -22,7 +22,7 @@ class MediaPlayerApp(tk.Tk):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
         self.get_history_csvfile(watch_history_csv)
-        self.favorites_manager = FavoritesManager(FILES_FOLDER + "Favorites.csv")
+        self.favorites_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.deleter = DeletionManager()
         self.bg_color = "black"
@@ -361,7 +361,7 @@ class MediaPlayerApp(tk.Tk):
         # self.ensure_folder_exists(SCREENSHOTS_FOLDER)
         filename = self.current_file.split('\\')[-1]
         # length = self.get_duration_str
-        screenshot_path = f"{SCREENSHOTS_FOLDER}screenshot_{filename}_{self.media_player.get_time()}.png"
+        screenshot_path = f"{SCREENSHOTS_FOLDER}\screenshot_{filename}_{self.media_player.get_time()}.png"
         self.media_player.video_take_snapshot(0, screenshot_path, 0, 0)
 
     def volume_increase(self, event):
