@@ -11,9 +11,9 @@ import shutil
 
 class DeletionManager:
     def __init__(self):
-        self.delete_csv = DELETE_FILES_CSV  # Path to the CSV file tracking deletions
-        self.fav_manager = FavoritesManager(FAV_FILES)  # FavoritesManager instance
-        self.logger = LogManager(LOG_PATH)  # Logger instance for logging operations
+        self.delete_csv = DELETE_FILES_CSV  
+        self.fav_manager = FavoritesManager(FAV_FILES) 
+        self.logger = LogManager(LOG_PATH)  
 
     def read_csv_file(self):
         """Reads the CSV file and returns a dictionary of file paths and their metadata."""
@@ -142,11 +142,10 @@ class DeletionManager:
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
         if not self.fav_manager.check_favorites(file_path):
             return True # Delete the file
-        # Ask the user if they want to move the favorite file instead of deleting
+        
         move_to_favorites = messagebox.askyesno("File in Favorites", 
                                                 f"{file_path} is in your favorites. Do you want to move it to the backup folder instead of deleting?")
         if move_to_favorites:
-            # Get the default favorites folder
             default_favorites_folder = get_favs_folder()
             use_default_folder = messagebox.askyesno("Select Folder", 
                                                     f"Do you want to move the file to the default folder: {default_favorites_folder}?")
@@ -244,7 +243,7 @@ class DeletionManager:
                 for row in reader:
                     if row:
                         file_path = normalise_path(row[0])  # Normalize the file path
-                        status = row[1]  # Keep the existing status
+                        status = row[1]
 
                         # If size and mod_time are not in the row, calculate them
                         if len(row) < 4:
@@ -258,10 +257,8 @@ class DeletionManager:
                             size = row[2]
                             mod_time = row[3]
 
-                        # Write the updated row to the temporary file
                         writer.writerow([file_path, status, size, mod_time])
 
-            # Replace original CSV with the updated one
             os.replace(temp_file, self.delete_csv)
             print("CSV refactoring complete. New columns added: File Size, Modification Time.")
 

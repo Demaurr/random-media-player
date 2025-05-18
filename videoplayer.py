@@ -361,7 +361,7 @@ class MediaPlayerApp(tk.Tk):
         # self.ensure_folder_exists(SCREENSHOTS_FOLDER)
         filename = self.current_file.split('\\')[-1]
         # length = self.get_duration_str
-        screenshot_path = f"{SCREENSHOTS_FOLDER}\screenshot_{filename}_{self.media_player.get_time()}.png"
+        screenshot_path = f"{SCREENSHOTS_FOLDER}\\screenshot_{filename}_{self.media_player.get_time()}.png"
         self.media_player.video_take_snapshot(0, screenshot_path, 0, 0)
 
     def volume_increase(self, event):

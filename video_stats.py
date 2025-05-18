@@ -61,7 +61,7 @@ class VideoStatsApp:
             video_data (list): A list of dictionaries containing video statistics.
             session_time (int): The duration of the session in seconds. Defaults to 0.
         """
-        self.report_folder = report_folder
+        self.report_folder = report_folder + "\\"
         self.master = master
         self.video_data = video_data
         self.session_time = session_time

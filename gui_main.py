@@ -356,7 +356,7 @@ class FileExplorerApp:
     def on_enter_pressed(self, event=None):
         folder_path_string = self.entry.get()
         vf_loader = VideoFileLoader()
-        self.play_folder = False
+        self.reset_search_option()
         try:
             if folder_path_string == "play favs":
                 favs = FavoritesManager()
@@ -366,7 +366,7 @@ class FileExplorerApp:
                 self.update_stats()
             
             elif folder_path_string == "show paths":
-                self.play_folder = True
+                self.reset_search_option(folder=True)
                 with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
                     reader = csv.DictReader(file)
 
@@ -514,6 +514,10 @@ class FileExplorerApp:
             self.update_search_size([file[1] for file in fav_files])
             self.insert_to_table(fav_files)
             self.update_stats()
+
+    def reset_search_option(self, folder=False, images=False):
+        self.play_folder = folder
+        self.play_images = images
                     
 
 
@@ -524,8 +528,6 @@ class FileExplorerApp:
             if self.play_folder:
                 folder_path = self.file_table.item(item, "values")[1]
                 vf_load = VideoFileLoader()
-                self.play_folder = False
-                self.play_images = False
                 self.video_files = vf_load.start_here(file_path)
                 self.total_size = self.convert_bytes(vf_load.total_size_in_bytes)
                 self.total_files = len(self.video_files)
@@ -533,6 +535,7 @@ class FileExplorerApp:
                 print(f"Total Videos Found in {folder_path}: {len(self.video_files)}")
                 self.update_entry_text(folder_path)
                 self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+                self.reset_search_option()
             
             elif self.play_images:
                 # Disable the main window
@@ -542,9 +545,11 @@ class FileExplorerApp:
                 image_viewer_width = 900
                 image_viewer_height = 600
                 image_files = self.get_files_from_table()
+                # self.reset_search_option(images=True)
 
                 # Create ImageViewer instance with the specified width and height
                 ImageViewer(viewer_window, image_files, index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
+                # self.reset_search_option()
                 
                 # Re-enable the main window when the image viewer window is closed
                 # viewer_window.protocol("WM_DELETE_WINDOW", lambda: self._on_close_viewer(viewer_window))
