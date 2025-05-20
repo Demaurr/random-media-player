@@ -3,7 +3,7 @@ import csv
 from send2trash import send2trash
 from tkinter import messagebox, filedialog
 from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists
-from player_constants import FAV_FILES, DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
+from player_constants import FAV_FILES, DELETE_FILES_CSV, LOG_PATH
 from logs_writer import LogManager
 from favorites_manager import FavoritesManager
 from datetime import datetime
@@ -23,14 +23,14 @@ class DeletionManager:
                 reader = csv.reader(file)
                 next(reader)
                 for row in reader:
-                    if row and len(row) >= 4:  # Ensure it's not an empty row and has all fields
+                    # Make sure to check if the row is not empty and has enough columns
+                    if row and len(row) >= 4:
                         file_path = normalise_path(row[0])
                         status = row[1]
                         size = int(row[2]) if row[2] != 'N/A' else row[2]
                         mod_time = row[3]
                         file_status_dict[file_path] = {'status': status, 'size': size, 'mod_time': mod_time}
         except FileNotFoundError:
-            # File will be created later if it doesn't exist
             pass
         return file_status_dict
 
@@ -141,7 +141,7 @@ class DeletionManager:
     def handle_favorites(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
         if not self.fav_manager.check_favorites(file_path):
-            return True # Delete the file
+            return True
         
         move_to_favorites = messagebox.askyesno("File in Favorites", 
                                                 f"{file_path} is in your favorites. Do you want to move it to the backup folder instead of deleting?")
@@ -152,20 +152,20 @@ class DeletionManager:
 
             if use_default_folder:
                 self.move_file_to_folder(file_path, default_favorites_folder, file_status_dict)
-                return False  # Indicating that the file was moved, not deleted
+                return False 
             else:
                 # Ask the user for a new folder if they don't want to use the default one
                 new_folder = filedialog.askdirectory(title="Select Folder to Move Favorites")
                 if new_folder:
                     self.move_file_to_folder(file_path, new_folder, file_status_dict)
-                    return False  # File was moved, not deleted
+                    return False
                 else:
                     print(f"Skipping {file_path} as no folder was selected.")
-                    return False  # No folder was selected, so no deletion happens
+                    return False
         else:
             # If the user does not want to move the file, remove it from favorites and mark for deletion
             self.remove_from_favorites_and_delete(file_path, file_status_dict)
-            return True  # File can now be deleted
+            return True 
 
     def move_file_to_folder(self, file_path, folder, file_status_dict):
         """Moves a file to the specified folder."""
@@ -183,7 +183,10 @@ class DeletionManager:
             print(f'Error moving {file_path}: {e}')
 
     def remove_from_favorites_and_delete(self, file_path, file_status_dict):
-        """Removes a file from favorites and deletes it."""
+        """
+        Removes a file from favorites and deletes it.
+        For Now it will not Remove from favorites, but it will delete the file.
+        """
         # self.fav_manager.delete_from_favorites(file_path) # skipping the deletion from fav files
         if self.delete_file(file_path, file_status_dict, handle_favs=False):
             file_status_dict[file_path]["status"] = "Deleted"
@@ -198,7 +201,6 @@ class DeletionManager:
                     print(f"Skipping deletion of {file_path} because it's a favorite and not removed.")
                     return False
             
-            # Proceed with file deletion
             send2trash(file_path)
             print(f"[FILE DELETED] {file_path} has been deleted.")
             self.logger.update_logs('[FILE DELETED]', file_path)
@@ -206,27 +208,23 @@ class DeletionManager:
             
         except Exception as e:
             self.logger.error_logs(f'Error deleting {file_path}: {e}')
+            return False
 
     def update_file_name_in_csv(self, old_name, new_name):
         """Updates the file name in the CSV for a file marked 'ToDelete'."""
         old_name = normalise_path(old_name)
         new_name = normalise_path(new_name)
-
-        # print(old_name, new_name)
         
         file_status_dict = self.read_csv_file()
 
         if old_name in file_status_dict.keys():
             if file_status_dict[old_name]['status'] == "ToDelete":
-                # Update the file name in the dictionary
                 file_status_dict[new_name] = file_status_dict.pop(old_name)
                 self.logger.update_logs('[DELETION-LIST UPDATED]: ', f"{old_name} -> {new_name}")
             else:
                 print(f"{old_name} is not marked for deletion.")
         else:
             print(f"{old_name} is not in the deletion list.")
-
-        # Write the updated dictionary back to the CSV
         self.write_csv_file(file_status_dict)
 
     def refactor_csv(self):
@@ -242,10 +240,9 @@ class DeletionManager:
                 
                 for row in reader:
                     if row:
-                        file_path = normalise_path(row[0])  # Normalize the file path
+                        file_path = normalise_path(row[0])
                         status = row[1]
-
-                        # If size and mod_time are not in the row, calculate them
+                        # Check if the file exists before trying to get its size and modification time
                         if len(row) < 4:
                             try:
                                 size = os.path.getsize(file_path)
