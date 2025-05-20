@@ -10,7 +10,7 @@ except ImportError:
 
 from datetime import datetime
 from logs_writer import LogManager
-from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_FOLDER
+from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_FOLDER, SKIP_FOLDERS
 
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""
@@ -123,7 +123,7 @@ class VideoFileLoader:
             for folder in folder_paths:
                 # Generate file stats and update CSV
                 csv_file = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv")
-                stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False)
+                stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False, skip_folders=SKIP_FOLDERS)
                 stats.generate_file_stats_csv(csv_path=csv_file)
                 # Update CSV path in Log_Folders.csv
                 self.add_to_csv_file(folder, csv_file)
