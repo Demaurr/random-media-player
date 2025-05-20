@@ -11,7 +11,7 @@ logger = LogManager(LOG_PATH)
 
 def create_csv_file(headers=None, filename="New_CSV.csv"):
     if os.path.exists(filename):
-        print(f"{filename} File Already Exists...")
+        print(f"{filename} File Exists...")
         return 
     # If no headers are provided, create three random headers
     if headers is None:
@@ -30,7 +30,9 @@ def normalise_path(path):
 def get_favs_folder():
     """
     Reads the favorite folder path from Extra_Paths.txt.
-    Expected format: FAV_FOLDER: E:\\New folder\\New folder (2)\\
+    Expected format: FAV_FOLDER: E:\\New folder\\New folder (2)\\Or something
+    Returns:
+        str: The favorite folder path if found, otherwise None.
     """
     with open(FILES_FOLDER + "\\" + "Extra_Paths.txt", "r", encoding='utf-8') as file:
         for line in file:
@@ -39,7 +41,7 @@ def get_favs_folder():
                 parts = line.split(":", 1)
                 if len(parts) > 1:
                     return parts[1].strip()
-    return None  # Return None if the FAV_FOLDER entry is not found
+    return None 
 
 def mark_for_deletion(video_file, status="ToDelete", event=None):
     """
@@ -148,7 +150,7 @@ def ensure_folder_exists(folder_path):
                 print(f"Error creating folder at {folder_path}: {e}")
                 return True
         else:
-            print(f"Folder already exists at {folder_path}")
+            # print(f"Folder already exists at {folder_path}")
             return True
 
 def rename_if_exists(filename):
