@@ -1,22 +1,36 @@
-from datetime import datetime, timedelta
-import os
 import csv
-from pprint import pprint
+import importlib
+import os
+from datetime import datetime, timedelta
+
 import tkinter as tk
-from tkinter import Toplevel, ttk
-from tkinter import messagebox
-from tkinter import filedialog
-from logs_writer import LogManager
-from videoplayer import MediaPlayerApp
-from file_loader import VideoFileLoader
-from favorites_manager import FavoritesManager
+from tkinter import Toplevel, filedialog, messagebox, ttk
+
+import file_loader
 from deletion_manager import DeletionManager
+from favorites_manager import FavoritesManager
+from file_loader import VideoFileLoader
 from file_manager import FileManager
-from image_player import ImageViewer
-from player_constants import FILES_FOLDER, REPORTS_FOLDER, WATCHED_HISTORY_LOG_PATH, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, DELETE_FILES_CSV
-from static_methods import create_csv_file, ensure_folder_exists, normalise_path, get_file_size
 from get_aspects import VideoProcessor
-import cProfile
+from image_player import ImageViewer
+from logs_writer import LogManager
+from player_constants import (
+    DELETE_FILES_CSV,
+    FILES_FOLDER,
+    FOLDER_LOGS,
+    LOG_PATH,
+    REPORTS_FOLDER,
+    SCREENSHOTS_FOLDER,
+    WATCHED_HISTORY_LOG_PATH,
+)
+from settings_manager import SettingsWindow
+from static_methods import create_csv_file, ensure_folder_exists, gather_all_media, get_file_size, normalise_path
+from videoplayer import MediaPlayerApp
+
+import player_constants
+import media_stats_window
+# from pprint import pprint
+# import cProfile
 
 class FileExplorerApp:
     def __init__(self, root):
@@ -32,17 +46,18 @@ class FileExplorerApp:
         self.total_duration_watched = 0.0
         self.search_size = 0
 
-        # Instantiate DeletionManager
         ensure_folder_exists(FILES_FOLDER)
         ensure_folder_exists(SCREENSHOTS_FOLDER)
         ensure_folder_exists(REPORTS_FOLDER)
+        
         self.deletion_manager = DeletionManager()
         self.fav_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.video_processor = VideoProcessor
+        
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         self.center_window()
-        self.create_widgets()
+        self._create_widgets()
         self._keybinding()
         self.create_context_menu()
 
@@ -153,12 +168,12 @@ class FileExplorerApp:
         dest_folder = filedialog.askdirectory(title="Select Destination Folder")
         if not dest_folder:
             return
-        file_manager = FileManager()  # Create an instance of FileManager
+        file_manager = FileManager()
         for item in selected_items:
             file_path = self.file_table.item(item, "values")[2]
             try:
-                if file_manager.move_file(file_path, dest_folder):  # Move the selected file
-                    self.file_table.delete(item)  # Optionally remove from table after moving
+                if file_manager.move_file(file_path, dest_folder): 
+                    self.file_table.delete(item)
                 else:
                     messagebox.showerror("Move Failed", f"Failed to move file: {file_path}")
             except Exception as e:
@@ -187,7 +202,7 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[2]
             self.deletion_manager.mark_for_deletion(file_path, status)
         
-        # Use the DeletionManager to handle deletion or marking
+        # Using the DeletionManager to handle deletion or marking
         if direct_delete:
             self.deletion_manager.delete_files_in_csv(skip_confirmation=True)
         
@@ -210,6 +225,15 @@ class FileExplorerApp:
         """Deletes files marked as 'ToDelete' using the DeletionManager."""
         self.deletion_manager.delete_files_in_csv()
 
+    def open_settings(self):
+        def reload_constants():
+            importlib.reload(player_constants)
+            importlib.reload(file_loader)
+            self.deletion_manager = DeletionManager()
+            self.fav_manager = FavoritesManager()
+            self.logger = LogManager(LOG_PATH)
+        SettingsWindow(self.root, on_save_callback=reload_constants)
+
     @staticmethod
     def convert_bytes(bytes_size):
         units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -223,102 +247,246 @@ class FileExplorerApp:
         return f"{size:.2f} {units[index]}"
 
 
-    def create_widgets(self):
-        # Create heading label
-        self.heading_label = tk.Label(self.root, text="Random Media Player", bg="black", fg="red", font=("Open Sans", 44, "bold"))
-        self.heading_label.pack(side="top", pady=(10, 5))
-
-        # Create search frame
-        self.input_frame = tk.Frame(self.root, bg="black")
-        self.input_frame.pack(side="top", pady=(15, 5))
-
-        # Create search bar
-        self.entry = tk.Entry(self.input_frame, bg="white", fg="black", width=60, bd=6, relief=tk.FLAT, font=("Arial", 12))
-        self.entry.pack(side="left", padx=(10, 5), pady=5)
+    def _create_widgets(self):
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview.Heading", font=("Segoe UI", 16, "bold"), background="black", foreground="red")
+        style.configure("Treeview", font=("Segoe UI", 11), rowheight=28, background="#222", fieldbackground="#222", foreground="white")
+        style.map("Treeview", background=[("selected", "#444")])
+        style.configure("TButton", font=("Segoe UI", 11, "bold"), padding=6, borderwidth=0)
+        style.configure("TEntry", font=("Segoe UI", 11), padding=4)
         
-        # Create enter button
-        self.enter_button = tk.Button(self.input_frame, text="Get", command=self.on_enter_pressed, bg="green", fg="black", font=("Arial", 12, "bold"),width=10, bd=4, relief=tk.RAISED)
-        self.enter_button.pack(side="left", padx=(0, 10), pady=5)
+        self.heading_label = tk.Label(
+            self.root, text="Random Media Player", bg="black", fg="red",
+            font=("Segoe UI", 44, "bold"), pady=10
+        )
+        self.heading_label.pack(side="top", fill="x", pady=(10, 5))
 
-        # Create search frame
+        self.input_frame = tk.Frame(self.root, bg="black")
+        self.input_frame.pack(side="top", fill="x", padx=20, pady=(10, 5))
+
+        self.entry = tk.Entry(
+            self.input_frame, bg="#181818", fg="white", width=50, bd=2, relief=tk.FLAT,
+            font=("Segoe UI", 13)
+        )
+        self.entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=5, ipady=4)
+
+        self.enter_button = tk.Button(
+            self.input_frame, text="Get", command=self.on_enter_pressed,
+            bg="red", fg="white", font=("Segoe UI", 13, "bold"),
+            width=10, bd=0, relief=tk.RAISED, activebackground="#b30000",
+            cursor="hand2"
+        )
+        self.enter_button.pack(side="left", padx=(0, 0), pady=5)
+
         self.search_frame = tk.Frame(self.root, bg="black")
-        self.search_frame.pack(side="top", pady=(0, 10))
+        self.search_frame.pack(side="top", fill="x", padx=20, pady=(0, 10))
 
-        # Create search bar
-        self.search_entry = tk.Entry(self.search_frame, bg="white", fg="black", width=30, bd=3, relief=tk.FLAT, font=("Arial", 12))
-        self.search_entry.pack(side="left", padx=(10, 5), pady=0)
+        self.search_entry = tk.Entry(
+            self.search_frame, bg="#181818", fg="white", width=30, bd=2, relief=tk.FLAT,
+            font=("Segoe UI", 12)
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=0, ipady=2)
 
-        # Create search button
-        self.search_button = tk.Button(self.search_frame, text="Search", command=self.on_search_pressed, bg="gray", fg="black", font=("Arial", 10, "bold"),
-                                       width=10, bd=0.5, relief=tk.RAISED)
+        self.search_button = tk.Button(
+            self.search_frame, text="Search", command=self.on_search_pressed,
+            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
+            width=10, bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
         self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.filter_favs = tk.Button(self.search_frame, text="Favs", command=self.check_update_favs, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
-        self.filter_favs.pack(side="left", pady=0)
+        self.filter_favs = tk.Button(
+            self.search_frame, text="Favs", command=self.check_update_favs,
+            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#006400",
+            cursor="hand2"
+        )
+        self.filter_favs.pack(side="left", padx=(0, 5), pady=0)
 
-        self.delete_button = tk.Button(self.search_frame, text="Del-All", command=self.delete_files_in_csv, bg="red", fg="white", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
+        self.delete_button = tk.Button(
+            self.search_frame, text="Del-All", command=self.delete_files_in_csv,
+            bg="red", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#b30000",
+            cursor="hand2"
+        )
         self.delete_button.pack(side="left", padx=5, pady=5)
 
-        self.refresh_deleted = tk.Button(self.search_frame, text="Refresh-Del", command=self.refresh_deletions, bg="red", fg="white", font=("Arial", 10, "bold"),bd=0.5, relief=tk.RAISED)
-        self.refresh_deleted.pack(side="left", pady=5, padx=(0,5))
+        self.refresh_deleted = tk.Button(
+            self.search_frame, text="Refresh-Del", command=self.refresh_deletions,
+            bg="red", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#b30000",
+            cursor="hand2"
+        )
+        self.refresh_deleted.pack(side="left", padx=(0, 5), pady=5)
 
-        self.show_caps = tk.Button(self.search_frame, text="Snaps", command=self.display_caps, bg="green", fg="black", font=("Arial", 10, "bold"), bd=0.5, relief=tk.RAISED)
-        self.show_caps.pack(side="left", pady=0)
+        self.show_caps = tk.Button(
+            self.search_frame, text="Snaps", command=self.display_caps,
+            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#006400",
+            cursor="hand2"
+        )
+        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
 
-        self.show_verticals = tk.Button(self.search_frame, text="V", command=self.get_verticals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
+        self.show_verticals = tk.Button(
+            self.search_frame, text="V", command=self.get_verticals,
+            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
         self.show_verticals.pack(side="left", padx=5, pady=0)
 
-        self.show_horizontals = tk.Button(self.search_frame, text="L", command=self.get_horizontals, bg="white", fg="black", font=("Arial", 10, "bold"), bd=0.7, relief=tk.RAISED)
-        self.show_horizontals.pack(side="left", padx=0, pady=0)
+        self.show_horizontals = tk.Button(
+            self.search_frame, text="L", command=self.get_horizontals,
+            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.show_horizontals.pack(side="left", padx=(0, 5), pady=0)
 
-        self.stats_frame = tk.Frame(self.root, bg="black")
-        self.stats_frame.pack(side="top", pady=0)
+        self.all_media_button = tk.Button(
+            self.search_frame, text="All Media", command=self.show_all_media,
+            bg="blue", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#003366",
+            cursor="hand2"
+        )
+        self.all_media_button.pack(side="left", padx=(0, 5), pady=0)
 
-        self.total_files_label = tk.Label(self.stats_frame, text="Total Files: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.stats_frame = tk.Frame(self.root, bg="#181818", bd=2, relief=tk.GROOVE)
+        self.stats_frame.pack(side="top", fill="x", padx=20, pady=(0, 5))
+
+        self.total_files_label = tk.Label(
+            self.stats_frame, text="Total Files: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
         self.total_files_label.pack(side="left", padx=(10, 10))
 
-        self.search_results_label = tk.Label(self.stats_frame, text="Search Results: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.search_results_label = tk.Label(
+            self.stats_frame, text="Search Results: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
         self.search_results_label.pack(side="left", padx=(0, 10))
 
-        self.total_size_label = tk.Label(self.stats_frame, text="Total Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.total_size_label = tk.Label(
+            self.stats_frame, text="Total Size: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
         self.total_size_label.pack(side="left", padx=(0, 10))
 
-        self.search_size_label = tk.Label(self.stats_frame, text="S-Size: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.search_size_label = tk.Label(
+            self.stats_frame, text="S-Size: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
         self.search_size_label.pack(side="left", padx=(0, 10))
 
-        self.total_duration_label = tk.Label(self.stats_frame, text="Durations: 0", bg="black", fg="white", font=("Arial", 12, "bold"))
+        self.total_duration_label = tk.Label(
+            self.stats_frame, text="Durations: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
         self.total_duration_label.pack(side="left", padx=(10, 10))
 
-        style = ttk.Style()
-        style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
+        table_frame = tk.Frame(self.root, bg="black")
+        table_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 10))
 
-        # Create file table
-        self.file_table = ttk.Treeview(self.root, columns=("#", "File Name", "Folder Path"), show="headings")
+        self.file_table = ttk.Treeview(
+            table_frame, columns=("#", "File Name", "Folder Path"), show="headings", selectmode="extended"
+        )
         self.file_table.heading("#", text="#")
         self.file_table.heading("File Name", text="File Name")
         self.file_table.heading("Folder Path", text="Folder Path")
-        self.file_table.pack(side="left", fill="both", expand=True, padx=20, pady=10)
 
-        # change the width to have scroller with the window
-        self.file_table.column("#", width=30)  # Align columns to center
-        self.file_table.column("File Name", width=370)  # Align columns to center
-        self.file_table.column("Folder Path", width=400)  # Align columns to center
+        self.file_table.column("#", width=40, anchor="center")
+        self.file_table.column("File Name", width=320, anchor="w")
+        self.file_table.column("Folder Path", width=400, anchor="w")
 
-        # Set alternate colors for even and odd rows
-        self.file_table.tag_configure("evenrow", background="#333333", foreground="white", font=("Arial", 10))  # Dark gray background
-        self.file_table.tag_configure("oddrow", background="#555555", foreground="white", font=("Arial", 10))  # Light gray background
-        # self.file_table.tag_configure("evenrow", font=("Arial", 20))
+        self.file_table.tag_configure("evenrow", background="#222", foreground="white")
+        self.file_table.tag_configure("oddrow", background="#333", foreground="white")
 
-        # Create vertical scrollbar
-        self.scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.file_table.yview)
+        self.file_table.pack(side="left", fill="both", expand=True)
+
+        self.scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.file_table.yview)
         self.scrollbar.pack(side="right", fill="y")
-
-        # Configure Treeview to use vertical scrollbar
         self.file_table.configure(yscrollcommand=self.scrollbar.set)
 
+        self.settings_button = tk.Button(
+            self.root, text="⚙️", command=self.open_settings,
+            bg="white", fg="gray", bd=0, font=("Segoe UI", 13, "bold"),
+            relief=tk.FLAT, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.settings_button.place(relx=1.0, x=-10, y=10, anchor="ne", width=40, height=30)
+
+        self.stats_button = tk.Button(
+            self.root, text="📊", command=self.open_media_stats,
+            bg="white", fg="blue", bd=0, font=("Segoe UI", 13, "bold"),
+            relief=tk.FLAT, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.stats_button.place(relx=1.0, x=-60, y=10, anchor="ne", width=40, height=30)
+
+        # "Hovering Effects"
+        def on_enter(e): e.widget.config(bg="#444")
+        def on_leave(e):
+            if e.widget == self.enter_button:
+                e.widget.config(bg="red")
+            elif "Del" in e.widget["text"]:
+                e.widget.config(bg="red")
+            elif "Favs" in e.widget["text"] or "Snaps" in e.widget["text"]:
+                e.widget.config(bg="green")
+            else:
+                e.widget.config(bg="white")
+
+        for btn in [self.enter_button, self.delete_button, self.refresh_deleted, self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals]:
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+
+    def show_all_media(self):
+        """Gathers all media and displays File Name and Source Folder in the table."""
+        csv_path = gather_all_media()
+        if not csv_path:
+            messagebox.showerror("Error", "Failed to gather all media.")
+            return
+
+        self.reset_search_option()
+
+        file_list = set()
+        total_size_bytes = 0
+        try:
+            with open(csv_path, newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for idx, row in enumerate(reader):
+                    file_name = row.get("File Name", "")
+                    source_folder = row.get("Source Folder", "")
+                    file_path = os.path.join(source_folder, file_name)
+                    if os.path.exists(file_path) and source_folder:
+                        file_list.add(file_path)
+                        size_str = row.get("File Size (Bytes)", "0")
+                        try:
+                            total_size_bytes += int(size_str)
+                        except (ValueError, TypeError):
+                            pass
+            self.video_files = list(file_list)
+            # print(f"Some Files {file_list[:3]}")
+            self.insert_to_table(self.file_path_tuple(file_list))
+            self.total_files = len(file_list)
+            self.total_size = self.convert_bytes(total_size_bytes)
+            self.update_stats()
+            self.update_entry_text("All Media Files")
+            messagebox.showinfo("All Media", f"Total media files found: {len(file_list)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load all media: {e}")
+
+    def open_media_stats(self):
+        """Open the media stats window."""
+        print("Opens Media Analysis Window, Currently Not Working")
+        messagebox.showinfo("Info", "Media Analysis Window is not working currently.")  
+        # stats_window = tk.Toplevel(self.root)
+        # app = media_stats_window.StatsWindow(stats_window, WATCHED_HISTORY_LOG_PATH)
+        # root.mainloop()
+
     def update_entry_text(self, text):
-        self.entry.delete(0, tk.END)  # Clear the current text in the entry
-        self.entry.insert(0, text)    # Insert the new text
+        self.entry.delete(0, tk.END)  
+        self.entry.insert(0, text)
 
     def update_stats(self):
             self.total_files_label.config(text=f"Total Files: {self.total_files}")
@@ -328,7 +496,6 @@ class FileExplorerApp:
             self.search_size_label.config(text=f"S-Size: {self.search_size}")
 
     def list_files(self, directory):
-        # self.file_table.delete(*self.file_table.get_children())
         file_list = []
         self.file_path = []
         for root, dirs, files in os.walk(directory):
@@ -378,7 +545,7 @@ class FileExplorerApp:
                 self.show_deletes()
             
             elif folder_path_string == "show deleted":
-                # Show files marked as "ToDelete"
+                # Show files marked as "Deleted"
                 self.show_deletes(deleted=True)
 
             elif folder_path_string == "show history":
@@ -438,7 +605,7 @@ class FileExplorerApp:
                 reader = csv.reader(file)
                 for row in reader:
                     if row and row[1] == "ToDelete":
-                        delete_files.append(row[0])  # Append the file path
+                        delete_files.append(row[0])
                         if row[2] != "N/A":
                             self.total_size += float(row[2])
         except FileNotFoundError:
@@ -455,7 +622,7 @@ class FileExplorerApp:
                 reader = csv.reader(file)
                 for row in reader:
                     if row and row[1] == "Deleted":
-                        delete_files.append(row[0])  # Append the file path
+                        delete_files.append(row[0])
                         if row[2] != "N/A":
                             self.total_size += float(row[2])
         except FileNotFoundError:
@@ -470,7 +637,7 @@ class FileExplorerApp:
         try:
             search_files = self.image_files if self.play_images else self.video_files
             for file in search_files:
-                if query in file.lower():  # Check if query matches file name
+                if query in file.lower():
                     file_name = os.path.basename(file)
                     file_list.append((file_name, file))
             print(f"Total Files for {query}: {len(file_list)}")
@@ -603,8 +770,6 @@ class FileExplorerApp:
     def get_horizontals(self):
         try:
             file_list = self.get_files_from_table()
-            # pprint(file_list)
-            # video_processor = VideoProcessor(file_list)
             video_processor = self.video_processor(file_list)
             horizontals = video_processor.get_horizontal_videos()
             print(f"Total Verticals Files: {len(horizontals)}")
@@ -616,16 +781,6 @@ class FileExplorerApp:
         except Exception as e:
             print(f"An Error {e} Occurred")
             messagebox.showerror("Error", f"Exception in Getting Vertical Pressed: {e}")
-
-    # def _on_close_player(self, player_window): # Not Working as Expecteed
-    #     """Callback to re-enable the main window after the player window is closed."""
-    #     player_window.destroy() 
-    #     self.root.wm_attributes("-disabled", False)
-
-    # def _on_close_viewer(self, viewer_window): # Not Working as Expecteed
-    #     """Callback to re-enable the main window after the image viewer window is closed."""
-    #     viewer_window.destroy()  
-    #     self.root.wm_attributes("-disabled", False)  # Re-enable the main window
 
     def random_play(self, event=None):
         self.on_enter_pressed()
@@ -649,7 +804,7 @@ class FileExplorerApp:
         thirty_days_ago = datetime.now() - timedelta(days=days)
         
         unique_file_names = set()
-        self.total_duration_watched = 0  # Initialize total duration watched in seconds
+        self.total_duration_watched = 0
         row_count = 0
         
         with open(file_path, 'r', encoding='utf-8') as csvfile:
@@ -675,10 +830,9 @@ class FileExplorerApp:
                         print(f"Warning: Invalid duration format in row {row_count}. Skipping.")
                         continue
                     
-                    # Add the file name to the unique set
                     unique_file_names.add(row['File Name'])
                 
-                # Print progress every 1000 rows
+                # Show Progrees every 1000 rows
                 if row_count % 1000 == 0:
                     print(f"Processed {row_count} rows...")
 
@@ -696,23 +850,21 @@ class FileExplorerApp:
         if '.' in duration_str:
             duration_parts = duration_str.split('.')
             if ':' in duration_parts[0]:
-                # Handles the case where format is HH:MM:SS.microseconds
+                # case for format HH:MM:SS.microseconds
                 time_part = datetime.strptime(duration_parts[0], '%H:%M:%S')
             else:
-                # Handles the case where format is MM:SS.microseconds
+                # case for format MM:SS.microseconds
                 time_part = datetime.strptime(duration_parts[0], '%M:%S')
             
-            # Calculate the total time in seconds with microseconds converted to decimal seconds
             seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second + float(f"0.{duration_parts[1]}")
         else:
             if ':' in duration_str:
-                # Handles the case where format is HH:MM:SS
+                # case for format HH:MM:SS
                 time_part = datetime.strptime(duration_str, '%H:%M:%S')
             else:
-                # Handles the case where format is MM:SS
+                # case for format MM:SS
                 time_part = datetime.strptime(duration_str, '%M:%S')
             
-            # Convert the total time to seconds
             seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second
         
         return seconds
