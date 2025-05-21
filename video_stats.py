@@ -77,15 +77,47 @@ class VideoStatsApp:
         self.heading_frame = tk.Frame(master, bg=bg)
         self.heading_frame.pack(pady=5)
 
-        self.heading_label = tk.Label(self.heading_frame, text="Statistics For The Session", font=("Tahoma", 20, "bold"), fg=fg, bg=bg)
-        self.heading_label.pack(side="left")
+        self.heading_label = tk.Label(
+            self.heading_frame,
+            text="Statistics For The Session",
+            font=("Segoe UI", 24, "bold"),
+            fg=fg,
+            bg=bg,
+            pady=8
+        )
+        self.heading_label.pack(side="left", anchor="w")
 
-        # Add a button for generating the summary report
-        self.generate_report_button = tk.Button(self.heading_frame, text="Generate Summary Report", font=("Open Sans", 12, "bold"), bg="green", fg="white", command=self.generate_report_html)
-        self.generate_report_button.pack(side="left", padx=10, pady=10)
+        self.generate_report_button = tk.Button(
+            self.heading_frame,
+            text="Generate Summary Report",
+            font=("Segoe UI", 12, "bold"),
+            bg="green",
+            fg="white",
+            activebackground="#006400",
+            activeforeground="white",
+            relief=tk.FLAT,
+            bd=0,
+            padx=12,
+            pady=3,
+            cursor="hand2",
+            command=self.generate_report_html
+        )
+        self.generate_report_button.pack(side="right", padx=10)
 
-        self.session_time_label = tk.Label(master, text=f"Session Time: {self.format_session_time(self.session_time)}", font=("Open Sans", 14, "bold"), fg=fg, bg=bg)
-        self.session_time_label.pack(pady=5)
+        def on_enter(e): e.widget.config(bg="#228B22")
+        def on_leave(e): e.widget.config(bg="green")
+        self.generate_report_button.bind("<Enter>", on_enter)
+        self.generate_report_button.bind("<Leave>", on_leave)
+
+        self.session_time_label = tk.Label(
+            master,
+            text=f"Session Time: {self.format_session_time(self.session_time)}",
+            font=("Segoe UI", 14, "bold"),
+            fg=fg,
+            bg=bg,
+            pady=4
+        )
+        self.session_time_label.pack(pady=(0, 10))
 
         self.create_table()
 
@@ -101,33 +133,62 @@ class VideoStatsApp:
         Creates a table to display video statistics using the ttk.Treeview widget.
         """
         columns = ("Title", "Times", "Watchtime", "Folder")
-        self.tree = ttk.Treeview(self.master, columns=columns, show="headings", selectmode="none")
+        table_frame = tk.Frame(self.master, bg=self.master["bg"])
+        table_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        self.tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            selectmode="none",
+            style="Custom.Treeview"
+        )
 
         style = ttk.Style()
-        style.configure("Treeview.Heading", font=("Open Sans", 16, "bold"))
+        style.theme_use("clam")
+        style.configure(
+            "Custom.Treeview.Heading",
+            font=("Segoe UI", 15, "bold"),
+            background="black",
+            foreground="white"
+        )
+
+        style.configure(
+            "Custom.Treeview",
+            font=("Segoe UI", 12),
+            rowheight=32,
+            background="black",
+            fieldbackground="black",
+            foreground="white"
+        )
+        style.map("Custom.Treeview", background=[("selected", "#222")])
 
         self.tree.heading("Title", text="Title")
         self.tree.heading("Times", text="Times")
         self.tree.heading("Watchtime", text="Watchtime")
         self.tree.heading("Folder", text="Folder")
 
-        self.tree.column("Title", width=150)
-        self.tree.column("Times", width=100)
-        self.tree.column("Watchtime", width=150)
-        self.tree.column("Folder", width=350)
+        self.tree.column("Title", width=180, anchor="w")
+        self.tree.column("Times", width=80, anchor="center")
+        self.tree.column("Watchtime", width=140, anchor="center")
+        self.tree.column("Folder", width=320, anchor="w")
 
-        self.tree.tag_configure('oddrow', background='grey')
-        self.tree.tag_configure('evenrow', background='white')
+        self.tree.tag_configure('oddrow', background="#222", foreground="white")
+        self.tree.tag_configure('evenrow', background="#333", foreground="white")
 
         for idx, video in enumerate(self.video_data):
             tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-            self.tree.insert("", "end", values=(video["File Name"], video["Count"], video["Duration Watched"], video["Folder"]), tags=(tag,))
+            self.tree.insert(
+                "",
+                "end",
+                values=(video["File Name"], video["Count"], video["Duration Watched"], video["Folder"]),
+                tags=(tag,)
+            )
 
-        self.tree.pack(side="left", fill="both", expand=True, padx=20, pady=10)
+        self.tree.pack(side="left", fill="both", expand=True)
 
-        scrollbar = ttk.Scrollbar(self.master, orient="vertical", command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         scrollbar.pack(side="right", fill="y")
-
         self.tree.configure(yscrollcommand=scrollbar.set)
 
     def center_window(self):

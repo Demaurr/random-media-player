@@ -1,47 +1,64 @@
-import tkinter as tk
-from tkinter import messagebox
-import vlc
 import os
 import random
+import threading
 import timeit
 from datetime import timedelta
-from static_methods import ensure_folder_exists
-from watch_history_logger import WatchHistoryLogger
-from volume_bar import VolumeBar
-from video_progress_bar import VideoProgressBar
-from watch_dictionary import WatchDict
-from video_stats import VideoStatsApp
-from favorites_manager import FavoritesManager
+
+import tkinter as tk
+from tkinter import messagebox
+
+import vlc
+
 from deletion_manager import DeletionManager
+from favorites_manager import FavoritesManager
 from logs_writer import LogManager
-from player_constants import FILES_FOLDER, LOG_PATH, WATCHED_HISTORY_LOG_PATH, SCREENSHOTS_FOLDER, REPORTS_FOLDER
+from player_constants import FILES_FOLDER, LOG_PATH, REPORTS_FOLDER, SCREENSHOTS_FOLDER, WATCHED_HISTORY_LOG_PATH
+from static_methods import ensure_folder_exists
+from video_progress_bar import VideoProgressBar
+from video_stats import VideoStatsApp
+from volume_bar import VolumeBar
+from watch_dictionary import WatchDict
+from watch_history_logger import WatchHistoryLogger
 
 
 class MediaPlayerApp(tk.Tk):
     
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
-        self.get_history_csvfile(watch_history_csv)
+        self._get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.deleter = DeletionManager()
+        self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
+
         self.bg_color = "black"
         self.fg_color = "white"
         self.title("Media Player")
         self.geometry("1000x600")
         self.center_window()
         self.configure(bg=self.bg_color)
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self.playback_segments = []  
         self.prev_counts = 0
         self.forward_counts = 0
+        self.segment_start = 0
+        self.segment_speed = 1.0
+        self.segment_forward = 0
+        self.segment_prev = 0
+        self.autoplay = True
+
         self.random_select = random_select
         self.video_index = 0 if not current_file else video_files.index(current_file)
+        
+        self.current_time_str = "00:00:00"
+        self.total_duration_str = "00:00:00"
+        
         self._keybinding()
         self.initialize_player(video_files, video_path, cur_file=current_file)
         
 
-    def get_history_csvfile(self, watch_history_csv):
+    def _get_history_csvfile(self, watch_history_csv):
         try:
             # You Can Add a Folder in file_info.txt as default One
             with open(FILES_FOLDER + "file_info.txt", "r") as file:
@@ -53,7 +70,7 @@ class MediaPlayerApp(tk.Tk):
         except FileNotFoundError:
             self.watch_history_csv = watch_history_csv
     
-    def on_close(self):
+    def _on_close(self):
         self.session_end = timeit.default_timer()
         self.stop()  # Call the stop method when the window is closed
         # tk.Tk.quit(self)
@@ -71,6 +88,9 @@ class MediaPlayerApp(tk.Tk):
         self.media_player = self.instance.media_player_new()
 
         self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
+        self.media_player.event_manager().event_attach(
+            vlc.EventType.MediaPlayerEndReached, self._on_video_end
+        )
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
         self.current_file = cur_file
@@ -81,9 +101,9 @@ class MediaPlayerApp(tk.Tk):
         # self.watched_videos = {}
         self.watched_videos = WatchDict()
         self.feedback_var = tk.StringVar()
-        self.feedback_label = None  # This will hold the label widget
+        self.feedback_label = None 
         
-        self.create_widgets()
+        self._create_widgets()
         if self.random_select:
             self.select_random_video()
         elif not self.random_select:
@@ -103,131 +123,149 @@ class MediaPlayerApp(tk.Tk):
             self.current_file = self.video_files[self.video_index]
             self.video_index += 1
 
+    def _on_video_end(self, event):
+        # Schedule play_next on the main thread
+        if self.autoplay:
+            self.after(50, self.play_next)
 
-    def create_widgets(self):
-        """Creates the GUI elements for the media player."""
-        self.media_canvas = tk.Canvas(self, bg="black", width=800, height=400)
+
+    def _create_widgets(self):
+        """Creates the GUI elements for the media player with improved style and responsiveness."""
+        self.media_canvas = tk.Canvas(self, bg="black", width=800, height=400, highlightthickness=0)
         self.media_canvas.pack(pady=(5, 0), fill=tk.BOTH, expand=True)
 
-        # Frame to contain control buttons and duration label
         control_frame = tk.Frame(self, bg="black")
         control_frame.pack(pady=(5, 0), fill=tk.X)
 
         self.feedback_label = tk.Label(
             self,
             textvariable=self.feedback_var,
-            font=("Arial", 20, "bold"),
+            font=("Segoe UI", 18, "bold"),
             bg="black",
             fg="white"
         )
+    
 
-        # Control buttons
+        def style_btn(btn, bg, fg, activebg=None, activefg=None):
+            btn.config(
+                bg=bg,
+                fg=fg,
+                relief=tk.FLAT,
+                bd=0,
+                font=("Segoe UI", 12, "bold"),
+                activebackground=activebg or bg,
+                activeforeground=activefg or fg,
+                cursor="hand2",
+                padx=4,
+                pady=1
+            )
+
         self.current_stats_button = tk.Button(
-            control_frame,
-            text="Current Stats",
-            font=("Arial", 12, "bold"),
-            command=self.current_stats,
+            control_frame, text="Current Stats", command=self.current_stats
         )
-        self.current_stats_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.current_stats_button, "white", "black", "#e0e0e0")
 
         self.prev_button = tk.Button(
-            control_frame,
-            text="Previous",
-            font=("Arial", 12, "bold"),
-            bg="red",
-            fg="white",
-            command=self.play_previous,
+            control_frame, text="Previous", command=self.play_previous
         )
-        self.prev_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.prev_button, "red", "white", "#b30000")
 
         self.rewind_button = tk.Button(
-            control_frame,
-            text=" << ",
-            font=("Arial", 12, "bold"),
-            bg="red",
-            fg="white",
-            command=self.rewind,
+            control_frame, text="⏪", command=self.rewind
         )
-        self.rewind_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.rewind_button, "red", "white", "#b30000")
 
         self.play_button = tk.Button(
-            control_frame,
-            text="Play",
-            font=("Arial", 12, "bold"),
-            bg="black",
-            fg="white",
-            width=10,
-            command=self.play_video,
+            control_frame, text="▶️ Play", command=self.play_video
         )
-        self.play_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.play_button, "black", "white", "#222")
 
         self.pause_button = tk.Button(
-            control_frame,
-            text="Pause",
-            font=("Arial", 12, "bold"),
-            bg="#FF9800",
-            fg="white",
-            command=self.pause_video,
+            control_frame, text="⏸️ Pause", command=self.pause_video
         )
-        self.pause_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.pause_button, "#FF9800", "white", "#e65100")
 
         self.fast_forward_button = tk.Button(
-            control_frame,
-            text=" >> ",
-            font=("Arial", 12, "bold"),
-            bg="red",
-            fg="white",
-            command=self.fast_forward,
+            control_frame, text="⏩", command=self.fast_forward
         )
-        self.fast_forward_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.fast_forward_button, "red", "white", "#b30000")
 
         self.next_button = tk.Button(
-            control_frame,
-            text="Next",
-            font=("Arial", 12, "bold"),
-            bg="red",
-            fg="white",
-            command=self.play_next,
+            control_frame, text="Next", command=self.play_next
         )
-        self.next_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.next_button, "red", "white", "#b30000")
 
-        self.add_to_favorites_button = tk.Button(
-            control_frame,
-            text=" Fav + ",
-            font=("Arial", 12, "bold"),
-            bg="white",
-            fg="black",
-            command=self.add_to_favorites,
+        # self.add_to_favorites_button = tk.Button(
+        #     control_frame, text="Fav +", command=self.add_to_favorites
+        # )
+        # style_btn(self.add_to_favorites_button, "white", "green", "#006400", "white")
+
+        # self.remove_from_favorites_button = tk.Button(
+        #     control_frame, text="Fav -", command=self.remove_from_favorites
+        # )
+        # style_btn(self.remove_from_favorites_button, "black", "white", "#222")
+
+        self.autoplay_button = tk.Button(
+            control_frame, text="Autoplay: ON", command=self.toggle_autoplay
         )
-        self.add_to_favorites_button.pack(side=tk.LEFT, padx=5, pady=0)
+        style_btn(self.autoplay_button, "#2196F3", "white", "#1565C0")
 
-        self.remove_from_favorites_button = tk.Button(
-            control_frame,
-            text=" Fav - ",
-            font=("Arial", 12, "bold"),
-            bg="black",
-            fg="white",
-            command=self.remove_from_favorites,
-        )
-        self.remove_from_favorites_button.pack(side=tk.LEFT, padx=3, pady=0)
+        for btn in [
+            self.current_stats_button, self.prev_button, self.rewind_button,
+            self.play_button, self.pause_button, self.fast_forward_button,
+            self.next_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
+        ]:
+            btn.pack(side=tk.LEFT, padx=4, pady=2, ipadx=2, ipady=2)
 
-        # Duration label
         self.time_label = tk.Label(
             control_frame,
             text="00:00:00 / 00:00:00",
-            font=("Arial", 12, "bold"),
+            font=("Segoe UI", 13, "bold"),
             fg="white",
             bg="black",
+            padx=10
         )
         self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
 
-        # Progress bar
         self.progress_bar = VideoProgressBar(
             self, self.set_video_position, bg=self.bg_color, highlightthickness=0
         )
-        self.progress_bar.pack(side=tk.LEFT, padx=5, pady=0)
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=8)
+
         self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
+        self.volume_bar.pack(side=tk.RIGHT, padx=10, pady=8)
+
+        def on_enter(e): e.widget.config(bg="#444")
+        def on_leave(e):
+            txt = e.widget["text"]
+            if txt in ["Previous", "⏪", "⏩", "Next"]:
+                e.widget.config(bg="red")
+            elif txt == "Current Stats":
+                e.widget.config(bg="white")
+            elif txt == "Fav +":
+                e.widget.config(bg="white")
+            elif txt == "Fav -":
+                e.widget.config(bg="black")
+            elif "Pause" in txt:
+                e.widget.config(bg="#FF9800")
+            else:
+                e.widget.config(bg="black")
+
+        for btn in [
+            self.current_stats_button, self.prev_button, self.rewind_button,
+            self.play_button, self.pause_button, self.fast_forward_button,
+            self.next_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
+        ]:
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+
+    def toggle_autoplay(self):
+        """Toggle the autoplay setting."""
+        self.autoplay = not self.autoplay
+        self.autoplay_button.config(
+            text=f"Autoplay: {'ON' if self.autoplay else 'OFF'}",
+            bg="#2196F3" if self.autoplay else "#757575"
+        )
 
     def _keybinding(self):
         """
@@ -250,10 +288,70 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<Control-F>", self.add_to_favorites)
         self.bind("<Control-d>", self.remove_from_favorites)
         self.bind("<Control-D>", self.remove_from_favorites)
+        self.bind("<KeyPress-x>", self.cycle_playback_speed)
+        self.bind("<KeyPress-X>", self.cycle_playback_speed)
         self.bind("<Control-Right>", self.play_im_next)
         self.bind("<Control-Left>", self.play_im_previous)
         self.bind("<Delete>", self.delete_video)
         self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
+
+    def _on_video_loaded(self, title):
+        self.reset_values()
+
+        self.title(title)
+        self.media_player.set_hwnd(self.media_canvas.winfo_id())
+        self.media_player.play()
+        self.show_marquee(f"Playing: {self.current_file}")
+        self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
+        self.playing_video = True
+        self.watched_videos.add_watch(self.current_file)
+        self.progress_bar.set(0)
+
+    def reset_values(self):
+        self.playback_segments = []
+        self.segment_start = 0
+        self.segment_speed = 1.0
+        self.segment_forward = 0
+        self.segment_prev = 0
+        self.prev_counts = 0
+        self.forward_counts = 0
+
+    def cycle_playback_speed(self, event=None):
+        """Cycles playback speed between 1x, 1.5x, and 2x."""
+        if self.playing_video:
+            current_speed = self.media_player.get_rate()
+            if abs(current_speed - 1.0) < 0.1:
+                new_speed = 1.5
+            elif abs(current_speed - 1.5) < 0.1:
+                new_speed = 2.0
+            else:
+                new_speed = 1.0
+            self.set_playback_speed(new_speed)
+            print(f"Playback Speed Changed to: {new_speed}x")
+            self.show_marquee(f"Speed: {new_speed}x")
+
+    def set_playback_speed(self, speed):
+        if self.playing_video:
+            self.record_segment()
+            self.segment_speed = speed
+            self.media_player.set_rate(speed)
+            self.show_marquee(f"Speed: {speed}x")
+
+    def record_segment(self):
+        """Record the current playback segment."""
+        segment_end = self.media_player.get_time()
+        if segment_end > self.segment_start:
+            self.playback_segments.append({
+                "start": self.segment_start,
+                "end": segment_end,
+                "speed": self.segment_speed,
+                "forward_counts": self.segment_forward,
+                "prev_counts": self.segment_prev
+            })
+        # Reset for next segment
+        self.segment_start = segment_end
+        self.segment_forward = 0
+        self.segment_prev = 0
 
     def remove_from_deletion(self, event=None):
         self.deleter.remove_from_deletion(self.current_file)
@@ -264,22 +362,16 @@ class MediaPlayerApp(tk.Tk):
         """Adds the currently playing video to favorites."""
         if self.current_file:
             if self.favorites_manager.add_to_favorites(self.current_file):
-                # self.show_feedback(f"Added {self.current_file} to favorites")
                 self.show_marquee(f"Added {self.current_file} from favorites")
-                # self.logger.update_logs(f"[ADDED] to Favorites", self.current_file)
             else:
-                # self.show_feedback("Video is already in favorites!")
                 self.show_marquee("Video is already in favorites!")
 
     def remove_from_favorites(self, event=None):
         """Removes the currently playing video from favorites."""
         if self.current_file:
             if self.favorites_manager.delete_from_favorites(self.current_file):
-                # self.show_feedback(f"Removed {self.current_file} from favorites")
                 self.show_marquee(f"Removed {self.current_file} from favorites")
-                # self.logger.update_logs(f"[DELETED] from Favorites", self.current_file)
             else:
-                # self.show_feedback("Video is not in favorites!")
                 self.show_marquee("Video is not in favorites!")
 
     def show_marquee(self, text):
@@ -318,8 +410,8 @@ class MediaPlayerApp(tk.Tk):
     def toggle_controls_visibility(self, visibility):
         """Toggle the visibility of all control buttons and progress bars."""
         widgets_with_default_padding = [self.current_stats_button, self.prev_button, self.rewind_button, self.play_button,
-                                        self.pause_button, self.fast_forward_button, self.next_button,
-                                          self.add_to_favorites_button, self.remove_from_favorites_button]
+                                        self.pause_button, self.fast_forward_button, self.next_button,self.autoplay_button]
+                                        #   self.add_to_favorites_button, self.remove_from_favorites_button]
         widgets_with_custom_padding = [self.time_label, self.progress_bar, self.volume_bar]
 
         if visibility:
@@ -346,13 +438,13 @@ class MediaPlayerApp(tk.Tk):
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen mode."""
         self.fullscreen = not self.attributes("-fullscreen")
-        self.attributes("-fullscreen", self.fullscreen)  # Set fullscreen attribute
+        self.attributes("-fullscreen", self.fullscreen) 
         if self.fullscreen:
-            self.toggle_controls_visibility(visibility=False)  # Hide controls
+            self.toggle_controls_visibility(visibility=False)
             # Hide cursor in fullscreen mode
             self.config(cursor="none")
         else:
-            self.toggle_controls_visibility(visibility=True)  # Show controls
+            self.toggle_controls_visibility(visibility=True)
             # Show cursor when exiting fullscreen mode
             self.config(cursor="")
 
@@ -376,11 +468,11 @@ class MediaPlayerApp(tk.Tk):
     def volume_decrease(self, event):
         """Decreases the volume."""
         current_volume = self.media_player.audio_get_volume()
-        new_volume = max(current_volume - 5, 0)  # Decrease volume by 10%, down to 0%
+        new_volume = max(current_volume - 5, 0)
         # self.media_player.audio_set_volume(new_volume)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
-        self.volume_bar.set(new_volume)  # Update volume bar
+        self.volume_bar.set(new_volume) 
 
 
     def select_file(self):
@@ -486,6 +578,9 @@ class MediaPlayerApp(tk.Tk):
         return video_files
 
     def play_im_next(self, event=None):
+        """
+        Plays the immediate next video in the playlist.
+        """
         if self.random_select:
             self.random_select = False
             current_index = self.video_files.index(self.current_file)
@@ -496,6 +591,9 @@ class MediaPlayerApp(tk.Tk):
             self.play_next()
     
     def play_im_previous(self, event=None):
+        """
+        Plays the immediate next video in the playlist.
+        """
         if self.random_select:
             self.random_select = False
             current_index = self.video_files.index(self.current_file) 
@@ -503,41 +601,28 @@ class MediaPlayerApp(tk.Tk):
             self.play_previous()
             self.random_select = True
         else:
-            self.play_next()
+            self.play_previous()
         
 
     def play_video(self):
-        """
-        Plays the currently selected video file.
-        """
-        # print(self.winfo_width())
-        try:
-            if os.path.exists(self.current_file):
-                title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
-                self.title(title)
-                media = self.instance.media_new(self.current_file)
-                self.media_player.set_media(media)
-                self.media_player.set_hwnd(self.media_canvas.winfo_id())
-                self.media_player.play()
-                self.reset_video_counts()
-                self.show_marquee(f"Playing: {self.current_file}")
-                self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
-                self.playing_video = True
-                self.watched_videos.add_watch(self.current_file)
-                self.progress_bar.set(0)
-            else:
-                print(f"The file Doesn't Exists: {self.current_file}")
-                self.logger.error_logs(f"File Not Found: {self.current_file}")
-                self.play_next()
-        except FileNotFoundError as e:
-            print(f"An Exception Occurred in play_video: {e}")
-            self.show_feedback(f"Error {e} Loading {self.current_file}")
-            # self.play_next()
-        except Exception as e:
-            print(f"An Exception Occurred in play_video: {e}")
-            self.show_feedback(f"An Unexpected Error Occured in play_video: {e}")
-            # self.show_feedback(f"Error {e} Loading {self.current_file}")
-            # self.play_next()
+        """Starts loading and playing the video in a background thread."""
+        def load_and_play():
+            try:
+                if os.path.exists(self.current_file):
+                    title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
+                    media = self.instance.media_new(self.current_file)
+                    self.media_player.set_media(media)
+                    # Schedule GUI updates on the main thread
+                    self.after(0, lambda: self._on_video_loaded(title))
+                else:
+                    print(f"The file Doesn't Exists: {self.current_file}")
+                    self.logger.error_logs(f"File Not Found: {self.current_file}")
+                    self.after(0, self.play_next)
+            except Exception as e:
+                print(f"An Exception Occurred in play_video: {e}")
+                self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
+
+        threading.Thread(target=load_and_play, daemon=True).start()
 
     def fast_forward(self, event=None):
         """
@@ -545,6 +630,7 @@ class MediaPlayerApp(tk.Tk):
         """
         if self.playing_video:
             self.forward_counts += 1
+            self.segment_forward += 1
             current_time = self.media_player.get_time() + 10000
             current_time_str = str(timedelta(milliseconds=current_time))[:-3]
             self.media_player.set_time(current_time)
@@ -557,9 +643,11 @@ class MediaPlayerApp(tk.Tk):
         """
         if self.playing_video:
             self.prev_counts += 1
-            current_time = self.media_player.get_time() - 5000
+            self.segment_prev += 1
+            current_time = max(self.media_player.get_time() - 5000, 0)
             self.media_player.set_time(current_time)
             self.show_marquee(f"{self.current_time_str} / {self.total_duration_str}")
+
 
     def pause_video(self, event=None):
         """
@@ -568,10 +656,12 @@ class MediaPlayerApp(tk.Tk):
         """
         if self.playing_video:
             if self.video_paused:
+                self.record_segment()
                 self.media_player.play()
                 self.video_paused = False
                 self.pause_button.config(text="Pause")
             else:
+                self.record_segment()
                 self.media_player.pause()
                 self.video_paused = True
                 self.pause_button.config(text="Resume")
@@ -579,23 +669,34 @@ class MediaPlayerApp(tk.Tk):
     def stop(self):
         """
         Stops playback of the currently playing video.
-        Logs the watch history before stopping, including the duration watched and total duration.
+        Logs the watch history before stopping, using real elapsed time.
         """
         if self.playing_video:
-            # Log watch history before stopping
-            duration_watched = self.get_duration_str()
-            # self.watched_videos[self.current_file] =  self.watched_videos.get(self.current_file, 0) + self.media_player.get_time()
+            self.record_segment()
+            total_watched = self.calculate_total_watched()
+            duration_watched = self.get_time_str(total_watched)
+            total_duration = self.get_duration_str()
+            print(f"Real Elapsed Time: {duration_watched}")
+
             skipped_time = (self.prev_counts * 4990) - (self.forward_counts * 9990)
             print(f"Skipped Time: {self.get_time_str(skipped_time)}")
             print(f"Prev Counts: {self.prev_counts}, Forward Counts: {self.forward_counts}")
-            actual_time_duration = self.media_player.get_time()+skipped_time
-            total_duration = self.get_time_str(actual_time_duration)
-            self.watch_history_logger.log_watch_history(self.current_file, duration_watched, total_duration)
-            # print("total_duration:", total_duration, "\n", "Duration Watched(wng):", duration_watched, "\n", "Duration Watched(cor):", self.get_time_str(self.media_player.get_time()+skipped_time))
-            self.watched_videos.increment_duration_and_count(self.current_file, actual_time_duration)
+            
+            self.watch_history_logger.log_watch_history(self.current_file, total_duration, duration_watched)
+            self.watched_videos.increment_duration_and_count(self.current_file, total_watched)
             self.media_player.stop()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
+
+    def calculate_total_watched(self):
+        """
+        Calculate the total watched time (miliseconds) based on playback segments.
+        """
+        total = 0
+        for seg in self.playback_segments:
+            watched = (seg["end"] - seg["start"] + seg["prev_counts"] * 4990 - seg["forward_counts"] * 9990) / seg["speed"]
+            total += watched
+        return int(total)  # in ms
 
     def set_video_position(self, value):
         """
@@ -655,7 +756,7 @@ class MediaPlayerApp(tk.Tk):
 
     def handle_error(self, event):
         print("Error occurred while playing the media.")
-        self.master.destroy()
+        self.destroy()
     
     def show_seassion_stats(self, video_data, session_start=timeit.default_timer(), for_current=False):
         """
@@ -677,20 +778,22 @@ class MediaPlayerApp(tk.Tk):
         """
         Center the Window with Respect to the Screen.
         """
-        # Gets the requested values of the height and width.
         window_width = 1000
         window_height = 600
 
-        # Gets both half the screen width/height and window width/height
         position_right = int(self.winfo_screenwidth() / 2 - window_width / 2)
         position_down = int(self.winfo_screenheight() / 2 - window_height / 2)
 
-        # Positions the window in the center of the page.
         self.geometry("+{}+{}".format(position_right, position_down))
-
-    def reset_video_counts(self):
-        self.prev_counts = 0
-        self.forward_counts = 0
 
     def print_sessions_stats(self):
         pass
+
+if __name__ == "__main__":
+    # for testing purposes
+    import sys
+    import tkinter as tk
+    dummy_video_files = ["sample1.mp4", "sample2.mkv", "sample3.avi"]
+    app = MediaPlayerApp(video_files=dummy_video_files, random_select=False)
+    app.play_video = lambda: None
+    app.mainloop()
