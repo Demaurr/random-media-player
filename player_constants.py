@@ -15,3 +15,5 @@ DELETE_FILES_CSV = rf"{FILES_FOLDER}\To_Delete.csv"
 STYLE_FILE = rf"..\..\{STYLES_FOLDER}\style.css"
 FAV_FILES = rf"{FILES_FOLDER}\Favorites.csv"
 FILE_TRANSFER_LOG = rf"{LOGS_FOLDER}\file_transfer_log.csv"
+ALL_MEDIA_CSV = rf"{FILES_FOLDER}\ALL_MEDIA.csv"
+SKIP_FOLDERS = [r"Files", r"Files", r"Files\Screenshots", r"Files\Reports", r"Logs", r"Styles", r"__pycache__", r"venv", r"venv.bat"]

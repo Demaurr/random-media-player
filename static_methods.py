@@ -2,9 +2,7 @@ import csv
 from datetime import datetime
 import os
 import re
-from tkinter import messagebox
-from send2trash import send2trash
-from player_constants import DELETE_FILES_CSV, FILES_FOLDER, LOG_PATH
+from player_constants import ALL_MEDIA_CSV, DELETE_FILES_CSV, FILES_FOLDER, FOLDER_LOGS, LOG_PATH
 from logs_writer import LogManager
 
 logger = LogManager(LOG_PATH)
@@ -37,98 +35,10 @@ def get_favs_folder():
     with open(FILES_FOLDER + "\\" + "Extra_Paths.txt", "r", encoding='utf-8') as file:
         for line in file:
             if line.startswith("FAV_FOLDER:"):
-                # Split only on the first occurrence of ':'
                 parts = line.split(":", 1)
                 if len(parts) > 1:
                     return parts[1].strip()
     return None 
-
-def mark_for_deletion(video_file, status="ToDelete", event=None):
-    """
-    Deprecated: Use deletion_manager for this
-    Marks the given video file for deletion by adding it to the CSV, avoiding duplicates.
-    """
-    video_file = normalise_path(video_file)
-
-    # Read existing entries into a dictionary
-    file_status_dict = {}
-    try:
-        with open(DELETE_FILES_CSV, mode='r', newline='', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                if row and row[0]:  # Ensure it's not an empty row
-                    file_status_dict[normalise_path(row[0])] = row[1]  # Store file path and status
-    except FileNotFoundError:
-        # If the file doesn't exist, continue without raising an error (will be created on write)
-        pass
-
-    # Check if the video file is already in the CSV
-    if video_file in file_status_dict:
-        existing_status = file_status_dict[video_file]
-        if existing_status == "ToDelete":
-            # Ask the user if they want to delete the file since it's already marked
-            confirm_delete = messagebox.askyesno("File Already Marked", 
-                                                 f"{video_file} is already marked for deletion. Do you want to delete it now?")
-            if confirm_delete:
-                # Proceed to delete the file
-                send2trash(video_file)
-                print(f"{video_file} has been deleted.")
-                file_status_dict[video_file] = "Deleted"  # Update status to Deleted
-                logger.update_logs('[FILE DELETED]', video_file)
-    else:
-        # If the file is not marked, add the new entry
-        file_status_dict[video_file] = status
-        logger.update_logs('[MARKED FOR DELETION]', video_file)
-    
-    # Write the updated dictionary back to the CSV
-    with open(DELETE_FILES_CSV, mode='w', newline='', encoding="utf-8") as file:
-        writer = csv.writer(file)
-        for file_path, file_status in file_status_dict.items():
-            writer.writerow([file_path, file_status])
-        print(f"{video_file} marked for deletion with status: {status}.")
-
-
-def remove_from_deletion(video_file, event=None):
-    """
-    Deprecated: Use deletion_manager for this
-    Removes the given video file from the deletion list if marked for deletion (ToDelete).
-       Notifies if the file is already deleted and cannot be undeleted.
-    """
-    video_file = normalise_path(video_file)
-
-    # Read existing entries into a dictionary
-    file_status_dict = {}
-    try:
-        with open(DELETE_FILES_CSV, mode='r', newline='', encoding="utf-8") as file:
-            reader = csv.reader(file)
-            for row in reader:
-                if row and row[0]:  # Ensure it's not an empty row
-                    file_status_dict[row[0]] = row[1]  # Store file path and status
-    except FileNotFoundError:
-        # If the file doesn't exist, continue without raising an error (will be created on write)
-        pass
-
-    # Check if the video file is in the dictionary
-    if video_file in file_status_dict:
-        existing_status = file_status_dict[video_file]
-        if existing_status == "ToDelete":
-            # Remove from the deletion list
-            del file_status_dict[video_file]
-            print(f"{video_file} has been removed from the deletion list.")
-            logger.update_logs('[REMOVED FROM DELETION]', video_file)
-        elif existing_status == "Deleted":
-            # Notify the user that the file is already deleted
-            messagebox.showinfo("Already Deleted", f"{video_file} is already deleted and cannot be undeleted.")
-            print(f"{video_file} is already deleted.")
-    else:
-        # If the file is not in the deletion list, do nothing
-        print(f"{video_file} is not in the deletion list.")
-
-    # Write the updated dictionary back to the CSV
-    with open(DELETE_FILES_CSV, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        for file_path, file_status in file_status_dict.items():
-            writer.writerow([file_path, file_status])
 
 def ensure_folder_exists(folder_path):
         """
@@ -141,7 +51,7 @@ def ensure_folder_exists(folder_path):
         Returns:
             None
         """
-        if not os.path.exists(folder_path):  # Check if folder doesn't exist
+        if not os.path.exists(folder_path):
             try:
                 os.makedirs(folder_path)  # Create the folder and any missing parent directories
                 print(f"Folder created at {folder_path}")
@@ -155,7 +65,7 @@ def ensure_folder_exists(folder_path):
 
 def rename_if_exists(filename):
     base_name, extension = os.path.splitext(filename)
-    base_name = remove_number_suffix(base_name)  # Remove (number) suffix if exists
+    base_name = remove_number_suffix(base_name)
     counter = 1
     new_filename = filename
     
@@ -202,20 +112,16 @@ def convert_date_format(file_path):
         for row in reader:
             row_count += 1
             try:
-                # Convert the date string to a datetime object
                 date_watched = datetime.strptime(row['Date Watched'], '%m/%d/%Y %H:%M')
 
-                # Convert the datetime object to the desired format
                 row['Date Watched'] = datetime.strftime(date_watched, '%Y-%m-%d %H:%M:%S')
-
-                # Add the updated row to the list
                 rows.append(row)
+                
             except ValueError:
                 rows.append(row)
                 print(f"Warning: Invalid date format in row {row_count}. Skipping: {row['Date Watched']}")
                 continue
 
-    # Overwrite the original file with the updated rows
     with open(file_path, 'w', newline='', encoding='utf-8') as output_csv:
         writer = csv.DictWriter(output_csv, fieldnames=rows[0].keys())
         writer.writeheader()
@@ -225,11 +131,9 @@ def convert_date_format(file_path):
 
 
 def compare_folders(filepath, folderpath):
-    # Get the directory path from the full filepath
     file_directory = os.path.dirname(filepath)
     print(file_directory)
     
-    # Normalize both paths to handle different path separators and remove trailing slashes
     file_directory = os.path.normpath(file_directory)
     folderpath = os.path.normpath(folderpath)
     
@@ -242,3 +146,47 @@ def compare_folders(filepath, folderpath):
         # print(f"File directory: {file_directory}")
         # print(f"Folder path: {folderpath}")
         return False
+    
+def gather_all_media():
+    LOG_FOLDERS_CSV = FOLDER_LOGS
+    OUTPUT_CSV = ALL_MEDIA_CSV
+    HEADER = [
+        "File Name",
+        "File Type",
+        "File Size (Bytes)",
+        "File Size (Human Readable)",
+        "Creation Date",
+        "Modification Date",
+        "Source Folder"
+    ]
+    seen = set()
+    csv_paths = set()
+    with open(LOG_FOLDERS_CSV, newline='', encoding='utf-8') as logf:
+        reader = csv.reader(logf)
+        next(reader, None)  # skip header
+        for row in reader:
+            if len(row) < 2:
+                continue
+            csv_path = row[1].strip()
+            if csv_path:
+                csv_paths.add(normalise_path(csv_path))
+
+    with open(OUTPUT_CSV, "w", newline='', encoding='utf-8') as outf:
+        writer = csv.writer(outf)
+        writer.writerow(HEADER)
+        for csv_file in csv_paths:
+            if not os.path.exists(csv_file):
+                continue
+            with open(csv_file, newline='', encoding='utf-8') as inf:
+                reader = csv.reader(inf)
+                in_header = next(reader, None)
+                for row in reader:
+                    if len(row) < 7:
+                        continue
+                    # Only unique combination of Source Folder + File Name
+                    key = (normalise_path(row[6]), row[0].lower())
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    writer.writerow(row)
+    return OUTPUT_CSV
