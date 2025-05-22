@@ -157,8 +157,8 @@ class MediaPlayerApp(tk.Tk):
                 activebackground=activebg or bg,
                 activeforeground=activefg or fg,
                 cursor="hand2",
-                padx=4,
-                pady=1
+                padx=5,
+                pady=0
             )
 
         self.current_stats_button = tk.Button(
@@ -195,16 +195,6 @@ class MediaPlayerApp(tk.Tk):
             control_frame, text="Next", command=self.play_next
         )
         style_btn(self.next_button, "red", "white", "#b30000")
-
-        # self.add_to_favorites_button = tk.Button(
-        #     control_frame, text="Fav +", command=self.add_to_favorites
-        # )
-        # style_btn(self.add_to_favorites_button, "white", "green", "#006400", "white")
-
-        # self.remove_from_favorites_button = tk.Button(
-        #     control_frame, text="Fav -", command=self.remove_from_favorites
-        # )
-        # style_btn(self.remove_from_favorites_button, "black", "white", "#222")
 
         self.autoplay_button = tk.Button(
             control_frame, text="Autoplay: ON", command=self.toggle_autoplay
@@ -247,7 +237,7 @@ class MediaPlayerApp(tk.Tk):
                 e.widget.config(bg="white")
             elif txt == "Fav -":
                 e.widget.config(bg="black")
-            elif "Pause" in txt:
+            elif "Pause" in txt or "Resume" in txt:
                 e.widget.config(bg="#FF9800")
             else:
                 e.widget.config(bg="black")
@@ -668,12 +658,12 @@ class MediaPlayerApp(tk.Tk):
                 self.record_segment()
                 self.media_player.play()
                 self.video_paused = False
-                self.pause_button.config(text="Pause")
+                self.pause_button.config(text="⏸️ Pause")
             else:
                 self.record_segment()
                 self.media_player.pause()
                 self.video_paused = True
-                self.pause_button.config(text="Resume")
+                self.pause_button.config(text="⏯️ Resume", bg="#FF9800")
 
     def stop(self):
         """
