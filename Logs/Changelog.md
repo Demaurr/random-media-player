@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version [3.1.0] 2025-03-08
+
+### Added
+- Landscape and Vertical file filtering using ffmpeg in get_aspect.py
+- Compare folder method in static_methods to ensure given directories are same regardless of the slashes used.
+- Folder existence checking in the gui_main instead of videoplayer resolving folder_not_found bug.
+- Added use of shutil instead of os.rename for moving files between the drives.  
+- Added use of rename_if_exists when moving to favorites folder to prevent the overwriting of the files with the same name.
+- Added methods refractor_csv and check_deleted to refactor the csv if need and refresh the csv by checking the availablity of the files in deletion_list.
+
+### Changed
+- The structure of the Deletion Csv by also having size and modification_date data.
+- The paths and changed them to raw strings instead of simple format strings in player_constants.py.
+- The getting favs and added get_favs_by_name which will get and save any file as fav using only the name.
+
+### Fixed
+- Spaces issues with the Paths (now strips paths for outer spaces)
+- Minor Bugs
+
 ## Version [3.0.2] 2024-9-29
 
 ### Added
