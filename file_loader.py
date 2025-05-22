@@ -3,6 +3,8 @@ import os
 import csv
 from pprint import pprint
 
+from static_methods import compare_folders
+
 try:
     from Filing import filestatser
 except ImportError:
@@ -39,11 +41,8 @@ class VideoFileLoader:
 
     @staticmethod
     def are_paths_same(path1, path2):
-        # Normalize paths to use the same separator
         normalized_path1 = os.path.normpath(path1)
         normalized_path2 = os.path.normpath(path2)
-        
-        # Compare the normalized paths
         return normalized_path1 == normalized_path2
     
     @staticmethod
@@ -121,7 +120,6 @@ class VideoFileLoader:
         """
         try:
             for folder in folder_paths:
-                # Generate file stats and update CSV
                 csv_file = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv")
                 stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False, skip_folders=SKIP_FOLDERS)
                 stats.generate_file_stats_csv(csv_path=csv_file)
@@ -158,9 +156,11 @@ class VideoFileLoader:
         try:
             with open(self.csv_path, 'r', newline='', encoding='utf-8') as csvfile:
                 csv_reader = csv.reader(csvfile)
-                next(csv_reader)  # Skip header row
+                next(csv_reader)
                 for row in csv_reader:
-                    if self.are_paths_same(row[0], folder_path):
+                    # if self.are_paths_same(row[0], folder_path):
+                    #     return row[1]
+                    if compare_folders(row[0], folder_path):
                         return row[1]
         except FileNotFoundError:
             print(f"ERROR: Log_Folders.csv file not found at {self.csv_path}\n")
@@ -169,14 +169,14 @@ class VideoFileLoader:
         return folder_path
     
     def clean_input_paths(self, paths=[]):
-        csv_files = []
-        folders = []
+        csv_files = set()
+        folders = set()
         for ipath in paths:
             if ".csv" in ipath:
-                csv_files.append(ipath)
+                csv_files.add(ipath)
             else:
-                folders.append(ipath)
-        return folders, csv_files
+                folders.add(ipath)
+        return list(folders), list(csv_files)
     
     def seg_with_without_csv(self, folder_paths=[]):
         """
@@ -249,17 +249,12 @@ class VideoFileLoader:
         # Split the input string by ", "
         split_by_comma_space = input_string.split(", ")
         
-        # Initialize an empty list to store the final results
         stripped_strings = []
-        
-        # Iterate through each substring obtained after the first split
         for substr in split_by_comma_space:
             # Split each substring by ","
             substr = substr.strip()
             split_by_comma = substr.split(",")
             # print(substr)
-            
-            # Extend the stripped_strings list with the split substrings
             stripped_strings.extend(split_by_comma)
         
         return stripped_strings
@@ -312,7 +307,7 @@ class VideoFileLoader:
 
 if __name__ == "__main__":
     # Assuming you have instantiated your VideoFileLoader class as vf_loader
-    # folder_paths = ["C:/Users/HP/OneDrive/Desktop/Folders/Videos", "C:/Users/HP/Downloads", "D:/New folder/The Thirst"]
+    # folder_paths = ["C:/Users/HP/Videos", "C:/Users/HP/Downloads"]
 
     # try:
     vf_loader = VideoFileLoader()
