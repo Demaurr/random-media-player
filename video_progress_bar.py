@@ -13,6 +13,12 @@ class VideoProgressBar(tk.Scale):
             **kwargs: Additional keyword arguments to configure the progress bar.
         """
         kwargs["showvalue"] = False
+        kwargs.setdefault("bg", "black")
+        kwargs.setdefault("fg", "#2196F3")  # blue
+        kwargs.setdefault("troughcolor", "#222")
+        kwargs.setdefault("activebackground", "#2196F3")
+        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("font", ("Segoe UI", 10, "bold"))
         super().__init__(
             master,
             from_=0,

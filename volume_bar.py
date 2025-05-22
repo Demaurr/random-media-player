@@ -42,6 +42,14 @@ class VolumeBar(tk.Scale):
             media_player: The media player object whose volume will be controlled by this VolumeBar.
             **kwargs: Additional keyword arguments to configure the VolumeBar.
         """
+        kwargs.setdefault("bg", "black")
+        kwargs.setdefault("fg", "#2196F3")  # blue
+        kwargs.setdefault("troughcolor", "#222")
+        kwargs.setdefault("highlightthickness", 0)
+        kwargs.setdefault("sliderrelief", tk.FLAT)
+        kwargs.setdefault("activebackground", "#2196F3")
+        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("font", ("Segoe UI", 10, "bold"))
         super().__init__(
             master,
             from_=0,
