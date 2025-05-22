@@ -136,45 +136,42 @@ class VideoStatsApp:
         table_frame = tk.Frame(self.master, bg=self.master["bg"])
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        self.tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            selectmode="none",
-            style="Custom.Treeview"
-        )
-
-        style = ttk.Style()
+        style = ttk.Style(self.master)
         style.theme_use("clam")
         style.configure(
-            "Custom.Treeview.Heading",
+            "Stats.Treeview.Heading",
             font=("Segoe UI", 15, "bold"),
             background="black",
             foreground="white"
         )
-
         style.configure(
-            "Custom.Treeview",
+            "Stats.Treeview",
             font=("Segoe UI", 12),
             rowheight=32,
             background="black",
             fieldbackground="black",
             foreground="white"
         )
-        style.map("Custom.Treeview", background=[("selected", "#222")])
+        style.map("Stats.Treeview", background=[("selected", "#222")])
 
-        self.tree.heading("Title", text="Title")
-        self.tree.heading("Times", text="Times")
-        self.tree.heading("Watchtime", text="Watchtime")
-        self.tree.heading("Folder", text="Folder")
+        self.tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            selectmode="none",
+            style="Stats.Treeview"
+        )
 
-        self.tree.column("Title", width=180, anchor="w")
-        self.tree.column("Times", width=80, anchor="center")
-        self.tree.column("Watchtime", width=140, anchor="center")
-        self.tree.column("Folder", width=320, anchor="w")
-
+        # Set heading style explicitly
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center", command=lambda _col=col: None)
         self.tree.tag_configure('oddrow', background="#222", foreground="white")
         self.tree.tag_configure('evenrow', background="#333", foreground="white")
+
+        self.tree.column("Title", width=200, anchor="w")
+        self.tree.column("Times", width=70, minwidth=40, anchor="center", stretch=False)
+        self.tree.column("Watchtime", width=120, anchor="center")
+        self.tree.column("Folder", width=300, anchor="w")
 
         for idx, video in enumerate(self.video_data):
             tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
