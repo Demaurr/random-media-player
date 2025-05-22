@@ -1,6 +1,7 @@
 import os
 import random
 import threading
+import time
 import timeit
 from datetime import timedelta
 
@@ -420,7 +421,7 @@ class MediaPlayerApp(tk.Tk):
 
             # Pack widgets with custom padding individually
             # self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
-            self.progress_bar.pack(side=tk.LEFT, padx=5, pady=0)
+            self.progress_bar.pack(side=tk.LEFT, fill=tk.X, padx=5, pady=0, expand=True)
             self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
             # self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
         else:
@@ -608,6 +609,9 @@ class MediaPlayerApp(tk.Tk):
         """Starts loading and playing the video in a background thread."""
         def load_and_play():
             try:
+                if self.playing_video:
+                    self.media_player.stop()
+                    time.sleep(0.1)
                 if os.path.exists(self.current_file):
                     title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
                     media = self.instance.media_new(self.current_file)
@@ -621,6 +625,11 @@ class MediaPlayerApp(tk.Tk):
             except Exception as e:
                 print(f"An Exception Occurred in play_video: {e}")
                 self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
+        if hasattr(self, '_video_thread') and self._video_thread.is_alive():
+            print("Video thread is already running. Waiting for it to finish.")
+            return
+        self._video_thread = threading.Thread(target=load_and_play, daemon=True)
+        self._video_thread.start()
 
         threading.Thread(target=load_and_play, daemon=True).start()
 
