@@ -44,6 +44,7 @@ class FileExplorerApp:
         self.total_search_results = 0
         self.total_duration_watched = 0.0
         self.search_size = 0
+        self.video_files = []
 
         ensure_folder_exists(FILES_FOLDER)
         ensure_folder_exists(SCREENSHOTS_FOLDER)
@@ -107,12 +108,12 @@ class FileExplorerApp:
         if not selected_items:
             messagebox.showinfo("No Selection", "Select a File To Remove from Favs.")
             return
-        fav_manager = FavoritesManager()
+        # fav_manager = FavoritesManager()
         for item in selected_items:
             file_path = normalise_path(self.file_table.item(item, "values")[2])
             try:
-                if fav_manager.check_favorites(file_path):
-                    fav_manager.delete_from_favorites(file_path)
+                if self.fav_manager.check_favorites(file_path):
+                    self.fav_manager.delete_from_favorites(file_path)
                 else:
                     messagebox.showerror("Removal Failed", f"Failed to remove file: {file_path} from Favorites.")
             except Exception as e:
@@ -131,12 +132,12 @@ class FileExplorerApp:
         if not confirm:
             return
         
-        fav_manager = FavoritesManager()
+        # fav_manager = FavoritesManager()
         for item in selected_items:
             file_path = normalise_path(self.file_table.item(item, "values")[2])
             try:
-                if not fav_manager.check_favorites(file_path):
-                    fav_manager.add_to_favorites(file_path)
+                if not self.fav_manager.check_favorites(file_path):
+                    self.fav_manager.add_to_favorites(file_path)
                 else:
                     messagebox.showerror("Addition Failed", f"Failed to Add file: {file_path} To Favorites.")
             except Exception as e:
@@ -319,7 +320,39 @@ class FileExplorerApp:
 
         self.search_frame = tk.Frame(self.root, bg="black")
         self.search_frame.pack(side="top", fill="x", padx=20, pady=(0, 10))
+        
+        self.filter_favs = tk.Button(
+            self.search_frame, text="★", command=self.check_update_favs,
+            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#006400",
+            cursor="hand2"
+        )
+        self.filter_favs.pack(side="left", padx=(0, 5), pady=0)
 
+        self.show_caps = tk.Button(
+            self.search_frame, text="Snaps", command=self.display_caps,
+            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#006400",
+            cursor="hand2"
+        )
+        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
+
+        self.show_verticals = tk.Button(
+            self.search_frame, text="V", command=self.get_verticals,
+            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.show_verticals.pack(side="left", padx=(0,5), pady=0)
+
+        self.show_horizontals = tk.Button(
+            self.search_frame, text="L", command=self.get_horizontals,
+            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.show_horizontals.pack(side="left", padx=(0, 5), pady=0)
+        
         self.search_entry = tk.Entry(
             self.search_frame, bg="#181818", fg="white", width=30, bd=2, relief=tk.FLAT,
             font=("Segoe UI", 12)
@@ -334,22 +367,29 @@ class FileExplorerApp:
         )
         self.search_button.pack(side="left", padx=(0, 0), pady=0)
 
-        self.top_level_only_var = tk.BooleanVar(value=False)
-        self.top_level_only_check = ttk.Checkbutton(
-            self.search_frame, text="🔝", variable=self.top_level_only_var,
-            style="Modern.TCheckbutton",
-            cursor="hand2",
-            takefocus=0,
-        )
-        self.top_level_only_check.pack(side="left", padx=(5, 0), pady=5)
+        # self.top_level_only_var = tk.BooleanVar(value=False)
+        # self.top_level_only_check = ttk.Checkbutton(
+        #     self.search_frame, text="🔼", variable=self.top_level_only_var,
+        #     style="Modern.TCheckbutton",
+        #     cursor="hand2",
+        #     takefocus=0,
+        # )
+        # self.top_level_only_check.pack(side="left", padx=(5, 0), pady=5)
 
-        self.filter_favs = tk.Button(
-            self.search_frame, text="Favs", command=self.check_update_favs,
-            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
-            bd=0, relief=tk.RAISED, activebackground="#006400",
+        self.top_level_only_on = False
+        def toggle_top_level():
+            self.top_level_only_on = not self.top_level_only_on
+            if self.top_level_only_on:
+                self.top_level_only_button.config(bg="#4FC3F7", fg="black", relief=tk.SUNKEN)
+            else:
+                self.top_level_only_button.config(bg="black", fg="white", relief=tk.RAISED)
+        self.top_level_only_button = tk.Button(
+            self.search_frame, text="🔼", command=toggle_top_level,
+            bg="black", fg="white", font=("Segoe UI", 13, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
-        self.filter_favs.pack(side="left", padx=(0, 5), pady=0)
+        self.top_level_only_button.pack(side="left", padx=(5, 5), pady=5)
 
         self.delete_button = tk.Button(
             self.search_frame, text="🗑", command=self.on_delete_all_pressed,
@@ -366,31 +406,7 @@ class FileExplorerApp:
             cursor="hand2"
         )
         self.refresh_deleted.pack(side="left", padx=(0, 5), pady=5)
-
-        self.show_caps = tk.Button(
-            self.search_frame, text="Snaps", command=self.display_caps,
-            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
-            bd=0, relief=tk.RAISED, activebackground="#006400",
-            cursor="hand2"
-        )
-        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
-
-        self.show_verticals = tk.Button(
-            self.search_frame, text="V", command=self.get_verticals,
-            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
-            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.show_verticals.pack(side="left", padx=(0,5), pady=0)
-
-        self.show_horizontals = tk.Button(
-            self.search_frame, text="L", command=self.get_horizontals,
-            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
-            bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.show_horizontals.pack(side="left", padx=(0, 5), pady=0)
-
+        
         self.all_media_button = tk.Button(
             self.search_frame, text="All Media", command=self.show_all_media,
             bg="blue", fg="white", font=("Segoe UI", 11, "bold"),
@@ -400,39 +416,47 @@ class FileExplorerApp:
         self.all_media_button.pack(side="left", padx=(0, 5), pady=0)
 
         self.stats_frame = tk.Frame(self.root, bg="#181818", bd=2, relief=tk.GROOVE)
-        self.stats_frame.pack(side="top", fill="x", padx=20, pady=(0, 5))
+        self.stats_frame.pack(side="top", fill="x", padx=20, pady=(0, 5), anchor="center")
 
-        self.total_files_label = tk.Label(
-            self.stats_frame, text="Total Files: 0", bg="#181818", fg="white",
+        self.selected_files_label = tk.Label(
+            self.stats_frame, text="Selected: 0", bg="#181818", fg="white",
             font=("Segoe UI", 12, "bold")
         )
-        self.total_files_label.pack(side="left", padx=(10, 10))
+        self.selected_files_label.grid(row=0, column=0, padx=10, pady=0, sticky="ew")
+
+        self.total_files_label = tk.Label(
+            self.stats_frame, text="All Files: 0", bg="#181818", fg="white",
+            font=("Segoe UI", 12, "bold")
+        )
+        self.total_files_label.grid(row=0, column=1, padx=10, pady=0, sticky="ew")
 
         self.search_results_label = tk.Label(
             self.stats_frame, text="Search Results: 0", bg="#181818", fg="white",
             font=("Segoe UI", 12, "bold")
         )
-        self.search_results_label.pack(side="left", padx=(0, 10))
+        self.search_results_label.grid(row=0, column=2, padx=10, pady=0, sticky="ew")
 
         self.total_size_label = tk.Label(
-            self.stats_frame, text="Total Size: 0", bg="#181818", fg="white",
+            self.stats_frame, text="Size: 0", bg="#181818", fg="white",
             font=("Segoe UI", 12, "bold")
         )
-        self.total_size_label.pack(side="left", padx=(0, 10))
+        self.total_size_label.grid(row=0, column=3, padx=10, pady=0, sticky="ew")
 
         self.search_size_label = tk.Label(
             self.stats_frame, text="S-Size: 0", bg="#181818", fg="white",
             font=("Segoe UI", 12, "bold")
         )
-        self.search_size_label.pack(side="left", padx=(0, 10))
+        self.search_size_label.grid(row=0, column=4, padx=10, pady=0, sticky="ew")
 
         self.total_duration_label = tk.Label(
             self.stats_frame, text="Durations: 0", bg="#181818", fg="white",
             font=("Segoe UI", 12, "bold")
         )
-        self.total_duration_label.pack(side="left", padx=(10, 10))
+        self.total_duration_label.grid(row=0, column=5, padx=10, pady=0, sticky="ew")
 
         self._create_table()
+        for i in range(6):
+            self.stats_frame.grid_columnconfigure(i, weight=1)
 
         self.settings_button = tk.Button(
             self.root, text="⚙️", command=self.open_settings,
@@ -453,7 +477,7 @@ class FileExplorerApp:
 
         self.info_button = tk.Button(
             self.root, text="ℹ️", command=self.show_info,
-            bg="white", fg="#4FC3F7", bd=0, font=("Segoe UI", 13, "bold"),
+            bg="white", fg="red", bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -468,12 +492,18 @@ class FileExplorerApp:
                 e.widget.config(bg="red")
             elif e.widget == self.refresh_deleted or e.widget["text"] == "♻️":
                 e.widget.config(bg="red")
-            elif "Favs" in e.widget["text"] or "Snaps" in e.widget["text"]:
+            elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
                 e.widget.config(bg="green")
+            elif "V" in e.widget["text"] or "L" in e.widget["text"]:
+                e.widget.config(bg="black")
+            elif e.widget == self.all_media_button:
+                e.widget.config(bg="blue")
             else:
                 e.widget.config(bg="white")
 
-        for btn in [self.enter_button, self.delete_button, self.refresh_deleted, self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals]:
+        for btn in [self.enter_button, self.delete_button, self.refresh_deleted,
+                     self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
+                     self.all_media_button]:
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
 
@@ -488,7 +518,7 @@ class FileExplorerApp:
         self.file_table.heading("File Name", text="File Name", command=lambda: self.treeview_sort_column("File Name", False))
         self.file_table.heading("Folder Path", text="Folder Path", command=lambda: self.treeview_sort_column("Folder Path", False))
 
-        self.file_table.column("#", width=40, anchor="center")
+        self.file_table.column("#", width=40, anchor="center", stretch=False)
         self.file_table.column("File Name", width=320, anchor="w")
         self.file_table.column("Folder Path", width=400, anchor="w")
 
@@ -497,9 +527,15 @@ class FileExplorerApp:
 
         self.file_table.pack(side="left", fill="both", expand=True)
 
+        self.file_table.bind("<<TreeviewSelect>>", self.update_selected_files_label)
+
         self.scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.file_table.yview)
         self.scrollbar.pack(side="right", fill="y")
         self.file_table.configure(yscrollcommand=self.scrollbar.set)
+
+    def update_selected_files_label(self, event=None):
+        selected_count = len(self.file_table.selection())
+        self.selected_files_label.config(text=f"Selected: {selected_count}")
 
     def show_info(self):
         if hasattr(self, "_info_window") and self._info_window.winfo_exists():
@@ -509,16 +545,16 @@ class FileExplorerApp:
         self._info_window = tk.Toplevel(self.root)
         self._info_window.title("How to Use Random Media Player")
         self._info_window.configure(bg="#222")
-        self._info_window.geometry("520x420")
+        self._info_window.geometry("600x500")
         self._info_window.resizable(False, False)
         self._info_window.transient(self.root)
         self._info_window.grab_set()
-        self.center_window(window=self._info_window, width=520, height=420)
+        self.center_window(window=self._info_window, width=600, height=600)
 
-        icon_label = tk.Label(self._info_window, text="ℹ️", font=("Segoe UI Emoji", 48), bg="#222", fg="#4FC3F7")
+        icon_label = tk.Label(self._info_window, text="ℹ️", font=("Segoe UI Emoji", 48), bg="#222", fg="red")
         icon_label.pack(pady=(18, 0))
 
-        title_label = tk.Label(self._info_window, text="How to Use", font=("Segoe UI", 22, "bold"), bg="#222", fg="#4FC3F7")
+        title_label = tk.Label(self._info_window, text="How to Use", font=("Segoe UI", 22, "bold"), bg="#222", fg="red")
         title_label.pack(pady=(0, 10))
 
         frame = tk.Frame(self._info_window, bg="#222")
@@ -538,8 +574,8 @@ class FileExplorerApp:
             "• Enter a folder path Or Browse it using '📁' and click 'Get' to list media files.\n"
             "• You can enter multiple folder paths separated by commas.\n"
             "• Use 'Search' to filter files by name.\n"
-            "• Use '🔝' to search only in the top-level folder.\n"
-            "• Use 'Snaps' to view screenshots taken in the VideoPlayer.\n"
+            "• Use '🔼' to search only in the top-level folder.\n"
+            "• Use '★' and'Snaps' to view favorite files and screenshots taken respectively.\n"
             "• Double-click/Enter a file to play it.\n"
             "• Right-click a file for more options (move, delete).\n"
             "• Keyboard Shortcuts:\n"
@@ -548,8 +584,7 @@ class FileExplorerApp:
             "    - Ctrl+M: Move selected files\n"
             "    - Delete: Mark for deletion\n"
             "    - Ctrl+Shift+Delete: Remove from deletion list\n"
-            "• You can use 'V' and 'L' buttons to filter for\n"
-            "   vertical and landscape videos.\n"
+            "• You can use 'V' and 'L' buttons to filter for vertical and landscape videos.\n"
             "• Use the settings (⚙️) and stats (📊) buttons for more features.\n"
             "\nNote: to use V and L you'd have to download ffmpeg on your system.\n" \
             "Download FFmpeg from: https://ffmpeg.org/download.html\n" \
@@ -558,7 +593,7 @@ class FileExplorerApp:
         info_text.config(state="disabled")
         close_btn = tk.Button(
             self._info_window, text="Close", command=self._info_window.destroy,
-            font=("Segoe UI", 12, "bold"), bg="#4FC3F7", fg="#222", bd=0,
+            font=("Segoe UI", 12, "bold"), bg="white", fg="#222", bd=0,
             relief="flat", activebackground="#0288D1", activeforeground="#fff",
             cursor="hand2"
         )
@@ -670,12 +705,13 @@ class FileExplorerApp:
                 self.update_stats()
             
             elif folder_path_string == "show paths":
-                self.reset_search_option(folder=True)
-                with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
-                    reader = csv.DictReader(file)
+                # self.reset_search_option(folder=True)
+                # with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
+                #     reader = csv.DictReader(file)
 
-                    self.folders = list(set((normalise_path(row["Folder Path"]), normalise_path(row["Csv Path"])) for row in reader if os.path.isdir(row["Folder Path"])))
-                self.video_files = []
+                #     self.folders = list(set((normalise_path(row["Folder Path"]), normalise_path(row["Csv Path"])) for row in reader if os.path.isdir(row["Folder Path"])))
+                # self.video_files = []
+                self.show_paths()
             
             elif folder_path_string == "show deletes":
                 # Show files marked as "ToDelete"
@@ -711,6 +747,25 @@ class FileExplorerApp:
         elif self.play_folder:
             print(f"Total Folders in Search History: {len(self.folders)}")
             self.insert_to_table(sorted(self.folders))
+
+    def show_paths(self):
+        """Show only those folder/csv pairs where both the folder and the CSV file exist."""
+        self.reset_search_option(folder=True)
+        valid_folders = []
+        try:
+            with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    folder_path = normalise_path(row["Folder Path"])
+                    csv_path = normalise_path(row["Csv Path"])
+                    if os.path.isdir(folder_path) and os.path.isfile(csv_path):
+                        valid_folders.append((folder_path, csv_path))
+            self.folders = list(set(valid_folders))
+            # self.video_files = []
+            # self.insert_to_table(sorted(self.folders))
+            self.update_entry_text("show paths")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load valid folder/csv pairs: {e}")
 
     def refresh_deletions(self):
         self.deletion_manager.check_deleted()
@@ -773,7 +828,7 @@ class FileExplorerApp:
         file_list = []
         try:
             search_files = self.image_files if self.play_images else self.video_files
-            top_level_only = hasattr(self, "top_level_only_var") and self.top_level_only_var.get()
+            top_level_only = getattr(self, "top_level_only_on", False)
             folder_input = normalise_path(self.entry.get()).rstrip("\\/")
             for file in search_files:
                 if top_level_only:

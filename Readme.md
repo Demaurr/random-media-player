@@ -69,6 +69,24 @@ For full details, advanced features, keyboard shortcuts, troubleshooting, and co
 
 ---
 
+## Quick Launch (Batch File)
+
+If you haven't created an executable yet, you can use a batch file to run the app as if it were an executable.  
+This also ensures the current directory is set correctly for relative paths:
+
+1. Create a new file named `RunRandomMediaAnalyser.bat` in the project directory.
+2. Add the following code to the batch file:
+
+    ```bat
+    @echo off
+    cd <path to random-media-player dir>
+    python gui_main.py
+    pause
+    ```
+
+3. Double-click the batch file to launch the app.
+4. This way you can use this program as an executable.
+
 ## More Information
 
 - **Keyboard Shortcuts**
