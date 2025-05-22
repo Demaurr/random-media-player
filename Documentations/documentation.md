@@ -1,6 +1,7 @@
-# Random Media Player
-![Defualt Screen](Screenshots/Main_Screen4.PNG)
-### Overview
+# Media Analyser
+![Default Screen](../Screenshots/Current_Gui_Main_Screen.PNG)
+
+## Overview
 The Media Player Application is a Python-based desktop application designed to play video files with various control functionalities. 
 
 It helps users to keep track of their watch_time while watching movies or any videos.
@@ -13,35 +14,66 @@ The Player Can Play Typical Media Files and Keep Stats tracking and Saving Your 
 
 The project follows a modular structure to separate concerns and improve maintainability:
 
+- **gui_main.py**: Entry point for running the application.
+- **deletion_manager.py**: Handles deletion of files through the file browser window.
+- **favorites_manager.py**: Manages saving, removing, and reading favorites to/from a CSV file.
 - **file_loader.py**: Handles file loading functionalities.
+- **image_player.py**: Handles the viewing of Snapshots taken through the player.
 - **logs_writer.py**: Class which can be used to record update/error logs in a given file.
-- **favorites_manager.py**: Manages Favorites Saving, Removing and Reading to a given csv for Favorites.
+- **player_constants.py**: Contains pre-set constants necessary for the application.
+- **static_methods.py**: Contains the helpful methods to be used by the Application.
+- **summary_generator.py**: Generates Summary in HTML file format For the Recent Session's Watches.
 - **video_progress_bar.py**: Manages the video progress bar widget.
 - **video_stats.py**: Handles video playback statistics.
 - **videoplayer.py**: Implements the main media player application. Contains all the methods for Functionalities in Mediaplayer.
 - **volume_bar.py**: Controls the volume adjustment widget.
 - **watch_dictionary.py**: Defines the custom dictionary class for watch history.
 - **watch_history_logger.py**: Logs watch history data to a CSV file.
-- **summary_generator.py**: Generates Summary in HTML file format For the Recent Session's Watches.
-- **main.py**: Entry point for running the application.
+
+
 
 ## Functionality
+
 * Walk the Given Folder using `os` library and get all the media files in the directory and its sub-directory.
 * Keep Track of the All The Videos Watched related Info and store it in a **csv** through `watch_history_logger.py`.
 * Records the Statistics for the Current Open Session and shows stats through `video_stats.py` in a separate window.
 * Generates Summary in HTML Format Through The respective Button in **"Session Statistics"** window.
-* Keyboard keys with Player Buttons
-    * KeyPress-Right: When the right arrow key is pressed, the function fast_forward is triggered.
-    * Shift-KeyPress-Right: When the right arrow key is pressed while holding down the Shift key, the function play_next is triggered.
-    * KeyPress-space: When the spacebar is pressed, the function pause_video is triggered.
-    * KeyPress-Left: When the left arrow key is pressed, the function rewind is triggered.
-    * Shift-KeyPress-Left: When the left arrow key is pressed while holding down the Shift key, the function play_previous is triggered.
-    * Shift-KeyPress-s: Saves Snapshot of the screen with the name containing filename and time(in milliseconds) when it captured.
-    * Control-f/F: Saves the Current File to The Favorites.
-    * Control-d/d: Removes the Current File from Favorites.
-    * KeyPress-n/N: Plays The Next Video.
-    * KeyPress-p/P: Plays The Previously played Video.
 
+## Supported Video Formats
+
+The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` files by default. You can add more formats in the `get_video_files` method in `videoplayer.py`.
+
+## Keyboard Shortcuts
+
+### In Media Player Window
+| Shortcut                        | Action                                              |
+|----------------------------------|-----------------------------------------------------|
+| **`Shift + Right Arrow`**        | Play next video                                     |
+| **`Shift + Left Arrow`**         | Play previous video                                 |
+| **`Shift + S/s`**                  | Save screenshot (with filename and timestamp)       |
+| **`N/n`**                          | Play next video                                     |
+| **`Up Arrow`**                   | Increase volume                                     |
+| **`Down Arrow`**                 | Decrease volume                                     |
+| **`Left Arrow`**                 | Rewind                                              |
+| **`Right Arrow`**                | Fast forward                                        |
+| **`F/f`**                          | Toggle fullscreen                                   |
+| **`X/x`**                          | Cycle playback speed (1x, 1.5x, 2x)                 |
+| **`Space`**                      | Pause/resume video                                  |
+| **`Ctrl + Right Arrow`**         | Play immediate next video in playlist               |
+| **`Ctrl + Left Arrow`**          | Play immediate previous video in playlist           |
+| **`Ctrl + F/f`**                   | Add to favorites                                    |
+| **`Ctrl + D/d`**                   | Remove from favorites                               |
+| **`Delete`**                     | Mark current video for deletion                     |
+| **`Ctrl + Shift + Delete`**      | Remove current file from deletion list              |
+
+### In File Browser Window
+| Shortcut                        | Action                                              |
+|----------------------------------|-----------------------------------------------------|
+| **`Delete`**                     | Mark selected files for deletion                    |
+| **`Ctrl + M/m`**                   | Move selected files                                 |
+| **`Ctrl + F/f`**                   | Add selected files to favorites                     |
+| **`Ctrl + D/d`**                   | Remove selected files from favorites                |
+| **`Ctrl + Shift + Delete`**      | Remove selected files from deletion list            |
 
 ## Installation
 
@@ -63,23 +95,6 @@ The project follows a modular structure to separate concerns and improve maintai
     pip install -r requirements.txt
     ```
 
-## Files
-
-The project consists of the following files:
-
-1. **file_loader.py**:
-    > Having Class For **Loading** From Given **Path(s)** or **Csv(s)**. Note This Uses Another My(Filing) Library Which Can Be Downloaded from here: **[Filer](https://github.com/Demaurr/Filer)**.
-2. **logs_writer.py**: Class which can be used to record update/error logs in a given file.
-3. **favorites_manager.py**: Manages Favorites Saving, Removing and Reading to a given csv for Favorites.
-4. **video_progress_bar.py**: Defines a custom progress bar widget for displaying video playback progress.
-5. **video_stats.py**: Contains classes for managing and displaying video playback statistics.
-6. **videoplayer.py**: Implements the main video player application, including playback controls and user interface.
-7. **volume_bar.py**: Provides a volume control widget for adjusting audio levels during video playback.
-8. **watch_dict.py**: Defines a custom dictionary class for managing watch history.
-9. **watch_history_logger.py**: Logs watch history data to a CSV file.
-10. **summary_generator.py**: Generates Summary in HTML file format For the Recent Session's Watches.
-11. **main.py**: Entry point for running the media player application.
-
 
 
 ## Features
@@ -88,31 +103,70 @@ The project consists of the following files:
 - **Playback Controls**: Provides controls for play, pause, stop, fast-forward, and rewind.
 - **Watch History**: Keeps track of watched videos and their playback durations.
 - **Statistics**: Displays statistics on watched videos, including total duration watched and frequency of playback.
+- **View Snapshots**: View all the Snapshots taken from the Videoplayer in a built-in Image Viewer.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
 
 ## Usage
-*   Change the ***CONSTANT VARIABLES*** in `videoplayer.py`, `summary_generator.py` and `video_stats.py` to set the Path you want to store record files.
-*   Then Run `main.py`, through `py main.py`, to launch the application.
-*   Provide a **Folder Path** To Searching media files in **cmd** as input.
+
+*   Change the ***CONSTANT VARIABLES*** in `player_constants.py`
+*   Then run `gui_main.py` using `python gui_main.py` to launch the application.
+*   Provide a **Folder Path** or relevant [Commands](#commands) for searching media files in Entry Box as input.
 *   Use the interface to select video files from your directories.
-*   Control video playback using the buttons provided (play, pause, rewind, fast forward, etc.).
+*   Control video playback using the buttons provided (play, pause, rewind, fast forward, increase playback speed, etc.).
 *   **Current Stats** button will show the Statistic uptill that point.
 *   **Play** button will restart the current video.
-*   Close the application when finished.
+*   Close the Media Player when finished.
 *   After closing The Sessions Watch Statistics Window will be Shown.
 *   These Statistics can be saved as a HTML file by clicking on **Generate Summary** Button.
+*   Use the Buttons Like **`Snaps`** to get more from the app and views screenshot or get favorites.
+
+### Commands
+Use the following commands in the entry box for Folder paths.
+| Command           | Description                                             |
+|-------------------|---------------------------------------------------------|
+| **`show deletes`**  | Shows files marked for deletion                         |
+| **`show deleted`**  | Shows all the files deleted through the app             |
+| **`show history`**  | Shows the history of watched media in the past 30 days  |
+| **`show paths`**    | Shows all the previously entered and available paths    |
+| **`play favs`**     | Lists all the favorite media files                      |
+| **folder path `--update`** | Updates the file list of the folder
+
+## Session Statistics & Summary Reports
+
+After closing the player, a session statistics window appears, showing:
+- Each video watched (with folder)
+- Total watch time per video
+- Number of times watched
+- Session duration
+
+## Known Issues & Limitations
+
+- Some advanced video codecs may not be supported if VLC is not installed properly.
+- Large folders with thousands of videos may cause slow loading.
+- Watch time is based on playback segments and may not be 100% accurate if the app is force-closed.
+- Might Hang if the CPU is slow.
+
+## Troubleshooting & FAQ
+
+**Q:** The player doesn't start or crashes on launch.  
+**A:** Ensure you have Python 3.x, `tkinter`, and `python-vlc` installed. Also, make sure VLC media player is installed on your system.
+
+**Q:** Videos do not play or are not found.  
+**A:** Check that the folder path you provide contains supported video files and that you have permission to access them.
 
 ## Contributing
 
 Contributions to the Media Player Application are welcome! If you have any suggestions, bug fixes, or feature requests, please feel free to open an issue or submit a pull request on GitHub.
+
+The codebase is modular. To add new features:
+- Create a new module (e.g., for subtitles or playlists)
+- Import and integrate it in `gui_main.py` or `videoplayer.py`
+- Update the documentation and keyboard shortcuts as needed
 
 ## Acknowledgments
 
 Special thanks to the developers of the Tkinter and python-vlc libraries and [makeuseof](https://www.makeuseof.com/python-video-media-player-how-to-build/) site for their contributions to open-source software.
 
 ## Future Enhancements
+* Add the stats displaying For better and Quick Watchtime analysis.
 
-* ### **Playback Events**
-
-    Capture events related to video playback, such as start, pause, resume, stop, seek, etc., along with timestamps for each event. 
-    This feature can be implemented by adding event listeners to the media player instance and logging the relevant information (event type, timestamp) to a log file or database whenever an event occurs.
