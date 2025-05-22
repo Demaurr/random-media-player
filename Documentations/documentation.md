@@ -1,5 +1,5 @@
 # Media Analyser
-![Default Screen](../Screenshots/Current_Gui_Main_Screen.PNG)
+![Default Screen](../Screenshots/Current_Gui_Main_Screen.png)
 
 ## Overview
 The Media Player Application is a Python-based desktop application designed to play video files with various control functionalities. 

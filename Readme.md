@@ -1,6 +1,6 @@
 # Random Media Analyser
 
-![Main Screen Page](Screenshots/Current_GUI_Main_Screen.PNG)
+![Main Screen Page](Screenshots/Current_Gui_Main_Screen.png)
 
 ## Overview
 
@@ -31,7 +31,7 @@ For full details, advanced features, keyboard shortcuts, troubleshooting, and co
 
 ---
 ## Screenshots
-![Media Player](Screenshots/Current_Main_Screen.PNG)
+![Media Player](Screenshots/Current_Main_Screen.png)
 
 ## Main Features
 
