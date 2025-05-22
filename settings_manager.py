@@ -1,4 +1,5 @@
 import importlib
+from tkinter import filedialog, messagebox
 import player_constants
 import tkinter as tk
 import os
@@ -31,8 +32,8 @@ class SettingsWindow(tk.Toplevel):
         self.default_content = self._read_file(self.constants_path)
 
         # Heading
-        heading = tk.Label(self, text="Settings", bg="black", fg="red", font=("Open Sans", 28, "bold"))
-        heading.pack(pady=(18, 10))
+        heading = tk.Label(self, text="Settings", bg="black", fg="red", font=("Open Sans", 32, "bold"))
+        heading.pack(pady=(18, 7))
 
         # Frame for form
         form_frame = tk.Frame(self, bg="black")
@@ -42,6 +43,8 @@ class SettingsWindow(tk.Toplevel):
         row = 0
         label_font = ("Open Sans", 11, "bold")
         entry_font = ("Open Sans", 11)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
         for key, value in self.constants.items():
             label = tk.Label(form_frame, text=key, bg="black", fg="white", font=label_font, anchor="w")
             label.grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
@@ -49,6 +52,19 @@ class SettingsWindow(tk.Toplevel):
             entry.insert(0, value)
             entry.grid(row=row, column=1, padx=(0, 5), pady=6, sticky="ew")
             self.entries[key] = entry
+            if key != "SKIP_FOLDERS":
+                def browse_folder(entry=entry):
+                    folder_selected = filedialog.askdirectory(initialdir=base_dir, title="Select Folder")
+                    if folder_selected:
+                        abs_folder = os.path.abspath(folder_selected)
+                        if os.path.commonpath([abs_folder, base_dir]) == base_dir:
+                            entry.delete(0, tk.END)
+                            entry.insert(0, abs_folder)
+                        else:
+                            messagebox.showwarning("Invalid Folder", "Please select a folder within the application's directory.")
+
+                browse_btn = tk.Button(form_frame, text="📁", command=browse_folder, bg="#333", fg="white", font=("Open Sans", 12), relief=tk.FLAT, cursor="hand2")
+                browse_btn.grid(row=row, column=2, padx=(0, 5), pady=6, sticky="ew")
             row += 1
 
         button_frame = tk.Frame(self, bg="black")
@@ -61,7 +77,7 @@ class SettingsWindow(tk.Toplevel):
         reset_btn = tk.Button(button_frame, text="Reset to Default", command=self.reset_to_default, bg="black", fg="red", font=("Open Sans", 12, "bold"), width=16, relief=tk.FLAT, activebackground="#222", activeforeground="red", cursor="hand2", borderwidth=2, highlightbackground="red", highlightcolor="red")
         reset_btn.grid(row=0, column=2, padx=8)
 
-        self.center_window(600, 300)
+        self.center_window(650, 350)
         for btn, bg, fg in [
             (save_btn, "red", "white"),
             (cancel_btn, "white", "black"),
@@ -74,7 +90,7 @@ class SettingsWindow(tk.Toplevel):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
         
-    def center_window(self, width=600, height=500):
+    def center_window(self, width=700, height=600):
         self.update_idletasks()
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()

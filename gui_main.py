@@ -223,9 +223,16 @@ class FileExplorerApp:
                 messagebox.showerror("Error", f"An error occurred: {e}")
         messagebox.showinfo("Removed Marked", f"{len(selected_items)} file(s) removed from deletion list.")
 
-    def delete_files_in_csv(self):
+    def on_delete_all_pressed(self, event=None):
         """Deletes files marked as 'ToDelete' using the DeletionManager."""
-        self.deletion_manager.delete_files_in_csv()
+        entry_text = self.entry.get().strip().lower()
+        if entry_text == "show deletes":
+            self.deletion_manager.delete_files_in_csv()
+        else:
+            self.update_entry_text("show deletes")
+            self.show_deletes()
+            self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+            # messagebox.showinfo("Marked for Deletion", "Showing files marked for deletion. To delete all, type 'show deletes' and click 🗑 again.")
 
     def open_settings(self):
         def reload_constants():
@@ -281,7 +288,7 @@ class FileExplorerApp:
         self._set_styles()
         
         self.heading_label = tk.Label(
-            self.root, text="Random Media Player", bg="black", fg="red",
+            self.root, text="Media Analyser", bg="black", fg="red",
             font=("Segoe UI", 44, "bold"), pady=10
         )
         self.heading_label.pack(side="top", fill="x", pady=(10, 5))
@@ -345,7 +352,7 @@ class FileExplorerApp:
         self.filter_favs.pack(side="left", padx=(0, 5), pady=0)
 
         self.delete_button = tk.Button(
-            self.search_frame, text="🗑", command=self.delete_files_in_csv,
+            self.search_frame, text="🗑", command=self.on_delete_all_pressed,
             bg="red", fg="white", font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#b30000",
             anchor="center", cursor="hand2"
@@ -541,7 +548,11 @@ class FileExplorerApp:
             "    - Ctrl+M: Move selected files\n"
             "    - Delete: Mark for deletion\n"
             "    - Ctrl+Shift+Delete: Remove from deletion list\n"
+            "• You can use 'V' and 'L' buttons to filter for\n"
+            "   vertical and landscape videos.\n"
             "• Use the settings (⚙️) and stats (📊) buttons for more features.\n"
+            "\nNote: to use V and L you'd have to download ffmpeg on your system.\n" \
+            "Download FFmpeg from: https://ffmpeg.org/download.html\n" \
         )
         info_text.insert("1.0", info_content)
         info_text.config(state="disabled")
