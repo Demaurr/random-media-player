@@ -1,3 +1,4 @@
 python-vlc
 send2trash
 git+https://github.com/Demaurr/Filer.git@master#egg=Filer&subdirectory=Filer
+pillow
