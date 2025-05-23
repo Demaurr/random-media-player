@@ -29,6 +29,10 @@ For full details, advanced features, keyboard shortcuts, troubleshooting, and co
     pip install -r requirements.txt
     ```
 
+4. **Download VLC Media Player:**  
+   This application uses `python-vlc`, which requires the VLC Media Player and its libraries to be installed on your system.  
+   **Download and install VLC from:** [https://www.videolan.org/vlc/](https://www.videolan.org/vlc/)  
+   > Without VLC installed, video playback will not work.
 ---
 ## Screenshots
 ![Media Player](Screenshots/Current_Main_Screen.png)
