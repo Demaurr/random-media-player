@@ -272,6 +272,32 @@ class VideoFileLoader:
                 self.logger.error_logs(f"{e} While refreshing {folder}")
                 print(f"{e} While refreshing {folder}")
         return folders
+    
+    def refresh_folders(self, folder_paths):
+        """
+        Refresh (update) the CSV data for the given folder(s).
+
+        Args:
+            folder_paths (list or str): Folder path or list of folder paths to refresh.
+        Returns:
+            list: List of refreshed CSV file paths.
+        """
+        if isinstance(folder_paths, str):
+            folder_paths = [folder_paths]
+        refreshed_csvs = []
+        for folder in folder_paths:
+            try:
+                folder = self.normalise_path(folder)
+                self.update_folder_data_csv([folder])
+                csv_file = os.path.join(
+                    self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv"
+                )
+                refreshed_csvs.append(csv_file)
+                print(f"Refreshed: {folder}")
+            except Exception as e:
+                print(f"Failed to refresh {folder}: {e}")
+                self.logger.error_logs(f"{e} While refreshing {folder}")
+        return refreshed_csvs
 
     
     def start_here(self, input_string):
