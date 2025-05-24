@@ -261,7 +261,7 @@ class FileExplorerApp:
         style.theme_use("clam")
         style.configure("Treeview.Heading", font=("Segoe UI", 16, "bold"), background="black", foreground="red")
         style.configure("Treeview", font=("Segoe UI", 11), rowheight=28, background="#222", fieldbackground="#222", foreground="white")
-        style.map("Treeview", background=[("selected", "#444")])
+        style.map("Treeview", background=[("selected", "#8B0000")])
         style.configure("TButton", font=("Segoe UI", 11, "bold"), padding=6, borderwidth=0)
         style.configure("TEntry", font=("Segoe UI", 11), padding=4)
         style.configure(
@@ -399,13 +399,13 @@ class FileExplorerApp:
         )
         self.delete_button.pack(side="left", padx=(0,5), pady=5)
 
-        self.refresh_deleted = tk.Button(
-            self.search_frame, text="♻️", command=self.refresh_deletions,
+        self.refresh_button = tk.Button(
+            self.search_frame, text="♻️", command=self.on_refresh_pressed,
             bg="red", fg="white", font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#b30000",
             cursor="hand2"
         )
-        self.refresh_deleted.pack(side="left", padx=(0, 5), pady=5)
+        self.refresh_button.pack(side="left", padx=(0, 5), pady=5)
         
         self.all_media_button = tk.Button(
             self.search_frame, text="All Media", command=self.show_all_media,
@@ -490,7 +490,7 @@ class FileExplorerApp:
                 e.widget.config(bg="red")
             elif e.widget == self.delete_button or e.widget["text"] == "🗑":
                 e.widget.config(bg="red")
-            elif e.widget == self.refresh_deleted or e.widget["text"] == "♻️":
+            elif e.widget == self.refresh_button or e.widget["text"] == "♻️":
                 e.widget.config(bg="red")
             elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
                 e.widget.config(bg="green")
@@ -501,7 +501,7 @@ class FileExplorerApp:
             else:
                 e.widget.config(bg="white")
 
-        for btn in [self.enter_button, self.delete_button, self.refresh_deleted,
+        for btn in [self.enter_button, self.delete_button, self.refresh_button,
                      self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
                      self.all_media_button]:
             btn.bind("<Enter>", on_enter)
@@ -612,6 +612,32 @@ class FileExplorerApp:
                 self.entry.delete(0, tk.END)
                 self.entry.insert(0, folder_selected)
 
+    def on_refresh_pressed(self):
+        entry_text = self.entry.get().strip().lower()
+        if entry_text == "show paths":
+            # Refresh selected folders if any, else refresh all folders in the table
+            if not hasattr(self, "folders") or not self.folders:
+                self.show_paths()
+            selected_items = self.file_table.selection()
+            if selected_items:
+                # Get selected folder paths from the table
+                folder_paths = []
+                for item in selected_items:
+                    folder_path = self.file_table.item(item, "values")[1]
+                    folder_paths.append(folder_path.strip())
+                msg = f"Refreshed {len(folder_paths)} selected folder(s)."
+            else:
+                # Refresh all folders
+                folder_paths = [folder.strip() for folder, csv in self.folders]
+                msg = f"Refreshed {len(folder_paths)} folder(s)."
+            vf_loader = VideoFileLoader()
+            vf_loader.refresh_folders(folder_paths)
+            self.show_paths()
+            messagebox.showinfo("Refreshed", msg)
+        else:
+            self.refresh_deletions()
+            messagebox.showinfo("Refreshed", "Deletions refreshed.")
+
     def show_all_media(self):
         """Gathers all media and displays File Name and Source Folder in the table."""
         csv_path = gather_all_media()
@@ -664,7 +690,7 @@ class FileExplorerApp:
             self.total_files_label.config(text=f"Total Files: {self.total_files}")
             self.total_size_label.config(text=f"Total Size: {self.total_size}")
             self.search_results_label.config(text=f"Search Results: {self.total_search_results}")
-            self.total_duration_label.config(text=f"Durations (hours): {self.total_duration_watched}")
+            self.total_duration_label.config(text=f"Durations: {self.total_duration_watched}")
             self.search_size_label.config(text=f"S-Size: {self.search_size}")
 
     def list_files(self, directory):
