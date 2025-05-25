@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## **Version [3.2.6]** **2025-05-23**
+### Added
+- Icons for pause and resume actions on mouse leave for improved UI feedback.
+- Method for displaying previously used paths, replacing hard-coded logic.
+- Count of selected files in the file table for easier file management.
+
+### Changed
+- Button placements for a more visually appealing layout.
+- Top-level folder selection changed from a checkbox to a selection button.
+- Removed multiple initializations of `fav_manager` to improve performance.
+
+### Updated
+- requirements.txt to include the `Pillow` library.
+- readme to include the instructions to download vlc Mediaplayer before use.
+
 ## **Version [3.2.3]** **2025-05-22**
 
 ### Added
