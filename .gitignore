@@ -9,4 +9,5 @@ watch_analyzer.py
 *.log
 *.txt
 *.csv
+*.prof
 testing*.py
