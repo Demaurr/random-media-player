@@ -5,9 +5,11 @@ SCREENSHOTS_FOLDER = rf"{FILES_FOLDER}\Screenshots"
 REPORTS_FOLDER = rf"{FILES_FOLDER}\Reports"
 LOGS_FOLDER = r"Logs"
 STYLES_FOLDER = r"Styles"
+DEMO_FOLDER = r"Testings Data"
 
 # Path of Files
 FOLDER_LOGS = rf"{CSV_FOLDER}\Log_Folders.csv"
+DEMO_WATCHED_HISTORY = rf"{DEMO_FOLDER}\Demo_Watched_History.csv"
 LOG_PATH = rf"{LOGS_FOLDER}\Action_Logs.log"
 FAV_PATH = rf"{FILES_FOLDER}\fav_paths.txt"
 WATCHED_HISTORY_LOG_PATH = rf"{FILES_FOLDER}\Watched_History.csv"
