@@ -37,6 +37,46 @@ For full details, advanced features, keyboard shortcuts, troubleshooting, and co
 ## Screenshots
 ![Media Player](Screenshots/Current_Main_Screen.png)
 
+---
+
+## Dashboard Screenshots
+
+The **Dashboard** provides a visual summary of your media activity and library. Below are some example dashboard screens and what they show:
+
+### Overview
+![Media Consumption Overview](Screenshots/Dashboard_Overview.png)
+- **Overview of Media Consumption:**
+  Shows the summary of media consumption with listing the trend of Past 30 days.
+
+### Hourly Consumption
+
+![Dashboard Hourly Consumption](Screenshots/Dashboard_Hourly_Consumption.png)
+
+- **Media Consumption by Hour of Day:**  
+  Shows at what hours you most frequently watch media, helping you spot your peak viewing times.
+- **Hour vs Duration Category:**  
+  A heatmap showing how many videos of each duration category (short, medium, long, etc.) are watched at each hour.
+
+---
+
+### Weekly Consumption
+
+![Dashboard Weekly Consumption](Screenshots/Dashboard_Weekly_Consumption.png)
+
+- **Media Watched by Day of Week:**  
+  Bar chart showing how many videos are watched on each weekday.
+- **Weekday Watched by Duration Category:**  
+  Line chart showing trends for each duration category across the week.
+- **Total Watch Duration by Day of Week:**  
+  Bar chart of total minutes watched per weekday.
+- **Weekly Consumption Table:**  
+  Table summarizing the count and total duration watched for each weekday.
+
+---
+
+These dashboards help you understand your viewing habits, spot trends, and manage your media consumption more effectively.
+
+
 ## Main Features
 
 - **Video Playback:** Play videos from your local directories with a user-friendly interface.

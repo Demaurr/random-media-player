@@ -245,6 +245,12 @@ class VideoFileLoader:
                 continue
         return video_files
     
+    def ensure_trailing_backslash(self, path):
+        """Ensure the path ends with a backslash if it's a directory."""
+        if path and not path.endswith("\\"):
+            return path + "\\"
+        return path
+    
     def strip_string_by_comma(self, input_string):
         # Split the input string by ", "
         split_by_comma_space = input_string.split(", ")
@@ -267,7 +273,7 @@ class VideoFileLoader:
                     folder = self.normalise_path(folder.replace("--update", "").strip())
                     # folders.append(folder.replace("--update", ""))
                     self.update_folder_data_csv([folder])
-                folders.append(folder)
+                folders.append(self.ensure_trailing_backslash(folder))
             except Exception as e:
                 self.logger.error_logs(f"{e} While refreshing {folder}")
                 print(f"{e} While refreshing {folder}")

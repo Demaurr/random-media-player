@@ -91,7 +91,7 @@ def get_file_size(file_path):
     try:
         return os.path.getsize(file_path)
     except FileNotFoundError:
-        print(f"File not found: {file_path}")
+        # print(f"File not found: {file_path}")
         return 0
     except Exception as e:
         print(f"An error occurred: {str(e)}")
@@ -171,22 +171,43 @@ def gather_all_media():
             if csv_path:
                 csv_paths.add(normalise_path(csv_path))
 
+    all_rows = []
+    for csv_file in csv_paths:
+        if not os.path.exists(csv_file):
+            continue
+        with open(csv_file, newline='', encoding='utf-8') as inf:
+            reader = csv.reader(inf)
+            next(reader, None)  # skip header
+            for row in reader:
+                if len(row) < 7:
+                    continue
+                key = (normalise_path(row[6]), row[0].lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_rows.append(row)
+
     with open(OUTPUT_CSV, "w", newline='', encoding='utf-8') as outf:
         writer = csv.writer(outf)
         writer.writerow(HEADER)
-        for csv_file in csv_paths:
-            if not os.path.exists(csv_file):
-                continue
-            with open(csv_file, newline='', encoding='utf-8') as inf:
-                reader = csv.reader(inf)
-                in_header = next(reader, None)
-                for row in reader:
-                    if len(row) < 7:
-                        continue
-                    # Only unique combination of Source Folder + File Name
-                    key = (normalise_path(row[6]), row[0].lower())
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    writer.writerow(row)
+        writer.writerows(all_rows)
     return OUTPUT_CSV
+
+def open_in_default_app(file_path):
+    """
+    Opens the given file with the default application set in the OS.
+    Supports Windows, macOS, and Linux.
+    """
+    try:
+        if os.name == 'nt':  # Windows
+            os.startfile(file_path)
+        elif os.name == 'posix':
+            import subprocess
+            if sys.platform == 'darwin':  # macOS
+                subprocess.run(['open', file_path])
+            else:  # Linux and others
+                subprocess.run(['xdg-open', file_path])
+        else:
+            print("Unsupported OS.")
+    except Exception as e:
+        print(f"Failed to open file: {e}")

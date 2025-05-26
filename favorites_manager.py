@@ -83,15 +83,14 @@ class FavoritesManager:
         return False
 
     def get_favorites(self):
-        """Returns the list of favorites (source path + filename)."""
+        """Returns the list of favorites (source path + filename) without checking file existence."""
         favorites = []
         with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
             reader = csv.DictReader(file)
             for row in reader:
                 path = os.path.join(row["Source Path"], row["Video Name"])
-                if os.path.exists(path):
-                    favorites.append(path)
-                    self.total_size += get_file_size(path)
+                favorites.append(path)
+                self.total_size += get_file_size(path)
         return favorites
     
     def get_favorites_by_name(self) -> dict:
@@ -113,6 +112,27 @@ class FavoritesManager:
             print(f"Favorites file {self.fav_csv} not found.")
             self.logger.error_logs(f"Favorites file {self.fav_csv} not found.")
         return favorites_dict
+    
+    def delete_favorites_by_name(self, video_name):
+        """Deletes all entries with the given video name from favorites."""
+        temp_csv = self.fav_csv + ".temp"
+        removed = False
+        with open(self.fav_csv, "r", newline="", encoding="utf-8") as file, \
+             open(temp_csv, "w", newline="", encoding="utf-8") as temp_file:
+            reader = csv.DictReader(file)
+            writer = csv.DictWriter(temp_file, fieldnames=reader.fieldnames)
+            writer.writeheader()
+            for row in reader:
+                if row["Video Name"] != video_name:
+                    writer.writerow(row)
+                else:
+                    removed = True
+                    self.logger.update_logs(f"[FAVORITES REMOVED]", f"{row['Video Name']} from {row['Source Path']}")
+        if removed:
+            os.replace(temp_csv, self.fav_csv)
+        else:
+            os.remove(temp_csv)
+        return removed
 
     def update_path_and_hash(self):
         updated_rows = []

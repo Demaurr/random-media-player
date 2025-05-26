@@ -48,7 +48,7 @@ class VolumeBar(tk.Scale):
         kwargs.setdefault("highlightthickness", 0)
         kwargs.setdefault("sliderrelief", tk.FLAT)
         kwargs.setdefault("activebackground", "#2196F3")
-        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("bd", 1)
         kwargs.setdefault("font", ("Segoe UI", 10, "bold"))
         super().__init__(
             master,

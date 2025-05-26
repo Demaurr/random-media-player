@@ -2,3 +2,6 @@ python-vlc
 send2trash
 git+https://github.com/Demaurr/Filer.git@master#egg=Filer&subdirectory=Filer
 pillow
+pandas==2.2.3
+matplotlib==3.10.1
+seaborn==0.13.2

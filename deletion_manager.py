@@ -135,6 +135,7 @@ class DeletionManager:
             self.logger.update_logs("[DELETED FILES UPDATED]", f"Checked The Deleted Files Still Available.")
         else:
             print("No updates required; all deleted files are missing.")
+            messagebox.showinfo("No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
 
 
 

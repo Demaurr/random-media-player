@@ -14,7 +14,6 @@ from deletion_manager import DeletionManager
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
 from player_constants import FILES_FOLDER, LOG_PATH, REPORTS_FOLDER, SCREENSHOTS_FOLDER, WATCHED_HISTORY_LOG_PATH
-from static_methods import ensure_folder_exists
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -23,7 +22,6 @@ from watch_history_logger import WatchHistoryLogger
 
 
 class MediaPlayerApp(tk.Tk):
-    
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
         super().__init__()
         self._get_history_csvfile(watch_history_csv)
@@ -224,7 +222,7 @@ class MediaPlayerApp(tk.Tk):
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=8)
 
         self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=10, pady=8)
+        self.volume_bar.pack(side=tk.RIGHT, padx=10, pady=5)
 
         def on_enter(e): e.widget.config(bg="#444")
         def on_leave(e):
@@ -269,6 +267,8 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<Shift-KeyPress-Right>", self.play_next)
         self.bind("<KeyPress-n>", self.play_next)
         self.bind("<KeyPress-N>", self.play_next)
+        self.bind("<KeyPress-m>", self.toggle_mute)
+        self.bind("<KeyPress-M>", self.toggle_mute)
         self.bind("<KeyPress-Up>", self.volume_increase)
         self.bind("<KeyPress-Down>", self.volume_decrease)
         self.bind("<KeyPress-f>", self.toggle_fullscreen)
@@ -287,21 +287,22 @@ class MediaPlayerApp(tk.Tk):
         self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
 
     def _on_video_loaded(self, title):
-        self.reset_values()
+        self.reset_values(segment_speed=self.segment_speed)
 
         self.title(title)
         self.media_player.set_hwnd(self.media_canvas.winfo_id())
         self.media_player.play()
+        # self.set_playback_speed(self.segment_speed)
         self.show_marquee(f"Playing: {self.current_file}")
         self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
         self.playing_video = True
         self.watched_videos.add_watch(self.current_file)
         self.progress_bar.set(0)
 
-    def reset_values(self):
+    def reset_values(self, segment_speed=None):
         self.playback_segments = []
         self.segment_start = 0
-        self.segment_speed = 1.0
+        self.segment_speed = 1.0 if segment_speed is None else segment_speed
         self.segment_forward = 0
         self.segment_prev = 0
         self.prev_counts = 0
@@ -368,34 +369,7 @@ class MediaPlayerApp(tk.Tk):
     def show_marquee(self, text):
         self.media_player.video_set_marquee_string(vlc.VideoMarqueeOption.Text, text.encode('utf-8'))
         self.media_player.video_set_marquee_int(vlc.VideoMarqueeOption.Enable, 1)
-        self.media_player.video_set_marquee_int(vlc.VideoMarqueeOption.Timeout, 1000)  # 10 seconds
-
-    def show_feedback(self, message):
-        """
-        Deprecated
-        Displays feedback message on top of the window.
-        """
-        # Calculate the width of the window
-        window_width = self.winfo_width()
-
-        # Place the feedback label at the top of the window, centered horizontally
-        self.feedback_label.place(x=window_width // 2, y=0, anchor="n")
-        
-        # Set the message and configure label for text wrapping
-        self.feedback_var.set(message)
-        self.feedback_label.config(wraplength=window_width - 20)  # Adjust wraplength as needed
-
-        # Schedule the clear_feedback method to be called after 3 seconds
-        self.after(3000, self.clear_feedback)
-
-    def clear_feedback(self):
-        """
-        Deprecated
-        Clears the feedback message
-        """
-        self.feedback_var.set('')
-        self.feedback_label.pack_forget()
-        # self.feedback_label.config(textvariable='')
+        self.media_player.video_set_marquee_int(vlc.VideoMarqueeOption.Timeout, 1000)  # 1 seconds
 
 
     def toggle_controls_visibility(self, visibility):
@@ -451,7 +425,6 @@ class MediaPlayerApp(tk.Tk):
         """Increases the volume."""
         current_volume = self.media_player.audio_get_volume()
         new_volume = min(current_volume + 5, 100)  # Increase volume by 5%, up to 100%
-        # self.media_player.audio_set_volume(new_volume)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
         self.volume_bar.set(new_volume)  # Update volume bar
@@ -460,7 +433,6 @@ class MediaPlayerApp(tk.Tk):
         """Decreases the volume."""
         current_volume = self.media_player.audio_get_volume()
         new_volume = max(current_volume - 5, 0)
-        # self.media_player.audio_set_volume(new_volume)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
         self.volume_bar.set(new_volume) 
@@ -483,6 +455,7 @@ class MediaPlayerApp(tk.Tk):
         if self.current_file:
             self.deleter.mark_for_deletion(self.current_file)
             self.show_marquee(f"Marked {self.current_file} for deletion")
+            # Added Logging in deletion manager so No need to log here
             # self.logger.update_logs(f"[MARKED FOR DELETION]", self.current_file)
 
     def play_next(self, event=None):
@@ -520,9 +493,8 @@ class MediaPlayerApp(tk.Tk):
         # time.sleep(0.2)
         if self.playing_video:
             self.stop()  # Stop the current video
-        # Select the previous video
         if self.previous_file:
-            self.current_file = self.previous_file
+            self.current_file, self.previous_file = self.previous_file, self.current_file
             self.play_video()
 
     def get_duration_str(self):
@@ -601,10 +573,11 @@ class MediaPlayerApp(tk.Tk):
             try:
                 if self.playing_video:
                     self.media_player.stop()
-                    time.sleep(0.1)
+                    time.sleep(0.35)
                 if os.path.exists(self.current_file):
                     title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
                     media = self.instance.media_new(self.current_file)
+                    media.parse_async()  # Preloads meta info
                     self.media_player.set_media(media)
                     # Schedule GUI updates on the main thread
                     self.after(0, lambda: self._on_video_loaded(title))
@@ -621,7 +594,7 @@ class MediaPlayerApp(tk.Tk):
         self._video_thread = threading.Thread(target=load_and_play, daemon=True)
         self._video_thread.start()
 
-        threading.Thread(target=load_and_play, daemon=True).start()
+        # threading.Thread(target=load_and_play, daemon=True).start()
 
     def fast_forward(self, event=None):
         """
@@ -635,6 +608,13 @@ class MediaPlayerApp(tk.Tk):
             self.media_player.set_time(current_time)
             self.show_marquee(f"{current_time_str} / {self.total_duration_str}")
             
+    def toggle_mute(self, event=None):
+        """Toggle mute/unmute for the media player."""
+        if self.media_player:
+            is_muted = self.media_player.audio_get_mute()
+            self.media_player.audio_toggle_mute()
+            # Optionally show feedback
+            self.show_marquee("🔇Muted" if not is_muted else "🔊 Unmuted")
 
     def rewind(self, event=None):
         """

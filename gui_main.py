@@ -3,6 +3,7 @@ import importlib
 import os
 from datetime import datetime, timedelta
 
+import threading
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, ttk
 
@@ -22,12 +23,14 @@ from player_constants import (
     REPORTS_FOLDER,
     SCREENSHOTS_FOLDER,
     WATCHED_HISTORY_LOG_PATH,
+    DEMO_WATCHED_HISTORY
 )
 from settings_manager import SettingsWindow
 from static_methods import create_csv_file, ensure_folder_exists, gather_all_media, get_file_size, normalise_path
 from videoplayer import MediaPlayerApp
 
 import player_constants
+from media_dashboard import DashboardWindow
 # from pprint import pprint
 # import cProfile
 
@@ -108,7 +111,6 @@ class FileExplorerApp:
         if not selected_items:
             messagebox.showinfo("No Selection", "Select a File To Remove from Favs.")
             return
-        # fav_manager = FavoritesManager()
         for item in selected_items:
             file_path = normalise_path(self.file_table.item(item, "values")[2])
             try:
@@ -132,7 +134,6 @@ class FileExplorerApp:
         if not confirm:
             return
         
-        # fav_manager = FavoritesManager()
         for item in selected_items:
             file_path = normalise_path(self.file_table.item(item, "values")[2])
             try:
@@ -367,15 +368,6 @@ class FileExplorerApp:
         )
         self.search_button.pack(side="left", padx=(0, 0), pady=0)
 
-        # self.top_level_only_var = tk.BooleanVar(value=False)
-        # self.top_level_only_check = ttk.Checkbutton(
-        #     self.search_frame, text="🔼", variable=self.top_level_only_var,
-        #     style="Modern.TCheckbutton",
-        #     cursor="hand2",
-        #     takefocus=0,
-        # )
-        # self.top_level_only_check.pack(side="left", padx=(5, 0), pady=5)
-
         self.top_level_only_on = False
         def toggle_top_level():
             self.top_level_only_on = not self.top_level_only_on
@@ -415,6 +407,56 @@ class FileExplorerApp:
         )
         self.all_media_button.pack(side="left", padx=(0, 5), pady=0)
 
+        self.settings_button = tk.Button(
+            self.root, text="⚙️", command=self.open_settings,
+            bg="white", fg="gray", bd=0, font=("Segoe UI", 13, "bold"),
+            relief=tk.FLAT, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.settings_button.place(relx=1.0, x=-10, y=10, anchor="ne", width=40, height=30)
+
+        self.stats_button = tk.Button(
+            self.root, text="📊", command=self.open_media_stats,
+            bg="white", fg="blue", bd=0, font=("Segoe UI", 13, "bold"),
+            relief=tk.FLAT, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.stats_button.place(relx=1.0, x=-60, y=10, anchor="ne", width=40, height=30)
+
+        self.info_button = tk.Button(
+            self.root, text="ℹ️", command=self.show_info,
+            bg="white", fg="red", bd=0, font=("Segoe UI", 13, "bold"),
+            relief=tk.FLAT, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.info_button.place(relx=0.0, x=10, y=10, anchor="nw", width=40, height=30)
+
+        # "Hovering Effects"
+        def on_enter(e): e.widget.config(bg="#444")
+        def on_leave(e):
+            if e.widget == self.enter_button:
+                e.widget.config(bg="red")
+            elif e.widget == self.delete_button or e.widget["text"] == "🗑":
+                e.widget.config(bg="red")
+            elif e.widget == self.refresh_button or e.widget["text"] == "♻️":
+                e.widget.config(bg="red")
+            elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
+                e.widget.config(bg="green")
+            elif "V" in e.widget["text"] or "L" in e.widget["text"]:
+                e.widget.config(bg="black")
+            elif e.widget == self.all_media_button:
+                e.widget.config(bg="blue")
+            else:
+                e.widget.config(bg="white")
+
+        for btn in [self.enter_button, self.delete_button, self.refresh_button,
+                     self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
+                     self.all_media_button]:
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+        self._create_stats_frame()
+
+    def _create_stats_frame(self):
         self.stats_frame = tk.Frame(self.root, bg="#181818", bd=2, relief=tk.GROOVE)
         self.stats_frame.pack(side="top", fill="x", padx=20, pady=(0, 5), anchor="center")
 
@@ -457,55 +499,6 @@ class FileExplorerApp:
         self._create_table()
         for i in range(6):
             self.stats_frame.grid_columnconfigure(i, weight=1)
-
-        self.settings_button = tk.Button(
-            self.root, text="⚙️", command=self.open_settings,
-            bg="white", fg="gray", bd=0, font=("Segoe UI", 13, "bold"),
-            relief=tk.FLAT, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.settings_button.place(relx=1.0, x=-10, y=10, anchor="ne", width=40, height=30)
-
-        # Currently not working
-        self.stats_button = tk.Button(
-            self.root, text="📊", command=self.open_media_stats,
-            bg="white", fg="blue", bd=0, font=("Segoe UI", 13, "bold"),
-            relief=tk.FLAT, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.stats_button.place(relx=1.0, x=-60, y=10, anchor="ne", width=40, height=30)
-
-        self.info_button = tk.Button(
-            self.root, text="ℹ️", command=self.show_info,
-            bg="white", fg="red", bd=0, font=("Segoe UI", 13, "bold"),
-            relief=tk.FLAT, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.info_button.place(relx=0.0, x=10, y=10, anchor="nw", width=40, height=30)
-
-        # "Hovering Effects"
-        def on_enter(e): e.widget.config(bg="#444")
-        def on_leave(e):
-            if e.widget == self.enter_button:
-                e.widget.config(bg="red")
-            elif e.widget == self.delete_button or e.widget["text"] == "🗑":
-                e.widget.config(bg="red")
-            elif e.widget == self.refresh_button or e.widget["text"] == "♻️":
-                e.widget.config(bg="red")
-            elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
-                e.widget.config(bg="green")
-            elif "V" in e.widget["text"] or "L" in e.widget["text"]:
-                e.widget.config(bg="black")
-            elif e.widget == self.all_media_button:
-                e.widget.config(bg="blue")
-            else:
-                e.widget.config(bg="white")
-
-        for btn in [self.enter_button, self.delete_button, self.refresh_button,
-                     self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
-                     self.all_media_button]:
-            btn.bind("<Enter>", on_enter)
-            btn.bind("<Leave>", on_leave)
 
     def _create_table(self):
         table_frame = tk.Frame(self.root, bg="black")
@@ -676,10 +669,18 @@ class FileExplorerApp:
 
     def open_media_stats(self):
         """Open the media stats window."""
-        print("Opens Media Analysis Window, Currently Not Working")
-        messagebox.showinfo("Info", "Media Analysis Window is not working currently.")  
-        # stats_window = tk.Toplevel(self.root)
-        # app = media_stats_window.StatsWindow(stats_window, WATCHED_HISTORY_LOG_PATH)
+        try:
+            # print("Opens Media Analysis Window, Currently Not Working")
+            # messagebox.showinfo("Info", "Media Analysis Window is not working currently.")  
+            stats_window = tk.Toplevel(self.root)
+            stats_window.lift()
+            stats_window.focus_force()
+            app = DashboardWindow(stats_window, WATCHED_HISTORY_LOG_PATH)
+            # app = DashboardWindow(stats_window, DEMO_WATCHED_HISTORY)
+            self._set_styles()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open media stats: {e}")
+            stats_window.destroy()
         # root.mainloop()
 
     def update_entry_text(self, text):
@@ -718,6 +719,13 @@ class FileExplorerApp:
             tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)  # Apply alternate colors to rows
             self.file_table.insert("", tk.END, values=(idx, file, file_path), tags=tags)
 
+    def filter_existing_files(self, file_list, callback):
+        """Filter files that exist and call the callback with the result."""
+        def worker():
+            existing = [f for f in file_list if os.path.exists(f)]
+            self.root.after(0, lambda: callback(existing))
+        threading.Thread(target=worker, daemon=True).start()
+
     def on_enter_pressed(self, event=None):
         folder_path_string = self.entry.get()
         vf_loader = VideoFileLoader()
@@ -725,26 +733,23 @@ class FileExplorerApp:
         try:
             if folder_path_string == "play favs":
                 favs = FavoritesManager()
-                self.video_files = sorted(favs.get_favorites())
-                self.total_files = len(self.video_files)
-                self.total_size = self.convert_bytes(favs.total_size)
-                self.update_stats()
+                all_favs = favs.get_favorites()
+                def after_filter(existing_files):
+                    self.video_files = sorted(existing_files)
+                    self.total_files = len(self.video_files)
+                    self.total_size = self.convert_bytes(favs.total_size)
+                    self.update_stats()
+                    self.insert_to_table(self.file_path_tuple(self.video_files))
+                self.filter_existing_files(all_favs, after_filter)
+                return
             
             elif folder_path_string == "show paths":
-                # self.reset_search_option(folder=True)
-                # with open(FOLDER_LOGS, "r", encoding="utf-8") as file:
-                #     reader = csv.DictReader(file)
-
-                #     self.folders = list(set((normalise_path(row["Folder Path"]), normalise_path(row["Csv Path"])) for row in reader if os.path.isdir(row["Folder Path"])))
-                # self.video_files = []
                 self.show_paths()
             
             elif folder_path_string == "show deletes":
-                # Show files marked as "ToDelete"
                 self.show_deletes()
             
             elif folder_path_string == "show deleted":
-                # Show files marked as "Deleted"
                 self.show_deletes(deleted=True)
 
             elif folder_path_string == "show history":
@@ -795,7 +800,8 @@ class FileExplorerApp:
 
     def refresh_deletions(self):
         self.deletion_manager.check_deleted()
-        self.show_deletes(deleted=True)
+        self.update_entry_text("show deletes")
+        self.show_deletes(deleted=False)
         self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
 
 
@@ -935,7 +941,8 @@ class FileExplorerApp:
                 image_viewer_width = 900
                 image_viewer_height = 600
                 image_files = self.get_files_from_table()
-                # self.reset_search_option(images=True)
+                viewer_window.lift()           # Bring window to front
+                viewer_window.focus_force()
 
                 # Create ImageViewer instance with the specified width and height
                 ImageViewer(viewer_window, image_files, index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
@@ -956,8 +963,8 @@ class FileExplorerApp:
                     
                     # Re-enable the main window when the player window is closed
                     # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
-
-                    # Start the media player loop
+                    app.lift()
+                    app.focus_force()
                     app.mainloop()
                 else:
                     print("No video files found in the specified folder path(s).")
@@ -1120,3 +1127,5 @@ def run_app():
 if __name__ == "__main__":
     # cProfile.run('run_app()')
     run_app()
+    # import cProfile
+    # cProfile.run('run_app()', 'gui_profile.prof')

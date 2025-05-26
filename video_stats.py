@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 from summary_generator import HTMLSummaryReport
+from static_methods import open_in_default_app
 
 class VideoStatsApp:
     """
@@ -217,12 +218,19 @@ class VideoStatsApp:
         """
         Generates an HTML summary report based on the video statistics and saves it to a file in the REPORT_FOLDER.
         """
-        current_datetime = datetime.today().strftime("%Y%m%d_%H%M%S")
-        report_generator = HTMLSummaryReport(self.video_data)
-        html_content = report_generator.generate_html(session_time=self.format_session_time(self.session_time), date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  
-        with open(f"{self.report_folder}summary_report_{current_datetime}.html", "w", encoding="utf-8") as file:
-            file.write(html_content)
-        print(f"Summary Report Generated At: {self.report_folder}summary_report_{current_datetime}.html")
+        try:
+            current_datetime = datetime.today().strftime("%Y%m%d_%H%M%S")
+            report_generator = HTMLSummaryReport(self.video_data)
+            html_content = report_generator.generate_html(session_time=self.format_session_time(self.session_time), date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))  
+            with open(f"{self.report_folder}summary_report_{current_datetime}.html", "w", encoding="utf-8") as file:
+                file.write(html_content)
+            print(f"Summary Report Generated At: {self.report_folder}summary_report_{current_datetime}.html")
+            open_in_default_app(f"{self.report_folder}summary_report_{current_datetime}.html")
+        except Exception as e:
+            print(f"Error generating report: {e}")
+            error_message = f"An error occurred while generating the report: {e}"
+            tk.messagebox.showerror("Error", error_message)
+            self.on_closing()
 
 
 if __name__ == "__main__":
