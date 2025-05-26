@@ -5,7 +5,7 @@ SCREENSHOTS_FOLDER = rf"{FILES_FOLDER}\Screenshots"
 REPORTS_FOLDER = rf"{FILES_FOLDER}\Reports"
 LOGS_FOLDER = r"Logs"
 STYLES_FOLDER = r"Styles"
-DEMO_FOLDER = r"Testings Data"
+DEMO_FOLDER = r"Dummy Data"
 
 # Path of Files
 FOLDER_LOGS = rf"{CSV_FOLDER}\Log_Folders.csv"
