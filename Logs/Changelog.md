@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## **Version [3.3.0]** **2025-05-26**
+
+### Added
+- Messagebox in `deletion_manager` to display info if no updates are available.
+- `bd=1` to `volume_bar` layout for a cleaner look.
+- Rotation option in `image_player` for easier image viewing.
+- Sample method to add/remove images from favorites (not yet implemented).
+- `ensure_trailing_backslash` method to normalize paths and prevent duplicate tables for the same path.
+- Mute option in `videoplayer`.
+- Focusing new windows using **`.lift()`** and **`.focus_force()`** in tkinter for better UX.
+- *`media_dashboard.py`* module for dashboard creation with detailed plots.
+- Opening of video_stats report in a default browser using method from *`static_methods.py`*.
+
+### Changed
+- `gather_all_media` now works with threading in *`gui_main.py`* for improved performance.
+- Completely revamped `image_player` for faster image loading and fixed image display bugs.
+- Modified `get_favorites` to use threading for the "play favs" section in *`gui_main.py`*.
+- Changed **"time.sleep"** duration in `play_video` from 0.1s to 0.3s.
+- Added threading for filtering file existence in favorites.
+- Modularized codebase and removed unnecessary code and comments.
+
+### Fixed
+- Bugs related to image displaying in `image_player`.
+- Bug of calculating the watch duration based on video duration even if the video is set to 2x.
+
 ## **Version [3.2.6]** **2025-05-23**
 ### Added
 - Icons for pause and resume actions on mouse leave for improved UI feedback.
@@ -11,7 +36,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Button placements for a more visually appealing layout.
 - Top-level folder selection changed from a checkbox to a selection button.
-- Removed multiple initializations of `fav_manager` to improve performance.
+- Removed multiple initializations of **`fav_manager`** to improve performance.
 
 ### Updated
 - requirements.txt to include the `Pillow` library.

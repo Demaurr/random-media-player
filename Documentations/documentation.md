@@ -20,6 +20,7 @@ The project follows a modular structure to separate concerns and improve maintai
 - **file_loader.py**: Handles file loading functionalities.
 - **image_player.py**: Handles the viewing of Snapshots taken through the player.
 - **logs_writer.py**: Class which can be used to record update/error logs in a given file.
+- **media_dashboard.py**: Displays media consumption statistics and dashboard visualizations using matplotlib and seaborn.
 - **player_constants.py**: Contains pre-set constants necessary for the application.
 - **static_methods.py**: Contains the helpful methods to be used by the Application.
 - **summary_generator.py**: Generates Summary in HTML file format For the Recent Session's Watches.
@@ -30,7 +31,11 @@ The project follows a modular structure to separate concerns and improve maintai
 - **watch_dictionary.py**: Defines the custom dictionary class for watch history.
 - **watch_history_logger.py**: Logs watch history data to a CSV file.
 
-
+### Other folders and files:
+- **Screenshots/**: Stores screenshots taken during video playback.
+- **Documentations/**: Contains documentation files and guides.
+- **requirements.txt**: Lists Python dependencies required to run the application.
+- **Readme.md**: Main project overview and quickstart guide.
 
 ## Functionality
 
@@ -52,6 +57,7 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 | **`Shift + Left Arrow`**         | Play previous video                                 |
 | **`Shift + S/s`**                  | Save screenshot (with filename and timestamp)       |
 | **`N/n`**                          | Play next video                                     |
+| **`M/m`**                         | To Mute and Unmute the Media                         |
 | **`Up Arrow`**                   | Increase volume                                     |
 | **`Down Arrow`**                 | Decrease volume                                     |
 | **`Left Arrow`**                 | Rewind                                              |
@@ -74,6 +80,7 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 | **`Ctrl + F/f`**                   | Add selected files to favorites                     |
 | **`Ctrl + D/d`**                   | Remove selected files from favorites                |
 | **`Ctrl + Shift + Delete`**      | Remove selected files from deletion list            |
+| **`Ctrl + Enter`**                | To play random media from the given folder        |
 
 ## Installation
 
@@ -94,6 +101,14 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
     ```bash
     pip install -r requirements.txt
     ```
+
+4. Download and **install VLC Media Player**:
+   The application uses `python-vlc`, which requires VLC Media Player to be installed on your system.  
+   [Download VLC here](https://www.videolan.org/vlc/).  
+   > Without VLC installed, video playback will not work.
+
+5. (Optional, for video orientation filters) 
+   To use the **"V"** (vertical) and **"L"** (landscape) filter buttons, you must have [FFmpeg](https://ffmpeg.org/download.html) installed and available in your system PATH.
 
 
 
@@ -119,6 +134,10 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 *   After closing The Sessions Watch Statistics Window will be Shown.
 *   These Statistics can be saved as a HTML file by clicking on **Generate Summary** Button.
 *   Use the Buttons Like **`Snaps`** to get more from the app and views screenshot or get favorites.
+
+> **Note:**  
+> - Video playback requires VLC Media Player to be installed.  
+> - The **"V"** and **"L"** filter buttons require FFmpeg to be installed and accessible from your system PATH.
 
 ### Commands
 Use the following commands in the entry box for Folder paths.
@@ -168,5 +187,7 @@ The codebase is modular. To add new features:
 Special thanks to the developers of the Tkinter and python-vlc libraries and [makeuseof](https://www.makeuseof.com/python-video-media-player-how-to-build/) site for their contributions to open-source software.
 
 ## Future Enhancements
-* Add the stats displaying For better and Quick Watchtime analysis.
+* Displaying properties for each media files.
+* Sorting my Duration or giving the user Duration related info.
+* Record Sessions info for better time management.
 
