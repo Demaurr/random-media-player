@@ -8,6 +8,7 @@ Screentshots/Main_Sceenn2.PNG
 watch_analyzer.py
 *.log
 *.txt
-*.csv
+Files\*.csv
+Logs\*.csv
 *.prof
 testing*.py
