@@ -2,7 +2,7 @@
 ![Default Screen](../Screenshots/Current_Gui_Main_Screen.png)
 
 ## Overview
-The Media Player Application is a Python-based desktop application designed to play video files with various control functionalities. 
+The Media Player and Analyser Application is a Python-based desktop application designed to play video files with various control functionalities and Analyses user engagement. 
 
 It helps users to keep track of their watch_time while watching movies or any videos.
 
@@ -15,6 +15,9 @@ The Player Can Play Typical Media Files and Keep Stats tracking and Saving Your 
 The project follows a modular structure to separate concerns and improve maintainability:
 
 - **gui_main.py**: Entry point for running the application.
+- **category_manager.py**: Manages adding, updating and deleting user defined categories(playlist).
+- **category_window.py**: GUI for category_manager for ease of use.
+- **custom_messagebox.py**: Manages tkinter's messagebox display for errors and info.
 - **deletion_manager.py**: Handles deletion of files through the file browser window.
 - **favorites_manager.py**: Manages saving, removing, and reading favorites to/from a CSV file.
 - **file_loader.py**: Handles file loading functionalities.
@@ -46,7 +49,7 @@ The project follows a modular structure to separate concerns and improve maintai
 
 ## Supported Video Formats
 
-The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` files by default. You can add more formats in the `get_video_files` method in `videoplayer.py`.
+The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov` and `.m4v` files by default. You can add more formats in the `get_video_files` method in `videoplayer.py`.
 
 ## Keyboard Shortcuts
 
@@ -55,15 +58,16 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 |----------------------------------|-----------------------------------------------------|
 | **`Shift + Right Arrow`**        | Play next video                                     |
 | **`Shift + Left Arrow`**         | Play previous video                                 |
+| **`Shift + A/a`**                 | Open category manager                               |
 | **`Shift + S/s`**                  | Save screenshot (with filename and timestamp)       |
 | **`N/n`**                          | Play next video                                     |
 | **`M/m`**                         | To Mute and Unmute the Media                         |
+| **`F/f`**                          | Toggle fullscreen                                   |
+| **`X/x`**                          | Cycle playback speed (1x, 1.5x, 2x)                 |
 | **`Up Arrow`**                   | Increase volume                                     |
 | **`Down Arrow`**                 | Decrease volume                                     |
 | **`Left Arrow`**                 | Rewind                                              |
 | **`Right Arrow`**                | Fast forward                                        |
-| **`F/f`**                          | Toggle fullscreen                                   |
-| **`X/x`**                          | Cycle playback speed (1x, 1.5x, 2x)                 |
 | **`Space`**                      | Pause/resume video                                  |
 | **`Ctrl + Right Arrow`**         | Play immediate next video in playlist               |
 | **`Ctrl + Left Arrow`**          | Play immediate previous video in playlist           |
@@ -72,15 +76,29 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 | **`Delete`**                     | Mark current video for deletion                     |
 | **`Ctrl + Shift + Delete`**      | Remove current file from deletion list              |
 
+
 ### In File Browser Window
 | Shortcut                        | Action                                              |
 |----------------------------------|-----------------------------------------------------|
 | **`Delete`**                     | Mark selected files for deletion                    |
+| **`Shift + A/a`**                 | Open category manager                               |
 | **`Ctrl + M/m`**                   | Move selected files                                 |
 | **`Ctrl + F/f`**                   | Add selected files to favorites                     |
 | **`Ctrl + D/d`**                   | Remove selected files from favorites                |
 | **`Ctrl + Shift + Delete`**      | Remove selected files from deletion list            |
 | **`Ctrl + Enter`**                | To play random media from the given folder        |
+
+## Categories System
+- The application includes a comprehensive category management system
+- Access categories via the "☰" button or using `Shift + A`
+- Features:
+  - Add files to multiple categories
+  - View all categories and their file counts
+  - Double-click a category to view all files within it
+  - Categories persist across sessions
+  - Shows total size of files in each category
+
+
 
 ## Installation
 
@@ -110,7 +128,18 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 5. (Optional, for video orientation filters) 
    To use the **"V"** (vertical) and **"L"** (landscape) filter buttons, you must have [FFmpeg](https://ffmpeg.org/download.html) installed and available in your system PATH.
 
+## Commands
+- Type these commands in the `entry_box` of gui_main to get relevant results.
 
+| Command | Description |
+|---------|-------------|
+| `show deletes` | Shows files marked for deletion |
+| `show deleted` | Shows all files that have been deleted through the app |
+| `show history` | Shows the history of watched media in the past 30 days |
+| `show paths` | Shows all previously entered and available paths |
+| `play favs` | Lists all the favorite media files |
+| `show categories` | Shows all available categories and their contents |
+| `folder path --update` | Updates the file list of the specified folder |
 
 ## Features
 
@@ -120,6 +149,19 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 - **Statistics**: Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **View Snapshots**: View all the Snapshots taken from the Videoplayer in a built-in Image Viewer.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
+- **Profile Management**: Users can create different profile by just changing the *FILE_FOLDER* in GUI settings and enjoy fresh profile.
+
+## Statistics and Analytics
+- **Media Dashboard**:
+  - Monthly viewing trends
+  - Duration category analysis
+  - Visual graphs and charts
+  - Comprehensive watch history analysis
+- **Current Stats**: View statistics for current session without closing
+- **Watch Time Tracking**:
+  - Accurate tracking of actual watch time
+  - Accounts for speed changes and skips
+  - Maintains detailed watch history
 
 ## Usage
 
@@ -138,17 +180,6 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv` and `.m4v` f
 > **Note:**  
 > - Video playback requires VLC Media Player to be installed.  
 > - The **"V"** and **"L"** filter buttons require FFmpeg to be installed and accessible from your system PATH.
-
-### Commands
-Use the following commands in the entry box for Folder paths.
-| Command           | Description                                             |
-|-------------------|---------------------------------------------------------|
-| **`show deletes`**  | Shows files marked for deletion                         |
-| **`show deleted`**  | Shows all the files deleted through the app             |
-| **`show history`**  | Shows the history of watched media in the past 30 days  |
-| **`show paths`**    | Shows all the previously entered and available paths    |
-| **`play favs`**     | Lists all the favorite media files                      |
-| **folder path `--update`** | Updates the file list of the folder
 
 ## Session Statistics & Summary Reports
 
