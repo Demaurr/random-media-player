@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## **Version [3.4.0]** **2025-06-03**
+
+### Added
+- Category management system for organizing and saving video playlists.
+- Custom messagebox to prevent GUI conflicts during error handling.
+- Category management features in videoplayer and gui_main with keybindings.
+- **Colors** class in *`player_constants.py`* for centralized color management.
+- Additional **PATHS** in *`player_constants.py`* for categories management.
+- Show categories command in *`gui_main.py`* for displaying and playing from categories.
+- **`sort_treeview_column()`** method from *`static_methods.py`* for table sorting.
+- Parent window parameter to *`deletion_manager.py`* for proper window stacking.
+- Profile management system allowing creation of new profiles via **FILES_FOLDER**.
+
+### Changed
+- Restructured *`settings_manager.py`* with improved GUI and better constants management.
+- Modified Dashboard overview style using grid layout for cleaner appearance.
+- Improved path normalization when moving files.
+- Enhanced error handling across `gui_main`, `deletion_manager` and other modules.
+- Updated timeout duration in videoplayer for smoother playback.
+- Modified comments and docstrings for better code maintenance.
+- Modularized player creation and media release processes.
+
+### Fixed
+- Memory leaks by properly stopping mediaplayer in background on window close.
+- Category updates when moving files between directories.
+- Various minor issues related to video playback and UI responsiveness.
+- Error handling with improved user feedback and engagement.
+
 ## **Version [3.3.0]** **2025-05-26**
 
 ### Added
