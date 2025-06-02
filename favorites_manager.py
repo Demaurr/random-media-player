@@ -2,17 +2,21 @@ import os
 import csv
 from datetime import datetime
 from logs_writer import LogManager
-from player_constants import FAV_FILES, LOG_PATH
-from static_methods import create_csv_file, get_file_size, normalise_path
+from player_constants import FAV_FILES, LOG_PATH, LOGS_FOLDER
+from static_methods import create_csv_file, get_file_size, normalise_path, ensure_folder_exists
 import hashlib
 from pprint import pprint
 
 class FavoritesManager:
     def __init__(self, fav_csv=FAV_FILES):
-        create_csv_file(["Hash", "Video Name", "Source Path", "Date Added"], FAV_FILES)
+        ensure_folder_exists(LOGS_FOLDER)
         self.fav_csv = fav_csv
+        self._ensure_favorites_csv()
         self.logger = LogManager(LOG_PATH)
         self.total_size = 0.0
+
+    def _ensure_favorites_csv(self):
+        create_csv_file(["Hash", "Video Name", "Source Path", "Date Added"], self.fav_csv)
 
     @staticmethod
     def hash_string(input_string, hash_length=32):
@@ -32,13 +36,11 @@ class FavoritesManager:
             date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             hashed_string = self.hash_string(video_name + source_path)
 
-
-            # Write data to CSV file
             with open(self.fav_csv, "a", newline="", encoding="utf-8") as file:
                 fieldnames = ["Hash", "Video Name", "Source Path", "Date Added"]
                 writer = csv.DictWriter(file, fieldnames=fieldnames)
                 if file.tell() == 0:
-                    writer.writeheader()  # Write header if file is empty
+                    writer.writeheader()
                 writer.writerow({"Hash": hashed_string, "Video Name": video_name, "Source Path": source_path, "Date Added": date_added})
                 print(f"ADDED {current_file} to Favorites\n")
                 self.logger.update_logs(f"[FAVORITES ADDED]", current_file)
@@ -103,8 +105,6 @@ class FavoritesManager:
                     video_name = row["Video Name"]
                     source_path = row["Source Path"]
                     full_path = os.path.join(source_path, video_name)
-                    
-                    # if os.path.exists(full_path):
                     if video_name not in favorites_dict:
                         favorites_dict[video_name] = set()
                     favorites_dict[video_name].add(source_path)
@@ -140,12 +140,9 @@ class FavoritesManager:
         with open(self.fav_csv, 'r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                # Update the Source Path by replacing "/" with "\"
                 updated_path = row['Source Path'].replace('/', '\\')
-                # Recalculate the hash based on the updated path and video name
                 updated_hash = self.hash_string(row['Video Name'] + updated_path, hash_length=32)
                 hashes.add(updated_hash)
-                # Update the row with the new path and hash
                 row['Source Path'] = updated_path
                 row['Hash'] = updated_hash
                 updated_rows.append(row)
@@ -182,7 +179,6 @@ class FavoritesManager:
 
             for row in reader:
                 if row["Hash"] == old_hash:
-                    # Update the row with the new file location and hash
                     row["Source Path"] = new_source_path
                     row["Hash"] = new_hash
                     updated = True
@@ -191,7 +187,7 @@ class FavoritesManager:
                 writer.writerow(row)
 
         if updated:
-            os.replace(temp_csv, self.fav_csv)  # Replace the old CSV with the updated one
+            os.replace(temp_csv, self.fav_csv)
             return True
         else:
             os.remove(temp_csv)  # If no update was made, remove the temp file
@@ -204,29 +200,23 @@ class FavoritesManager:
         Converts all slashes to the appropriate format (e.g., backslashes for Windows).
         """
         updated_rows = []
-        seen_hashes = set()  # To ensure no duplicate hashes are generated
-
-        # Read from the favorites CSV
+        seen_hashes = set()
         with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
             reader = csv.DictReader(file)
             
             for row in reader:
                 original_path = os.path.join(row["Source Path"], row["Video Name"])
                 
-                # Normalize the path (for Windows, convert "/" to "\")
                 normalized_path = normalise_path(original_path)
                 row["Source Path"] = os.path.dirname(normalized_path)
                 row["Video Name"] = os.path.basename(normalized_path)
                 
-                # Recalculate the hash based on the normalized path
                 new_hash = self.hash_string(row["Video Name"] + row["Source Path"])
                 
-                # Ensure hash uniqueness
                 if new_hash in seen_hashes:
                     print(f"Warning: Duplicate hash for {normalized_path}. Skipping entry.")
                     continue
                 
-                # Update the hash in the row
                 row["Hash"] = new_hash
                 seen_hashes.add(new_hash)
                 updated_rows.append(row)

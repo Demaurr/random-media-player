@@ -6,6 +6,7 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from player_constants import DEMO_WATCHED_HISTORY
+from static_methods import sort_treeview_column
 
 plt.style.use('dark_background')
 # sns.set_palette(sns.color_palette(["#e74c3c", "#44b300", "#ffffff", "#222222"]))
@@ -53,44 +54,47 @@ class DashboardWindow():
         self.load_and_plot_data()
 
     def create_widgets(self, master):
-        # Top bar
-        btn_frame = tk.Frame(master, bg="black")
-        btn_frame.pack(side="top", fill="x", pady=10)
-
-        self.reload_btn = tk.Button(
-            btn_frame, text="Reload Data", command=self.load_and_plot_data,
-            bg="#44b300", fg="white", font=("Segoe UI", 11, "bold"), bd=0, padx=10, pady=5
-        )
-        self.reload_btn.pack(side="left", padx=10)
-
-        self.open_btn = tk.Button(
-            btn_frame, text="Open CSV...", command=self.open_csv_dialog,
-            bg="#e74c3c", fg="white", font=("Segoe UI", 11, "bold"), bd=0, padx=10, pady=5
-        )
-        self.open_btn.pack(side="left", padx=10)
+        title_frame = tk.Frame(master, bg="black")
+        title_frame.pack(side="top", fill="x", pady=(10, 10), padx=(10,0))
         
+        title_label = tk.Label(
+            title_frame, 
+            text="Media Consumption Dashboard",
+            bg="black",
+            fg="white",
+            font=("Segoe UI", 26, "bold")
+        )
+        title_label.pack(anchor="w")
 
         self.notebook = ttk.Notebook(master)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
         self._set_styles()
 
-    
     def _set_styles(self):
-
         style = ttk.Style()
         style.theme_use('clam')
+        
+        style.configure(
+            'dashboardStyle.TNotebook',
+            background='black',
+            borderwidth=0
+        )
         style.configure(
             'dashboardStyle.TNotebook.Tab',
+            padding=[20, 0],
             background='black',
-            foreground='red',
-            font=('Segoe UI', 11, 'bold'),
-            minwidth=150
+            foreground='white',
+            font=('Segoe UI', 12),
+            borderwidth=0
         )
         style.map(
             'dashboardStyle.TNotebook.Tab',
-            background=[('selected', '#8B0000')],
-            foreground=[('selected', 'white')]
+            background=[('selected', '#1a1a1a'), ('active', '#333333')],
+            foreground=[('selected', 'red'), ('active', 'white')],
+            expand=[('selected', [1, 1, 1, 0])]
         )
+        
+        # Configure treeview
         style.configure(
             "dashboardStyle.Treeview",
             background="black",
@@ -114,9 +118,9 @@ class DashboardWindow():
         self.notebook.add(self.month_scroll, text="Monthly Consumption")
         style.configure(
             "dashboardStyle.Treeview.Heading",
-            background="#e74c3c",
+            background="red",
             foreground="white",
-            font=('Segoe UI', 10, 'bold')
+            font=('Segoe UI', 11, 'bold')
         )
 
         self.notebook.configure(style='dashboardStyle.TNotebook')
@@ -222,10 +226,9 @@ class DashboardWindow():
         overview_content = self.overview_scroll.scrollable_frame
         overview_left = tk.Frame(overview_content, bg="black")
         overview_right = tk.Frame(overview_content, bg="black")
-        overview_left.pack(side="left", fill="both", expand=True, padx=(20, 10), pady=20)  # <-- fill both and expand
-        overview_right.pack(side="right", fill="both", expand=True, padx=(10, 20), pady=20)
+        overview_left.pack(side="left", fill="x", expand=True, padx=(20, 10), pady=10)
+        overview_right.pack(side="right", fill="x", expand=True, padx=(10, 20), pady=10)
 
-        # --- Card Metrics ---
         card_metrics = [
             ("Total Duration Elapsed", str(total_duration), "#44b300"),
             ("Total Watched Elapsed", str(total_watch_time), "#e74c3c"),
@@ -244,34 +247,33 @@ class DashboardWindow():
             card_metrics.append(("Rewatched Videos", str(rewatched), "#f39c12"))
             card_metrics.append(("Unique Videos", str(unique_videos), "#8e44ad"))
             
-        overview_left.grid_rowconfigure(tuple(range(len(card_metrics))), weight=1)
-        overview_left.grid_columnconfigure(0, weight=1)
+        overview_right.grid_rowconfigure(tuple(range(len(card_metrics))), weight=1)
+        overview_right.grid_columnconfigure(0, weight=1)
 
         for i, (label, value, color) in enumerate(card_metrics):
-            card = tk.Frame(overview_left, bg=color, bd=0, relief="flat")
-            card.grid(row=i, column=0, sticky="nsew", padx=5, pady=2)  # sticky nsew for full fill
-            tk.Label(card, text=value, bg=color, fg="white", font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=8, pady=(2,0))
-            tk.Label(card, text=label, bg=color, fg="white", font=("Segoe UI", 9)).pack(anchor="w", padx=8, pady=(0,1))
-        row_offset = len(card_metrics)
+            card = tk.Frame(overview_right, bg="black", bd=0, relief="flat")
+            card.grid(row=i, column=0, sticky="nsew", padx=5, pady=2)
+            border = tk.Frame(card, bg=color, width=4)
+            border.pack(side="left", fill="y", padx=(0, 0))
+            
+            content = tk.Frame(card, bg="black")
+            content.pack(side="left", fill="x", expand=True, padx=(10, 0))
+            
+            tk.Label(content, text=value, bg="black", fg="white", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0,0))
+            tk.Label(content, text=label, bg="black", fg="white", font=("Segoe UI", 9)).pack(anchor="w", pady=(0,0))
 
-        # self._make_table(overview_left, top_10_count, "Top 10 Most Watched Videos by Count", row_offset, "#e74c3c")
-        # self._make_table(overview_left, top_10_duration, "Top 10 Most Watched Videos by Duration", row_offset+1, "#44b300")
-        # self._make_table(overview_left, top_5_hours, "Top 5 Most Watched Hours", row_offset+2, "#ffffff")
-
-        # Right Side Plots
         if not video_count_by_date.empty:
             self._plot_last_30_days_with_categories(
-                overview_right, video_count_by_date, last_30, df, COL_TOTAL_DURATION
+                overview_left, video_count_by_date, last_30, df, COL_TOTAL_DURATION
             )
         else:
-            tk.Label(overview_right, text="No data for last 30 days.", bg="black", fg="#e74c3c", font=("Segoe UI", 14)).pack(pady=40)
+            tk.Label(overview_left, text="No data for last 30 days.", bg="black", fg="#e74c3c", font=("Segoe UI", 14)).pack(pady=40)
 
-        # Duration category plot as a pie chart
         if COL_TOTAL_DURATION in df.columns:
             duration_counts = df["Duration Category"].value_counts().reindex(
                 ["Very Short (<1 min)", "Short (1-3 min)", "Medium (3-10 min)", "Long (10-60 min)", "Very Long (>1 hr)"], fill_value=0
             )
-            fig2, ax2 = plt.subplots(figsize=(5, 2.8))
+            fig2, ax2 = plt.subplots(figsize=(6, 2.8))
             colors = ["#e74c3c", "#44b300", "#f39c12", "#222222", "#8e44ad"]
             wedges, texts, autotexts = ax2.pie(
                 duration_counts.values,
@@ -283,11 +285,9 @@ class DashboardWindow():
             )
             ax2.set_title("Videos by Duration Category", color="white")
             fig2.tight_layout()
-            self._embed_plot(overview_right, fig2, 1)
+            self._embed_plot(overview_right, fig2, len(card_metrics))
 
-        # self._make_table(overview_left, top_10_count, "Top 10 Most Watched Videos by Count", row_offset, "#e74c3c")
-
-        self._plot_top_10_duration(overview_left, top_10_duration, COL_DURATION_WATCHED, row_offset+1)
+        self._plot_top_10_duration(overview_left, top_10_duration, COL_DURATION_WATCHED, len(card_metrics)+1)
         self._populate_folder_tab(df)
         self._populate_hour_tab(df)
         self._populate_weekday_tab(df, weekday_counts, COL_TOTAL_DURATION)
@@ -401,10 +401,8 @@ class DashboardWindow():
             fig.tight_layout()
             self._embed_plot(left, fig, 0)
 
-            # --- Monthly Duration Category Plot ---
             if "Duration Category" in df.columns:
                 monthly_cat = df.groupby(["month", "Duration Category"]).size().unstack(fill_value=0)
-                # Order columns for consistency
                 category_order = [
                     "Very Short (<1 min)", "Short (1-3 min)", "Medium (3-10 min)",
                     "Long (10-60 min)", "Very Long (>1 hr)", "Unknown"
@@ -568,7 +566,7 @@ class DashboardWindow():
     def _plot_top_10_duration(self, parent, top_10_duration, COL_DURATION_WATCHED, row):
         """Plot the Top 10 Most Watched Videos by Duration as a horizontal bar chart."""
         if not top_10_duration.empty:
-            fig3, ax3 = plt.subplots(figsize=(7, 3))
+            fig3, ax3 = plt.subplots(figsize=(7, 2.8))
             sorted_top10 = top_10_duration.sort_values(by=COL_DURATION_WATCHED, ascending=False)
             video_labels = sorted_top10["video_name"]
             durations = sorted_top10[COL_DURATION_WATCHED].dt.total_seconds() / 60  # convert to minutes
@@ -592,8 +590,7 @@ class DashboardWindow():
             tk.Label(parent, text="No data for Weekday vs Duration Category.", bg="black", fg="#e74c3c",
                     font=("Segoe UI", 12, "bold")).grid(row=row, column=0, sticky="ew", padx=10, pady=10)
             return
-
-        # Prepare data
+        
         weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         category_order = [
             "Very Short (<1 min)", "Short (1-3 min)", "Medium (3-10 min)",
@@ -661,7 +658,7 @@ class DashboardWindow():
         else:
             cat_daily = None
 
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(7, 3.9))
         sns.lineplot(x=video_count_by_date.index, y=video_count_by_date.values, ax=ax, color="#e74c3c", marker="o", label="Total")
         if cat_daily is not None:
             colors = {
@@ -703,7 +700,8 @@ class DashboardWindow():
             parent, columns=cols, show="headings", height=table_height, style="dashboardStyle.Treeview"
         )
         for col in cols:
-            tree.heading(col, text=col)
+            tree.heading(col, text=col,
+                command=lambda: sort_treeview_column(tree, col, False))
             tree.column(col, anchor="center")
         for _, rowdata in df.iterrows():
             tree.insert('', 'end', values=tuple(rowdata))

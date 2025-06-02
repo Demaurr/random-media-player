@@ -6,13 +6,17 @@ from player_constants import FILE_TRANSFER_LOG, LOG_PATH
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
-from static_methods import create_csv_file, ensure_folder_exists, rename_if_exists, compare_folders
+from static_methods import create_csv_file, ensure_folder_exists, rename_if_exists, compare_folders, normalise_path
+from category_manager import CategoryManager
 
 class FileManager:
-    def __init__(self):
+    def __init__(self, parent_window=None):
         self.log_file = FILE_TRANSFER_LOG
         self.favorites = FavoritesManager()
         self.deletes = DeletionManager()
+        self.categories = CategoryManager()
+        if parent_window:
+            self.deletes.set_parent_window(parent_window)
         self.logger = LogManager(LOG_PATH)
         create_csv_file(["Source Path", "Destination Path", "Status", "Date"], self.log_file)
 
@@ -23,32 +27,31 @@ class FileManager:
         Also updates the deletion CSV and favorites paths if applicable.
         """
         try:
-            # Check if source file exists
             if not os.path.isfile(src):
                 raise FileNotFoundError(f"Source file not found: {src}")
-
-            # Ensure destination directory exists
+            
             ensure_folder_exists(dest)
             if compare_folders(src, dest):
                 print(f"Source and Destination is Same: {dest} {src}")
                 return False
             
-            # Get the full destination path (retain the filename in the new directory)
             dest_path = os.path.join(dest, os.path.basename(src))
             if os.path.exists(dest_path):
                 dest_path = rename_if_exists(dest_path)
 
-            # Move the file
             shutil.move(src, dest_path)
             self.logger.update_logs('[FILE MOVED]', f"{src} -> {dest_path}")
-            self.deletes.update_file_name_in_csv(src, dest_path)
-
-            # If the file is in favorites, update the path and the delete CSV
-            if self.favorites.check_favorites(src):
-                self.favorites.update_favorite_path(src, dest_path)
-
-            # Log the transfer
             self.log_transfer(src, dest_path)
+            self.deletes.update_file_name_in_csv(src, dest_path)
+            print(f"File moved from {src} to {normalise_path(dest_path)}")
+            if self.favorites.check_favorites(src):
+                self.favorites.update_favorite_path(src, normalise_path(dest_path))
+
+            file_categories = self.categories.get_file_categories(src)
+            for category in file_categories:
+                self.categories.remove_from_category(category, normalise_path(src))
+                self.categories.add_to_category(category, normalise_path(dest_path))
+
             return True
         except FileNotFoundError as e:
             self.logger.error_logs(f"{e}")
@@ -93,7 +96,6 @@ class FileManager:
             try:
                 with open(self.log_file, mode='w', newline='', encoding='utf-8') as file:
                     writer = csv.writer(file)
-                    # Write the headers
                     writer.writerow(["Source Path", "Destination Path", "Status", "Date"])
                 self.logger.update_logs("[LOG FILE CREATED]", f"Log file created with headers: {self.log_file}")
                 print(f"Log file created with headers: {self.log_file}")

@@ -6,10 +6,12 @@ import timeit
 from datetime import timedelta
 
 import tkinter as tk
-from tkinter import messagebox
+# from tkinter import messagebox  # Remove this import
 
 import vlc
 
+from category_manager import CategoryManager
+from category_window import CategoryWindow
 from deletion_manager import DeletionManager
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
@@ -19,6 +21,7 @@ from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
 from watch_dictionary import WatchDict
 from watch_history_logger import WatchHistoryLogger
+from custom_messagebox import showinfo, showwarning, showerror, askyesno  # Add this import
 
 
 class MediaPlayerApp(tk.Tk):
@@ -28,6 +31,8 @@ class MediaPlayerApp(tk.Tk):
         self.favorites_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.deleter = DeletionManager()
+        self.deleter.set_parent_window(self)  # Set parent window for message boxes
+        self.category_manager = CategoryManager()
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
 
         self.bg_color = "black"
@@ -74,22 +79,36 @@ class MediaPlayerApp(tk.Tk):
         self.stop()  # Call the stop method when the window is closed
         # tk.Tk.quit(self)
         self.show_seassion_stats(self.get_stats())
+        if hasattr(self, 'media_player'):
+            self.media_player.stop()
+            self.media_player.release()
+        if hasattr(self, 'instance'):
+            self.instance.release()
+        # self.destroy()
         # print("Closing window...")
         # self.withdraw()
         # print("Window withdrawn")
         # self.quit()
         # print("Application quit")
+
+    def _create_new_player(self):
+        self.media_player = self.instance.media_player_new()
+        self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
+        self.media_player.event_manager().event_attach(
+            vlc.EventType.MediaPlayerEndReached, self._on_video_end
+        )
           
 
     def initialize_player(self, video_files, folder_path, cur_file=None):
         # self.fav_csv = FILES_FOLDER +"Favorites.csv"
         self.instance = vlc.Instance()
-        self.media_player = self.instance.media_player_new()
+        # self.media_player = self.instance.media_player_new()
 
-        self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
-        self.media_player.event_manager().event_attach(
-            vlc.EventType.MediaPlayerEndReached, self._on_video_end
-        )
+        # self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
+        # self.media_player.event_manager().event_attach(
+        #     vlc.EventType.MediaPlayerEndReached, self._on_video_end
+        # )
+        self._create_new_player()
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
         self.current_file = cur_file
@@ -101,6 +120,7 @@ class MediaPlayerApp(tk.Tk):
         self.watched_videos = WatchDict()
         self.feedback_var = tk.StringVar()
         self.feedback_label = None 
+        
         
         self._create_widgets()
         if self.random_select:
@@ -125,7 +145,8 @@ class MediaPlayerApp(tk.Tk):
     def _on_video_end(self, event):
         # Schedule play_next on the main thread
         if self.autoplay:
-            self.after(50, self.play_next)
+            # self.current_media.release()
+            self.after(200, self.play_next)
 
 
     def _create_widgets(self):
@@ -194,6 +215,11 @@ class MediaPlayerApp(tk.Tk):
         )
         style_btn(self.next_button, "red", "white", "#b30000")
 
+        self.category_button = tk.Button(
+            control_frame, text="☰", command=self.open_category_manager
+        )
+        style_btn(self.category_button, "purple", "white", "#4B0082")
+
         self.autoplay_button = tk.Button(
             control_frame, text="Autoplay: ON", command=self.toggle_autoplay
         )
@@ -202,9 +228,9 @@ class MediaPlayerApp(tk.Tk):
         for btn in [
             self.current_stats_button, self.prev_button, self.rewind_button,
             self.play_button, self.pause_button, self.fast_forward_button,
-            self.next_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
+            self.next_button, self.category_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
         ]:
-            btn.pack(side=tk.LEFT, padx=4, pady=2, ipadx=2, ipady=2)
+            btn.pack(side=tk.LEFT, padx=3, pady=2)
 
         self.time_label = tk.Label(
             control_frame,
@@ -222,7 +248,7 @@ class MediaPlayerApp(tk.Tk):
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=8)
 
         self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=10, pady=5)
+        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
 
         def on_enter(e): e.widget.config(bg="#444")
         def on_leave(e):
@@ -231,17 +257,23 @@ class MediaPlayerApp(tk.Tk):
                 e.widget.config(bg="red")
             elif txt == "Current Stats":
                 e.widget.config(bg="white")
+            elif txt == "Categories":
+                e.widget.config(bg="purple")
             elif txt == "Fav +":
                 e.widget.config(bg="white")
             elif txt == "Fav -":
                 e.widget.config(bg="black")
             elif "Pause" in txt or "Resume" in txt:
                 e.widget.config(bg="#FF9800")
+            elif "Autoplay" in txt:
+                e.widget.config(bg="#2196F3")
+            elif "☰" in txt:
+                e.widget.config(bg="purple")
             else:
                 e.widget.config(bg="black")
 
         for btn in [
-            self.current_stats_button, self.prev_button, self.rewind_button,
+            self.current_stats_button, self.category_button, self.prev_button, self.rewind_button,
             self.play_button, self.pause_button, self.fast_forward_button,
             self.next_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
         ]:
@@ -285,6 +317,8 @@ class MediaPlayerApp(tk.Tk):
         self.bind("<Control-Left>", self.play_im_previous)
         self.bind("<Delete>", self.delete_video)
         self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
+        self.bind("<Shift-KeyPress-a>", self.open_category_manager)
+        self.bind("<Shift-KeyPress-A>", self.open_category_manager)
 
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
@@ -375,8 +409,8 @@ class MediaPlayerApp(tk.Tk):
     def toggle_controls_visibility(self, visibility):
         """Toggle the visibility of all control buttons and progress bars."""
         widgets_with_default_padding = [self.current_stats_button, self.prev_button, self.rewind_button, self.play_button,
-                                        self.pause_button, self.fast_forward_button, self.next_button,self.autoplay_button]
-                                        #   self.add_to_favorites_button, self.remove_from_favorites_button]
+                                        self.pause_button, self.fast_forward_button, self.next_button,
+                                          self.category_button, self.autoplay_button]
         widgets_with_custom_padding = [self.time_label, self.progress_bar, self.volume_bar]
 
         if visibility:
@@ -439,7 +473,7 @@ class MediaPlayerApp(tk.Tk):
 
 
     def select_file(self):
-        """Plays a video file from the start when the 'Select File' button is clicked.
+        """Plays a video file from the start when the 'Get' button is clicked.
             Unused up till Version 1.1.0
         """
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
@@ -475,10 +509,10 @@ class MediaPlayerApp(tk.Tk):
                 self.select_sequential_videos()
             else:
                 self.select_random_video()
-            self.play_video()
             self.video_paused = False
+            self.play_video()
         except IndexError:
-            messagebox.showerror("Index Error", f"Videos Finished")
+            showerror(self, "Index Error", f"Videos Finished")
         except Exception as e:
             print(f"An Exception Occurred in play_next(): {e}")
     
@@ -573,13 +607,20 @@ class MediaPlayerApp(tk.Tk):
             try:
                 if self.playing_video:
                     self.media_player.stop()
-                    time.sleep(0.35)
+                    # if hasattr(self, 'current_media'):
+                    #     print("Releasing current media...")
+                    #     self.current_media.release()
+                    # if hasattr(self, 'media_player'):
+                    #     self.media_player.release()
+                    time.sleep(0.3)
                 if os.path.exists(self.current_file):
                     title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
+                    self._release_current_media()
                     media = self.instance.media_new(self.current_file)
+                    self.current_media = media
                     media.parse_async()  # Preloads meta info
+                    # self._create_new_player()
                     self.media_player.set_media(media)
-                    # Schedule GUI updates on the main thread
                     self.after(0, lambda: self._on_video_loaded(title))
                 else:
                     print(f"The file Doesn't Exists: {self.current_file}")
@@ -587,7 +628,8 @@ class MediaPlayerApp(tk.Tk):
                     self.after(0, self.play_next)
             except Exception as e:
                 print(f"An Exception Occurred in play_video: {e}")
-                self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
+                showerror(self, "Error", f"Error loading {self.current_file}: {e}")
+                # self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
         if hasattr(self, '_video_thread') and self._video_thread.is_alive():
             print("Video thread is already running. Waiting for it to finish.")
             return
@@ -595,6 +637,13 @@ class MediaPlayerApp(tk.Tk):
         self._video_thread.start()
 
         # threading.Thread(target=load_and_play, daemon=True).start()
+
+    def _release_current_media(self):
+        if hasattr(self, 'current_media'):
+            print("Releasing current media...")
+            self.current_media.release()
+            print("Released current media..")
+            time.sleep(0.25)
 
     def fast_forward(self, event=None):
         """
@@ -664,6 +713,7 @@ class MediaPlayerApp(tk.Tk):
             self.watch_history_logger.log_watch_history(self.current_file, total_duration, duration_watched)
             self.watched_videos.increment_duration_and_count(self.current_file, total_watched)
             self.media_player.stop()
+            # self.media_player.release()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
 
@@ -716,7 +766,7 @@ class MediaPlayerApp(tk.Tk):
                 # print(total_duration, current_time)
                 # return
                 # return
-        self.after(100, self.update_video_progress)
+        self.after(200, self.update_video_progress)
 
     def get_stats(self):
         """
@@ -767,6 +817,15 @@ class MediaPlayerApp(tk.Tk):
 
     def print_sessions_stats(self):
         pass
+
+    def open_category_manager(self, event=None):
+        """Open the category manager window."""
+        if not self.video_paused:
+            self.pause_video()
+        category_window = CategoryWindow(self, self.current_file)
+        self.wait_window(category_window)
+        self.pause_video()
+        # self.pause_video(event=event)
 
 if __name__ == "__main__":
     # for testing purposes

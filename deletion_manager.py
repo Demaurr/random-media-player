@@ -1,19 +1,25 @@
 import os
 import csv
 from send2trash import send2trash
-from tkinter import messagebox, filedialog
+from tkinter import filedialog
 from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists
 from player_constants import FAV_FILES, DELETE_FILES_CSV, LOG_PATH
 from logs_writer import LogManager
 from favorites_manager import FavoritesManager
 from datetime import datetime
 import shutil
+from custom_messagebox import showinfo, showwarning, showerror, askyesno
 
 class DeletionManager:
     def __init__(self):
         self.delete_csv = DELETE_FILES_CSV  
         self.fav_manager = FavoritesManager(FAV_FILES) 
-        self.logger = LogManager(LOG_PATH)  
+        self.logger = LogManager(LOG_PATH)
+        self.parent_window = None
+
+    def set_parent_window(self, parent):
+        """Set the parent window for message boxes."""
+        self.parent_window = parent
 
     def read_csv_file(self):
         """Reads the CSV file and returns a dictionary of file paths and their metadata."""
@@ -50,25 +56,30 @@ class DeletionManager:
     def mark_for_deletion(self, video_file, status="ToDelete"):
         """Marks a video file for deletion by adding it to the CSV with size and datetime."""
         video_file = normalise_path(video_file)
+        if not os.path.exists(video_file):
+            showerror(self.parent_window, "Error", f"File not found: {video_file}")
+            return
         file_status_dict = self.read_csv_file()
+        try:
+            file_size = os.path.getsize(video_file)
+            mod_time = datetime.fromtimestamp(os.path.getmtime(video_file)).strftime('%Y-%m-%d %H:%M:%S')
 
-        file_size = os.path.getsize(video_file)
-        mod_time = datetime.fromtimestamp(os.path.getmtime(video_file)).strftime('%Y-%m-%d %H:%M:%S')
-
-        if video_file in file_status_dict:
-            existing_status = file_status_dict[video_file]['status']
-            if existing_status == "ToDelete":
-                confirm_delete = messagebox.askyesno("File Already Marked", 
-                                                     f"{video_file} is already marked for deletion. Do you want to delete it now?")
-                if confirm_delete:
-                    if self.delete_file(video_file, file_status_dict):
-                        file_status_dict[video_file]['status'] = "Deleted"
-                        # self.logger.update_logs('[FILE DELETED]', video_file)
-        else:
-            file_status_dict[video_file] = {'status': status, 'size': file_size, 'mod_time': mod_time}
-            self.logger.update_logs('[MARKED FOR DELETION]', video_file)
-
-        self.write_csv_file(file_status_dict)
+            if video_file in file_status_dict:
+                existing_status = file_status_dict[video_file]['status']
+                if existing_status == "ToDelete":
+                    confirm_delete = askyesno(self.parent_window, "File Already Marked", 
+                                                        f"{video_file} is already marked for deletion. Do you want to delete it now?")
+                    if confirm_delete:
+                        if self.delete_file(video_file, file_status_dict):
+                            file_status_dict[video_file]['status'] = "Deleted"
+            else:
+                file_status_dict[video_file] = {'status': status, 'size': file_size, 'mod_time': mod_time}
+                self.logger.update_logs('[MARKED FOR DELETION]', video_file)
+        except Exception as e:
+            self.logger.error_logs(f"Error marking {video_file} for deletion: {e}")
+            showerror(self.parent_window, "Error", f"Error marking {video_file} for deletion: {e}")
+        finally:
+            self.write_csv_file(file_status_dict)
 
     def remove_from_deletion(self, video_file):
         """Removes a file from the deletion list if it's marked for deletion."""
@@ -81,7 +92,7 @@ class DeletionManager:
                 del file_status_dict[video_file]
                 self.logger.update_logs('[REMOVED FROM DELETION]', video_file)
             elif existing_status == "Deleted":
-                messagebox.showinfo("Already Deleted", f"{video_file} is already deleted and cannot be undeleted.")
+                showinfo(self.parent_window, "Already Deleted", f"{video_file} is already deleted and cannot be undeleted.")
         else:
             print(f"{video_file} is not in the deletion list.")
 
@@ -92,9 +103,9 @@ class DeletionManager:
         
         # Check if confirmation should be skipped
         if not skip_confirmation:
-            confirm_delete = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete all marked files?")
+            confirm_delete = askyesno(self.parent_window, "Confirm Deletion", "Are you sure you want to delete all marked files?")
             if not confirm_delete:
-                messagebox.showinfo("Skipped", "Skipping Files marked for deletion.")
+                showinfo(self.parent_window, "Skipped", "Skipping Files marked for deletion.")
                 return
 
         file_status_dict = self.read_csv_file()
@@ -108,7 +119,7 @@ class DeletionManager:
                     file_status_dict[file_path]['status'] = "Deleted"
 
         self.write_csv_file(file_status_dict)
-        messagebox.showinfo("Deletion Complete", "All 'ToDelete' files have been processed.")
+        showinfo(self.parent_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
 
     def check_deleted(self):
         """
@@ -135,20 +146,18 @@ class DeletionManager:
             self.logger.update_logs("[DELETED FILES UPDATED]", f"Checked The Deleted Files Still Available.")
         else:
             print("No updates required; all deleted files are missing.")
-            messagebox.showinfo("No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
-
-
+            showinfo(self.parent_window, "No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
 
     def handle_favorites(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
         if not self.fav_manager.check_favorites(file_path):
             return True
         
-        move_to_favorites = messagebox.askyesno("File in Favorites", 
+        move_to_favorites = askyesno(self.parent_window, "File in Favorites", 
                                                 f"{file_path} is in your favorites. Do you want to move it to the backup folder instead of deleting?")
         if move_to_favorites:
             default_favorites_folder = get_favs_folder()
-            use_default_folder = messagebox.askyesno("Select Folder", 
+            use_default_folder = askyesno(self.parent_window, "Select Folder", 
                                                     f"Do you want to move the file to the default folder: {default_favorites_folder}?")
 
             if use_default_folder:

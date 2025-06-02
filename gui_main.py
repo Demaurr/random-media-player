@@ -31,6 +31,8 @@ from videoplayer import MediaPlayerApp
 
 import player_constants
 from media_dashboard import DashboardWindow
+from category_manager import CategoryManager
+from category_window import CategoryWindow
 # from pprint import pprint
 # import cProfile
 
@@ -42,6 +44,7 @@ class FileExplorerApp:
         self.root.geometry("900x600")
         self.play_images = False
         self.play_folder = False
+        self.play_category = False
         self.total_files = 0
         self.total_size = 0
         self.total_search_results = 0
@@ -54,9 +57,11 @@ class FileExplorerApp:
         ensure_folder_exists(REPORTS_FOLDER)
         
         self.deletion_manager = DeletionManager()
+        self.deletion_manager.set_parent_window(self.root)
         self.fav_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.video_processor = VideoProcessor
+        self.category_manager = CategoryManager()
         
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         self.center_window(window=self.root)
@@ -95,6 +100,8 @@ class FileExplorerApp:
         # Bind Shift+Delete to delete_selected_files with direct_delete=True
         # self.file_table.bind('<Shift-Delete>', lambda event: self.delete_selected_files(direct_delete=True, event=event))
         self.file_table.bind('<Control-Shift-Delete>', lambda event: self.remove_from_deletion(self.get_selected_video(), event))
+        self.file_table.bind('<Shift-KeyPress-a>', self.add_to_category)
+        self.file_table.bind('<Shift-KeyPress-A>', self.add_to_category)
 
     def get_selected_video(self):
         selected_item = self.file_table.selection()
@@ -149,7 +156,8 @@ class FileExplorerApp:
 
     def create_context_menu(self):
         self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="Move", command=self.move_selected_files)  # Add Move option
+        self.context_menu.add_command(label="Add to Category", command=self.add_to_category)
+        self.context_menu.add_command(label="Move", command=self.move_selected_files)
         self.context_menu.add_command(label="Move to Recycle Bin", command=self.delete_selected_files)
         # self.context_menu.add_separator()
         # self.context_menu.add_command(label="Properties", command=self.show_properties)
@@ -163,7 +171,7 @@ class FileExplorerApp:
         dest_folder = filedialog.askdirectory(title="Select Destination Folder")
         if not dest_folder:
             return
-        file_manager = FileManager()
+        file_manager = FileManager(parent_window=self.root)
         for item in selected_items:
             file_path = self.file_table.item(item, "values")[2]
             try:
@@ -206,7 +214,7 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[2]
             self.deletion_manager.mark_for_deletion(file_path, status)
         
-        # Using the DeletionManager to handle deletion or marking
+        # Not currently deleting files directly
         if direct_delete:
             self.deletion_manager.delete_files_in_csv(skip_confirmation=True)
         
@@ -241,6 +249,7 @@ class FileExplorerApp:
             importlib.reload(player_constants)
             importlib.reload(file_loader)
             self.deletion_manager = DeletionManager()
+            self.deletion_manager.set_parent_window(self.root)
             self.fav_manager = FavoritesManager()
             self.logger = LogManager(LOG_PATH)
         SettingsWindow(self.root, on_save_callback=reload_constants)
@@ -266,7 +275,7 @@ class FileExplorerApp:
         style.configure("TButton", font=("Segoe UI", 11, "bold"), padding=6, borderwidth=0)
         style.configure("TEntry", font=("Segoe UI", 11), padding=4)
         style.configure(
-            "Modern.TCheckbutton",
+            "NewStyle.TCheckbutton",
             background="black",
             foreground="white",
             font=("Segoe UI", 13),
@@ -277,7 +286,7 @@ class FileExplorerApp:
             padding=4,
         )
         style.map(
-            "Modern.TCheckbutton",
+            "NewStyle.TCheckbutton",
             background=[("active", "#222"), ("selected", "#444")],
             foreground=[("active", "#4FC3F7"), ("selected", "#4FC3F7")],
         )
@@ -353,20 +362,6 @@ class FileExplorerApp:
             cursor="hand2"
         )
         self.show_horizontals.pack(side="left", padx=(0, 5), pady=0)
-        
-        self.search_entry = tk.Entry(
-            self.search_frame, bg="#181818", fg="white", width=30, bd=2, relief=tk.FLAT,
-            font=("Segoe UI", 12)
-        )
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=0, ipady=2)
-
-        self.search_button = tk.Button(
-            self.search_frame, text="Search", command=self.on_search_pressed,
-            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
-            width=10, bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
-            cursor="hand2"
-        )
-        self.search_button.pack(side="left", padx=(0, 0), pady=0)
 
         self.top_level_only_on = False
         def toggle_top_level():
@@ -382,6 +377,20 @@ class FileExplorerApp:
             cursor="hand2"
         )
         self.top_level_only_button.pack(side="left", padx=(5, 5), pady=5)
+        
+        self.search_entry = tk.Entry(
+            self.search_frame, bg="#181818", fg="white", width=30, bd=2, relief=tk.FLAT,
+            font=("Segoe UI", 12)
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=0, ipady=2)
+
+        self.search_button = tk.Button(
+            self.search_frame, text="Search", command=self.on_search_pressed,
+            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
+            width=10, bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
+            cursor="hand2"
+        )
+        self.search_button.pack(side="left", padx=(0, 5), pady=0)
 
         self.delete_button = tk.Button(
             self.search_frame, text="🗑", command=self.on_delete_all_pressed,
@@ -401,11 +410,19 @@ class FileExplorerApp:
         
         self.all_media_button = tk.Button(
             self.search_frame, text="All Media", command=self.show_all_media,
-            bg="blue", fg="white", font=("Segoe UI", 11, "bold"),
+            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#003366",
             cursor="hand2"
         )
         self.all_media_button.pack(side="left", padx=(0, 5), pady=0)
+
+        self.categories_button = tk.Button(
+            self.search_frame, text="☰", command=self.show_categories,
+            bg="purple", fg="white", font=("Segoe UI", 11, "bold"),
+            bd=0, relief=tk.RAISED, activebackground="#4B0082",
+            cursor="hand2"
+        )
+        self.categories_button.pack(side="left", padx=(0, 5), pady=0)
 
         self.settings_button = tk.Button(
             self.root, text="⚙️", command=self.open_settings,
@@ -442,16 +459,16 @@ class FileExplorerApp:
                 e.widget.config(bg="red")
             elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
                 e.widget.config(bg="green")
-            elif "V" in e.widget["text"] or "L" in e.widget["text"]:
+            elif "V" in e.widget["text"] or "L" in e.widget["text"] or e.widget in [self.all_media_button]:
                 e.widget.config(bg="black")
-            elif e.widget == self.all_media_button:
-                e.widget.config(bg="blue")
+            elif e.widget == self.categories_button:
+                e.widget.config(bg="purple")
             else:
                 e.widget.config(bg="white")
 
         for btn in [self.enter_button, self.delete_button, self.refresh_button,
                      self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
-                     self.all_media_button]:
+                     self.all_media_button, self.categories_button]:
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
         self._create_stats_frame()
@@ -713,7 +730,12 @@ class FileExplorerApp:
             temp_files.append((os.path.basename(file),file))
         return temp_files
 
-    def insert_to_table(self, files: list):
+    def insert_to_table(self, files: list|tuple):
+        """
+        Inserts files into the file table with alternate row colors.
+        Args:
+            files (list|tuple): List of tuples containing file name and file path.
+        """
         self.file_table.delete(*self.file_table.get_children())
         for idx, (file, file_path) in enumerate(files):
             tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)  # Apply alternate colors to rows
@@ -758,6 +780,9 @@ class FileExplorerApp:
                 self.update_stats()
                 self.total_duration_watched = 0
 
+            elif folder_path_string == "show categories":
+                self.show_categories()
+
             else:
                 self.video_files = vf_loader.start_here(normalise_path(folder_path_string))
                 self.total_size = self.convert_bytes(vf_loader.total_size_in_bytes)
@@ -772,12 +797,15 @@ class FileExplorerApp:
             print(f"An Unknown Error Occurred {e}")
             return
         
-        if not self.play_folder:
+        if not self.play_folder and not self.play_category:
             print(f"Total Videos Found: {len(self.video_files)}")
             self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
         elif self.play_folder:
             print(f"Total Folders in Search History: {len(self.folders)}")
             self.insert_to_table(sorted(self.folders))
+        elif self.play_category:
+            print(f"Total Categories: {self.total_files}")
+            # self.insert_to_table_custom(self.categories)
 
     def show_paths(self):
         """Show only those folder/csv pairs where both the folder and the CSV file exist."""
@@ -911,9 +939,10 @@ class FileExplorerApp:
             self.insert_to_table(fav_files)
             self.update_stats()
 
-    def reset_search_option(self, folder=False, images=False):
+    def reset_search_option(self, folder=False, images=False, category=False):
         self.play_folder = folder
         self.play_images = images
+        self.play_category = category
                     
 
 
@@ -921,6 +950,7 @@ class FileExplorerApp:
         try:
             item = self.file_table.selection()[0]
             file_path = self.file_table.item(item, "values")[2]
+            
             if self.play_folder:
                 folder_path = self.file_table.item(item, "values")[1]
                 vf_load = VideoFileLoader()
@@ -933,36 +963,42 @@ class FileExplorerApp:
                 self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
                 self.reset_search_option()
             
+            elif self.play_category:
+                # Get files for the selected category
+                category_name = self.file_table.item(item, "values")[2]
+                files = self.category_manager.get_category_files(category_name)
+                existing_files = [f for f in files if os.path.exists(f)]
+                total_size = sum(get_file_size(f) for f in existing_files)
+                
+                self.video_files = existing_files
+                self.total_files = len(existing_files)
+                self.total_size = self.convert_bytes(total_size)
+                self.total_search_results = len(existing_files)
+                self.update_stats()
+                
+                print(f"Total Videos Found in category '{category_name}': {len(existing_files)}")
+                self.update_entry_text(f"Category: {category_name}")
+                self.insert_to_table(sorted(self.file_path_tuple(existing_files)))
+                self.reset_search_option()
+            
             elif self.play_images:
-                # Disable the main window
-                # self.root.wm_attributes("-disabled", True)
                 viewer_window = Toplevel(self.root)
                 viewer_window.title("Image Viewer")
                 image_viewer_width = 900
                 image_viewer_height = 600
                 image_files = self.get_files_from_table()
-                viewer_window.lift()           # Bring window to front
+                viewer_window.lift()
                 viewer_window.focus_force()
 
-                # Create ImageViewer instance with the specified width and height
                 ImageViewer(viewer_window, image_files, index=image_files.index(file_path), width=image_viewer_width, height=image_viewer_height)
-                # self.reset_search_option()
-                
-                # Re-enable the main window when the image viewer window is closed
-                # viewer_window.protocol("WM_DELETE_WINDOW", lambda: self._on_close_viewer(viewer_window))
 
             else:
                 self.files = sorted(self.get_files_from_table())
                 print(f"Total Videos Found: {len(self.files)}")
                 if self.files:
-                    # Disable the main window
-                    # self.root.wm_attributes("-disabled", True)
                     self.play_images = False
                     app = MediaPlayerApp(self.files, current_file=file_path, random_select=True)
                     app.update_video_progress()
-                    
-                    # Re-enable the main window when the player window is closed
-                    # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
                     app.lift()
                     app.focus_force()
                     app.mainloop()
@@ -1118,7 +1154,50 @@ class FileExplorerApp:
         self.update_entry_text(SCREENSHOTS_FOLDER)
         self.insert_to_table(self.file_path_tuple(self.image_files))
 
+    def add_to_category(self, event=None):
+        """Open category manager for selected files."""
+        selected_items = self.file_table.selection()
+        if not selected_items:
+            messagebox.showinfo("No Selection", "Please select files to add to a category.")
+            return
+        selected_files = []
+        for item in selected_items:
+            file_path = self.file_table.item(item, "values")[2]
+            selected_files.append(file_path)
+
+        category_window = CategoryWindow(self.root, selected_files)
+        category_window.lift()
+        category_window.focus_force()
+        self.root.wait_window(category_window)
+
+    def show_categories(self):
+        """Show all categories and their file counts in the table."""
+        self.reset_search_option(category=True)
+        self.play_category = True
+        categories = self.category_manager.get_all_categories()
+        self.file_table.delete(*self.file_table.get_children())
         
+        category_files = []
+        total_size = 0
+        for category in sorted(categories):
+            files = self.category_manager.get_category_files(category)
+            # size = sum(get_file_size(f) for f in files if os.path.exists(f))
+            size = sum(get_file_size(f) for f in files)
+            total_size += size
+            category_files.append((f"Contains {len(files)} Files", category))  # Using category as path for double-click handling
+
+        self.total_files = len(categories)
+        self.total_size = self.convert_bytes(total_size)
+        self.total_search_results = len(category_files)
+        self.update_stats()
+
+        self.insert_to_table(category_files)
+        self.update_entry_text("show categories")
+
+    def insert_to_table_custom(self, files: list|tuple):
+        for file in files:
+            self.file_table.insert("", "end", values=(file[0], file[1], file[2]))
+
 def run_app():
     root = tk.Tk()
     app = FileExplorerApp(root)
