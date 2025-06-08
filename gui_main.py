@@ -16,6 +16,7 @@ from get_aspects import VideoProcessor
 from image_player import ImageViewer
 from logs_writer import LogManager
 from player_constants import (
+    Colors,
     DELETE_FILES_CSV,
     FILES_FOLDER,
     FOLDER_LOGS,
@@ -299,30 +300,30 @@ class FileExplorerApp:
         self._set_styles()
         
         self.heading_label = tk.Label(
-            self.root, text="Media Analyser", bg="black", fg="red",
+            self.root, text="Media Analyser", bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_RED,
             font=("Segoe UI", 44, "bold"), pady=10
         )
         self.heading_label.pack(side="top", fill="x", pady=(10, 5))
 
-        self.input_frame = tk.Frame(self.root, bg="black")
+        self.input_frame = tk.Frame(self.root, bg=Colors.PLAIN_BLACK)
         self.input_frame.pack(side="top", fill="x", padx=20, pady=(10, 5))
 
         self.entry = tk.Entry(
-            self.input_frame, bg="#181818", fg="white", width=50, bd=2, relief=tk.FLAT,
+            self.input_frame, bg="#181818", fg=Colors.PLAIN_WHITE, width=50, bd=2, relief=tk.FLAT,
             font=("Segoe UI", 13)
         )
         self.entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=5, ipady=4)
 
         self.enter_button = tk.Button(
             self.input_frame, text="Get", command=self.on_enter_pressed,
-            bg="red", fg="white", font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 13, "bold"),
             width=10, bd=0, relief=tk.RAISED, activebackground="#b30000",
             cursor="hand2"
         )
         self.enter_button.pack(side="left", padx=(0, 0), pady=5)
         self.browse_button = tk.Button(
             self.input_frame, text="📁", command=self.browse_folder,
-            bg="white", fg="black", font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLACK, font=("Segoe UI", 13, "bold"),
             width=3, bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -333,7 +334,7 @@ class FileExplorerApp:
         
         self.filter_favs = tk.Button(
             self.search_frame, text="★", command=self.check_update_favs,
-            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_GREEN, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#006400",
             cursor="hand2"
         )
@@ -341,7 +342,7 @@ class FileExplorerApp:
 
         self.show_caps = tk.Button(
             self.search_frame, text="Snaps", command=self.display_caps,
-            bg="green", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_GREEN, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#006400",
             cursor="hand2"
         )
@@ -349,7 +350,7 @@ class FileExplorerApp:
 
         self.show_verticals = tk.Button(
             self.search_frame, text="V", command=self.get_verticals,
-            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -357,7 +358,7 @@ class FileExplorerApp:
 
         self.show_horizontals = tk.Button(
             self.search_frame, text="L", command=self.get_horizontals,
-            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -369,24 +370,24 @@ class FileExplorerApp:
             if self.top_level_only_on:
                 self.top_level_only_button.config(bg="#4FC3F7", fg="black", relief=tk.SUNKEN)
             else:
-                self.top_level_only_button.config(bg="black", fg="white", relief=tk.RAISED)
+                self.top_level_only_button.config(bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, relief=tk.RAISED)
         self.top_level_only_button = tk.Button(
             self.search_frame, text="🔼", command=toggle_top_level,
-            bg="black", fg="white", font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 13, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
         self.top_level_only_button.pack(side="left", padx=(5, 5), pady=5)
         
         self.search_entry = tk.Entry(
-            self.search_frame, bg="#181818", fg="white", width=30, bd=2, relief=tk.FLAT,
+            self.search_frame, bg="#181818", fg=Colors.PLAIN_WHITE, width=30, bd=2, relief=tk.FLAT,
             font=("Segoe UI", 12)
         )
         self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=0, ipady=2)
 
         self.search_button = tk.Button(
             self.search_frame, text="Search", command=self.on_search_pressed,
-            bg="white", fg="black", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLACK, font=("Segoe UI", 11, "bold"),
             width=10, bd=0, relief=tk.RAISED, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -394,7 +395,7 @@ class FileExplorerApp:
 
         self.delete_button = tk.Button(
             self.search_frame, text="🗑", command=self.on_delete_all_pressed,
-            bg="red", fg="white", font=("Segoe UI", 12, "bold"),
+            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#b30000",
             anchor="center", cursor="hand2"
         )
@@ -402,7 +403,7 @@ class FileExplorerApp:
 
         self.refresh_button = tk.Button(
             self.search_frame, text="♻️", command=self.on_refresh_pressed,
-            bg="red", fg="white", font=("Segoe UI", 12, "bold"),
+            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#b30000",
             cursor="hand2"
         )
@@ -410,7 +411,7 @@ class FileExplorerApp:
         
         self.all_media_button = tk.Button(
             self.search_frame, text="All Media", command=self.show_all_media,
-            bg="black", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#003366",
             cursor="hand2"
         )
@@ -418,7 +419,7 @@ class FileExplorerApp:
 
         self.categories_button = tk.Button(
             self.search_frame, text="☰", command=self.show_categories,
-            bg="purple", fg="white", font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_PURPLE, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#4B0082",
             cursor="hand2"
         )
@@ -426,7 +427,7 @@ class FileExplorerApp:
 
         self.settings_button = tk.Button(
             self.root, text="⚙️", command=self.open_settings,
-            bg="white", fg="gray", bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_GRAY, bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -434,7 +435,7 @@ class FileExplorerApp:
 
         self.stats_button = tk.Button(
             self.root, text="📊", command=self.open_media_stats,
-            bg="white", fg="blue", bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLUE, bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -442,7 +443,7 @@ class FileExplorerApp:
 
         self.info_button = tk.Button(
             self.root, text="ℹ️", command=self.show_info,
-            bg="white", fg="red", bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_RED, bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground="#e0e0e0",
             cursor="hand2"
         )
@@ -452,19 +453,19 @@ class FileExplorerApp:
         def on_enter(e): e.widget.config(bg="#444")
         def on_leave(e):
             if e.widget == self.enter_button:
-                e.widget.config(bg="red")
+                e.widget.config(bg=Colors.PLAIN_RED)
             elif e.widget == self.delete_button or e.widget["text"] == "🗑":
-                e.widget.config(bg="red")
+                e.widget.config(bg=Colors.PLAIN_RED)
             elif e.widget == self.refresh_button or e.widget["text"] == "♻️":
-                e.widget.config(bg="red")
+                e.widget.config(bg=Colors.PLAIN_RED)
             elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
-                e.widget.config(bg="green")
+                e.widget.config(bg=Colors.PLAIN_GREEN)
             elif "V" in e.widget["text"] or "L" in e.widget["text"] or e.widget in [self.all_media_button]:
-                e.widget.config(bg="black")
+                e.widget.config(bg=Colors.PLAIN_BLACK)
             elif e.widget == self.categories_button:
-                e.widget.config(bg="purple")
+                e.widget.config(bg=Colors.PLAIN_PURPLE)
             else:
-                e.widget.config(bg="white")
+                e.widget.config(bg=Colors.PLAIN_WHITE)
 
         for btn in [self.enter_button, self.delete_button, self.refresh_button,
                      self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
@@ -478,37 +479,37 @@ class FileExplorerApp:
         self.stats_frame.pack(side="top", fill="x", padx=20, pady=(0, 5), anchor="center")
 
         self.selected_files_label = tk.Label(
-            self.stats_frame, text="Selected: 0", bg="#181818", fg="white",
+            self.stats_frame, text="Selected: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.selected_files_label.grid(row=0, column=0, padx=10, pady=0, sticky="ew")
 
         self.total_files_label = tk.Label(
-            self.stats_frame, text="All Files: 0", bg="#181818", fg="white",
+            self.stats_frame, text="All Files: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.total_files_label.grid(row=0, column=1, padx=10, pady=0, sticky="ew")
 
         self.search_results_label = tk.Label(
-            self.stats_frame, text="Search Results: 0", bg="#181818", fg="white",
+            self.stats_frame, text="Search Results: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.search_results_label.grid(row=0, column=2, padx=10, pady=0, sticky="ew")
 
         self.total_size_label = tk.Label(
-            self.stats_frame, text="Size: 0", bg="#181818", fg="white",
+            self.stats_frame, text="Size: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.total_size_label.grid(row=0, column=3, padx=10, pady=0, sticky="ew")
 
         self.search_size_label = tk.Label(
-            self.stats_frame, text="S-Size: 0", bg="#181818", fg="white",
+            self.stats_frame, text="S-Size: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.search_size_label.grid(row=0, column=4, padx=10, pady=0, sticky="ew")
 
         self.total_duration_label = tk.Label(
-            self.stats_frame, text="Durations: 0", bg="#181818", fg="white",
+            self.stats_frame, text="Durations: 0", bg="#181818", fg=Colors.PLAIN_WHITE,
             font=("Segoe UI", 12, "bold")
         )
         self.total_duration_label.grid(row=0, column=5, padx=10, pady=0, sticky="ew")
@@ -603,7 +604,7 @@ class FileExplorerApp:
         info_text.config(state="disabled")
         close_btn = tk.Button(
             self._info_window, text="Close", command=self._info_window.destroy,
-            font=("Segoe UI", 12, "bold"), bg="white", fg="#222", bd=0,
+            font=("Segoe UI", 12, "bold"), bg=Colors.PLAIN_WHITE, fg="#222", bd=0,
             relief="flat", activebackground="#0288D1", activeforeground="#fff",
             cursor="hand2"
         )

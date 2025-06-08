@@ -319,6 +319,8 @@ class MediaPlayerApp(tk.Tk):
         self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
         self.bind("<Shift-KeyPress-a>", self.open_category_manager)
         self.bind("<Shift-KeyPress-A>", self.open_category_manager)
+        self.bind("<Alt-t>", self.toggle_always_on_top)
+        self.bind("<Alt-T>", self.toggle_always_on_top)
 
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
@@ -458,7 +460,7 @@ class MediaPlayerApp(tk.Tk):
     def volume_increase(self, event):
         """Increases the volume."""
         current_volume = self.media_player.audio_get_volume()
-        new_volume = min(current_volume + 5, 100)  # Increase volume by 5%, up to 100%
+        new_volume = min(current_volume + 5, 200)  # Increase volume by 5%, up to 200%
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
         self.volume_bar.set(new_volume)  # Update volume bar
@@ -826,6 +828,12 @@ class MediaPlayerApp(tk.Tk):
         self.wait_window(category_window)
         self.pause_video()
         # self.pause_video(event=event)
+
+    def toggle_always_on_top(self, event=None):
+        """Toggle whether the window stays on top of other windows."""
+        is_on_top = self.attributes("-topmost")
+        self.attributes("-topmost", not is_on_top)
+        self.show_marquee("Always on top: " + ("ON" if not is_on_top else "OFF"))
 
 if __name__ == "__main__":
     # for testing purposes

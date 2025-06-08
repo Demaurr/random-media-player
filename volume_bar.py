@@ -53,13 +53,13 @@ class VolumeBar(tk.Scale):
         super().__init__(
             master,
             from_=0,
-            to=100,
+            to=200,  # Changed from 100 to 200 to support up to 200% volume
             orient=tk.HORIZONTAL,
             length=200,
             command=self.set_volume,
             **kwargs,
         )
-        self.set(50)  # Set initial volume to 50%
+        self.set(50)  # Set initial volume to 100% (normal volume)
         self.media_player = media_player
 
     def set_volume(self, volume):
@@ -67,8 +67,10 @@ class VolumeBar(tk.Scale):
         Sets the volume of the associated media player.
 
         Args:
-            volume (int | float | str): The volume level to set, ranging from 0 to 100.
+            volume (int | float | str): The volume level to set, ranging from 0 to 200.
                 If a string is passed, it is expected to be a numerical representation of the volume level.
+                Values 0-100 represent normal volume range (0-100%)
+                Values 101-200 represent amplified volume range (101-200%)
         """
         self.media_player.audio_set_volume(int(volume))
 
