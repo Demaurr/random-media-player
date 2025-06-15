@@ -998,7 +998,7 @@ class FileExplorerApp:
                 print(f"Total Videos Found: {len(self.files)}")
                 if self.files:
                     self.play_images = False
-                    app = MediaPlayerApp(self.files, current_file=file_path, random_select=True)
+                    app = MediaPlayerApp(self.files, current_file=file_path, random_select=True, parent=self.root)
                     app.update_video_progress()
                     app.lift()
                     app.focus_force()

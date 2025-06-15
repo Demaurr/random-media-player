@@ -24,9 +24,9 @@ from watch_history_logger import WatchHistoryLogger
 from custom_messagebox import showinfo, showwarning, showerror, askyesno  # Add this import
 
 
-class MediaPlayerApp(tk.Tk):
-    def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH):
-        super().__init__()
+class MediaPlayerApp(tk.Toplevel):
+    def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH, parent=None):
+        super().__init__(parent)
         self._get_history_csvfile(watch_history_csv)
         self.favorites_manager = FavoritesManager()
         self.logger = LogManager(LOG_PATH)
@@ -319,6 +319,8 @@ class MediaPlayerApp(tk.Tk):
         self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
         self.bind("<Shift-KeyPress-a>", self.open_category_manager)
         self.bind("<Shift-KeyPress-A>", self.open_category_manager)
+        self.bind("<KeyPress-a>", self.toggle_autoplay)
+        self.bind("<KeyPress-A>", self.toggle_autoplay)
         self.bind("<Alt-t>", self.toggle_always_on_top)
         self.bind("<Alt-T>", self.toggle_always_on_top)
 
@@ -345,15 +347,17 @@ class MediaPlayerApp(tk.Tk):
         self.forward_counts = 0
 
     def cycle_playback_speed(self, event=None):
-        """Cycles playback speed between 1x, 1.5x, and 2x."""
+        """Cycles playback speed between 1x, 1.25x, 1.5x, 1.75x, and 2x."""
         if self.playing_video:
+            speeds = [1.0, 1.25, 1.5, 1.75, 2.0]
             current_speed = self.media_player.get_rate()
-            if abs(current_speed - 1.0) < 0.1:
-                new_speed = 1.5
-            elif abs(current_speed - 1.5) < 0.1:
-                new_speed = 2.0
-            else:
-                new_speed = 1.0
+            # Find the closest speed in the list
+            try:
+                index = next(i for i, s in enumerate(speeds) if abs(s - current_speed) < 0.1)
+                new_index = (index + 1) % len(speeds)
+            except StopIteration:
+                new_index = 0  # Default to the first speed if current is unknown
+            new_speed = speeds[new_index]
             self.set_playback_speed(new_speed)
             print(f"Playback Speed Changed to: {new_speed}x")
             self.show_marquee(f"Speed: {new_speed}x")
@@ -497,41 +501,73 @@ class MediaPlayerApp(tk.Tk):
     def play_next(self, event=None):
         """
         Plays the next video in the playlist.
-
-        Stops the current video if it's playing, selects a random video from the list of available videos,
-        sets it as the current video, and starts playing it.
+        Stops the current video if it's playing, selects the next video,
+        sets it as the current file, and plays it.
         """
+        if getattr(self, "_playing_lock", False):
+            print("Already transitioning to next video.")
+            return
+
+        self._playing_lock = True
         try:
-            # time.sleep(0.2)
+            if not self.video_files:
+                showerror(self, "No Videos", "The video list is empty.")
+                return
+
             if self.playing_video:
                 self.stop()
+
             self.previous_file = self.current_file
-            # self.current_file = random.choice(self.video_files)
-            if not self.random_select:
-                self.select_sequential_videos()
-            else:
+
+            if self.random_select:
                 self.select_random_video()
+            else:
+                self.select_sequential_videos()
+
             self.video_paused = False
+            print(f"Now playing: {self.current_file}")
             self.play_video()
+
         except IndexError:
-            showerror(self, "Index Error", f"Videos Finished")
+            self.current_file = None
+            showerror(self, "Index Error", "No more videos to play.")
         except Exception as e:
             print(f"An Exception Occurred in play_next(): {e}")
+            showerror(self, "Error", f"Failed to play next video: {e}")
+        finally:
+            self._playing_lock = False
+
     
     def play_previous(self, event=None):
         """
         Plays the previous video in the playlist.
-
-        Stops the current video if it's playing, selects the previous video (if available), sets it as the current video,
-        and starts playing it.
+        Stops the current video, swaps the current and previous file, and plays the previous one.
         """
-        # print(self.previous_file)
-        # time.sleep(0.2)
-        if self.playing_video:
-            self.stop()  # Stop the current video
-        if self.previous_file:
-            self.current_file, self.previous_file = self.previous_file, self.current_file
-            self.play_video()
+        if getattr(self, "_playing_lock", False):
+            print("Already transitioning between videos.")
+            return
+
+        self._playing_lock = True
+        try:
+            if self.playing_video:
+                self.stop()
+
+            if self.previous_file and os.path.exists(self.previous_file):
+                if self.previous_file == self.current_file:
+                    print("Previous file is same as current. Ignoring.")
+                    return
+
+                self.current_file, self.previous_file = self.previous_file, self.current_file
+                print(f"Reverted to: {self.current_file}")
+                self.play_video()
+            else:
+                showerror(self, "Error", "Previous file not available or missing.")
+        except Exception as e:
+            print(f"An error occurred in play_previous(): {e}")
+            showerror(self, "Error", f"Could not play previous video: {e}")
+        finally:
+            self._playing_lock = False
+
 
     def get_duration_str(self):
         """
@@ -641,11 +677,19 @@ class MediaPlayerApp(tk.Tk):
         # threading.Thread(target=load_and_play, daemon=True).start()
 
     def _release_current_media(self):
-        if hasattr(self, 'current_media'):
-            print("Releasing current media...")
-            self.current_media.release()
-            print("Released current media..")
-            time.sleep(0.25)
+        try:
+            if hasattr(self, 'media_player'):
+                print("Releasing current media player...")
+                self.media_player.stop()
+                self.media_player.set_media(None)
+            if hasattr(self, 'current_media') and self.current_media:
+                print("Releasing current media...")
+                self.current_media.release()
+                self.current_media = None
+                print("Released current media.")
+        except Exception as e:
+            print(f"Error during media release: {e}")
+        time.sleep(0.25)
 
     def fast_forward(self, event=None):
         """
@@ -825,6 +869,8 @@ class MediaPlayerApp(tk.Tk):
         if not self.video_paused:
             self.pause_video()
         category_window = CategoryWindow(self, self.current_file)
+        category_window.lift()
+        category_window.focus_force()
         self.wait_window(category_window)
         self.pause_video()
         # self.pause_video(event=event)
