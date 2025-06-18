@@ -1,5 +1,6 @@
 import os
 import random
+import subprocess
 import threading
 import time
 import timeit
@@ -15,12 +16,21 @@ from category_window import CategoryWindow
 from deletion_manager import DeletionManager
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
-from player_constants import FILES_FOLDER, LOG_PATH, REPORTS_FOLDER, SCREENSHOTS_FOLDER, WATCHED_HISTORY_LOG_PATH
+from player_constants import (
+    FILES_FOLDER, 
+    LOG_PATH, 
+    REPORTS_FOLDER, 
+    SCREENSHOTS_FOLDER, 
+    WATCHED_HISTORY_LOG_PATH, 
+    VIDEO_SNIPPETS_FOLDER, 
+    Colors
+    )
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
 from watch_dictionary import WatchDict
 from watch_history_logger import WatchHistoryLogger
+from snippets_manager import SnippetsManager
 from custom_messagebox import showinfo, showwarning, showerror, askyesno  # Add this import
 
 
@@ -34,6 +44,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.deleter.set_parent_window(self)  # Set parent window for message boxes
         self.category_manager = CategoryManager()
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
+        self.snippets_manager = SnippetsManager()
 
         self.bg_color = "black"
         self.fg_color = "white"
@@ -51,6 +62,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.segment_forward = 0
         self.segment_prev = 0
         self.autoplay = True
+        self.trim_start = None
+        # self.input_path = None
 
         self.random_select = random_select
         self.video_index = 0 if not current_file else video_files.index(current_file)
@@ -280,13 +293,14 @@ class MediaPlayerApp(tk.Toplevel):
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
 
-    def toggle_autoplay(self):
+    def toggle_autoplay(self, event=None):
         """Toggle the autoplay setting."""
         self.autoplay = not self.autoplay
         self.autoplay_button.config(
             text=f"Autoplay: {'ON' if self.autoplay else 'OFF'}",
             bg="#2196F3" if self.autoplay else "#757575"
         )
+        self.show_marquee("Autoplay is ON" if self.autoplay else "Autoplay is OFF")
 
     def _keybinding(self):
         """
@@ -323,9 +337,14 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind("<KeyPress-A>", self.toggle_autoplay)
         self.bind("<Alt-t>", self.toggle_always_on_top)
         self.bind("<Alt-T>", self.toggle_always_on_top)
+        self.bind('<KeyPress-S>', self.mark_start)
+        self.bind('<KeyPress-s>', self.mark_start)
+        self.bind('<KeyPress-E>', self.mark_end)
+        self.bind('<KeyPress-e>', self.mark_end)
 
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
+        self.reset_trim()
 
         self.title(title)
         self.media_player.set_hwnd(self.media_canvas.winfo_id())
@@ -813,6 +832,29 @@ class MediaPlayerApp(tk.Toplevel):
                 # return
                 # return
         self.after(200, self.update_video_progress)
+    
+    def seconds_to_hhmmss(self, seconds, safe_for_filename=True):
+        hours = int(seconds) // 3600
+        minutes = (int(seconds) % 3600) // 60
+        secs = int(seconds) % 60
+        if safe_for_filename:
+            return f"{hours}h{minutes}m{secs}s"
+        else:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def get_video_resolution(self):
+        try:
+            video_track = self.media_player.video_get_track()
+            if video_track == -1:
+                return "Unknown"
+            width = self.media_player.video_get_width()
+            height = self.media_player.video_get_height()
+            if width > 0 and height > 0:
+                return f"{width}x{height}"
+            return "Unknown"
+        except Exception as e:
+            print(f"[Resolution Error] {e}")
+            return "Unknown"
 
     def get_stats(self):
         """
@@ -880,6 +922,110 @@ class MediaPlayerApp(tk.Toplevel):
         is_on_top = self.attributes("-topmost")
         self.attributes("-topmost", not is_on_top)
         self.show_marquee("Always on top: " + ("ON" if not is_on_top else "OFF"))
+
+    def mark_start(self, event=None):
+        try:
+            # if not self.media_player.is_playing():
+            #     return
+            ms = self.media_player.get_time()
+            self.trim_start = ms
+            showinfo(self, "Trim", f"Start marked at {ms/1000:.2f} seconds")
+            self.time_label.config(fg="red")
+        except Exception as e:
+            showerror(self,"Trim Error", f"Could not mark start:\n{e}")
+            self.logger.error_logs(f"Error marking start for trimming: {e}")
+
+    def mark_end(self, event=None):
+        try:
+            if self.trim_start is None or not self.current_file:
+                return
+            end_ms = self.media_player.get_time()
+            if end_ms < self.trim_start:
+                start_ms, end_ms = end_ms, self.trim_start
+            else:
+                start_ms, end_ms = self.trim_start, end_ms
+                
+            duration_ms = self.media_player.get_length()
+            if start_ms >= duration_ms or end_ms > duration_ms:
+                showwarning(self, "Trim", "Invalid positions or video ended. Operation canceled.")
+                self.reset_trim()
+                return
+
+            # Ask user: fast or accurate
+            # choice = askquestion("Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
+            # choice = askyesno(self, "Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
+            # fast_mode = (choice == 'yes')
+            fast_mode = (True)
+
+            # Launch trimming thread
+            threading.Thread(
+                target=self._trim_worker,
+                args=(start_ms, end_ms, fast_mode),
+                daemon=True
+            ).start()
+            self.trim_start = None
+            self.time_label.config(fg=Colors.PLAIN_WHITE)
+
+        except Exception as e:
+            showerror(self, "Trim Error", f"Could not mark end or start trimming:\n{e}")
+            self.reset_trim()
+            self.logger.error_logs(f"Error marking end for trimming: {e}")
+
+    def reset_trim(self):
+        self.trim_start = None
+
+    def _trim_worker(self, start_ms, end_ms, fast_mode=True):
+        try:
+            start_s = start_ms / 1000.0
+            duration_s = (end_ms - start_ms) / 1000.0
+            base_name = os.path.splitext(os.path.basename(self.current_file))[0]
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            out_file = f"{base_name}_{self.seconds_to_hhmmss(start_s)}_to_{self.seconds_to_hhmmss(start_s+duration_s)}.mp4"
+            # out_file = f"{base_name}_{start_s}_to_{start_s+duration_s}.mp4"
+            out_path = os.path.join(VIDEO_SNIPPETS_FOLDER, out_file)
+
+            if fast_mode:
+                cmd = [
+                    'ffmpeg', '-y', '-ss', str(start_s), '-t', str(duration_s),
+                    '-i', self.current_file, '-c', 'copy', out_path
+                ]
+            else:
+                cmd = [
+                    'ffmpeg', '-y', '-ss', str(start_s), '-t', str(duration_s),
+                    '-i', self.current_file, '-c:v', 'libx264', '-c:a', 'aac', out_path
+                ]
+
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            showinfo(
+                self,
+                "Trim Complete",
+                f"Saved clipped video from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}\nPath: {out_path}"
+            )
+            self.logger.update_logs(
+                f"[TRIMMED VIDEO] {self.current_file} from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}",
+                out_path
+            )
+            self.category_manager.add_to_category("Trimmed Videos", out_path)
+            self.snippets_manager.record_trim(
+                original=self.current_file,
+                output=out_path,
+                start_s=start_s,
+                end_s=start_s + duration_s,
+                mode=fast_mode,
+                total_duration_s=duration_s,
+                resolution=self.get_video_resolution(),
+                file_size=os.path.getsize(out_path),
+                video_format=os.path.splitext(out_path)[1][1:],  # e.g., 'mp4'
+                notes=""
+            )
+        except FileNotFoundError:
+            self.logger.error_logs("ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
+            showerror(self, "Trim Error", "ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
+        # except subprocess.CalledProcessError:
+        #     showerror(self, "Trim Failed", "An error occurred during trimming.")
+        except Exception as e:
+            self.logger.error_logs(f"Unexpected error during trimming: {e}")
+            showerror(self, "Trim Error", f"Unexpected error:\n{e}")
 
 if __name__ == "__main__":
     # for testing purposes
