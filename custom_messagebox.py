@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 
 def create_messagebox(parent, message_type, title, message, **options):
     """
@@ -36,6 +36,44 @@ def create_messagebox(parent, message_type, title, message, **options):
         temp_window.destroy()
     
     return result
+def askopenfilename(parent, **options):
+    """Open a file dialog that is tied to the parent window."""
+    temp_window = tk.Toplevel(parent)
+    temp_window.withdraw()
+    temp_window.transient(parent)
+    temp_window.attributes('-topmost', True)
+    
+    try:
+        file = filedialog.askopenfilename(parent=temp_window, **options)
+    finally:
+        temp_window.destroy()
+    return file
+
+def asksaveasfilename(parent, **options):
+    """Save file dialog tied to parent."""
+    temp_window = tk.Toplevel(parent)
+    temp_window.withdraw()
+    temp_window.transient(parent)
+    temp_window.attributes('-topmost', True)
+    
+    try:
+        file = filedialog.asksaveasfilename(parent=temp_window, **options)
+    finally:
+        temp_window.destroy()
+    return file
+
+def askdirectory(parent, **options):
+    """Open directory dialog tied to parent."""
+    temp_window = tk.Toplevel(parent)
+    temp_window.withdraw()
+    temp_window.transient(parent)
+    temp_window.attributes('-topmost', True)
+    
+    try:
+        directory = filedialog.askdirectory(parent=temp_window, **options)
+    finally:
+        temp_window.destroy()
+    return directory
 
 def showinfo(parent, title, message, **options):
     """Show an info message box."""
