@@ -24,7 +24,8 @@ from player_constants import (
     REPORTS_FOLDER,
     SCREENSHOTS_FOLDER,
     WATCHED_HISTORY_LOG_PATH,
-    DEMO_WATCHED_HISTORY
+    DEMO_WATCHED_HISTORY,
+    VIDEO_SNIPPETS_FOLDER,
 )
 from settings_manager import SettingsWindow
 from static_methods import create_csv_file, ensure_folder_exists, gather_all_media, get_file_size, normalise_path
@@ -56,6 +57,7 @@ class FileExplorerApp:
         ensure_folder_exists(FILES_FOLDER)
         ensure_folder_exists(SCREENSHOTS_FOLDER)
         ensure_folder_exists(REPORTS_FOLDER)
+        ensure_folder_exists(VIDEO_SNIPPETS_FOLDER)
         
         self.deletion_manager = DeletionManager()
         self.deletion_manager.set_parent_window(self.root)

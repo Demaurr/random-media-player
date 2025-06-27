@@ -1,10 +1,11 @@
 # Path of Folders
-FILES_FOLDER = r"Testing"
+FILES_FOLDER = r"Files"
 CSV_FOLDER = FILES_FOLDER # change this to the folder where you want to get your Watched_History.csv from.
 SCREENSHOTS_FOLDER = rf"{FILES_FOLDER}\Screenshots"
 REPORTS_FOLDER = rf"{FILES_FOLDER}\Reports"
 LOGS_FOLDER = rf"{FILES_FOLDER}\Logs"
 ANALYTICS_FOLDER = rf"{FILES_FOLDER}\Analytics"
+VIDEO_SNIPPETS_FOLDER = rf"{FILES_FOLDER}\Video_Snippets"
 STYLES_FOLDER = r"Styles"
 DEMO_FOLDER = r"Dummy Data"
 
@@ -19,6 +20,7 @@ STYLE_FILE = rf"..\..\{STYLES_FOLDER}\style.css"
 FAV_FILES = rf"{CSV_FOLDER}\Favorites.csv"
 FILE_TRANSFER_LOG = rf"{CSV_FOLDER}\file_transfer_log.csv"
 ALL_MEDIA_CSV = rf"{CSV_FOLDER}\ALL_MEDIA.csv"
+SNIPPETS_HISTORY_CSV = rf"{CSV_FOLDER}\Trim_History.csv"
 SKIP_FOLDERS = {r".bzr", r".cache", r".env", r".git", r".hg", r".idea", r".next", r".nuxt", r".pytest_cache", r".svn", r".vs", r".vscode", r"Files\Reports", r"Files\Screenshots", r"Logs", r"Styles", r"__pycache__", r"bin", r"build", r"cache", r"dist", r"env", r"log", r"logs", r"node_modules", r"obj", r"target", r"temp", r"tmp", r"venv", r"venv.bat", r"virtualenv"}
 
 CATEGORIES_FILE = rf"{CSV_FOLDER}\categories.csv"
