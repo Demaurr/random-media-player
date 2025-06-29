@@ -192,7 +192,7 @@ class CategoryWindow(tk.Toplevel):
         self.files_tree.column("Filename", minwidth=100)
         self.files_tree.column("Categories", width=120)
         self.files_tree.column("Full Path", width=0, stretch=False)
-        self.files_tree.tag_configure('in_category', font=("Segoe UI", 10, "bold"))
+        self.files_tree.tag_configure('in_category', font=("Segoe UI", 10, "bold"), foreground="red")
         
         self.files_tree.grid(row=1, column=0, sticky='nsew')
         self.file_controls = tk.Frame(self.right_frame, bg=Colors.PLAIN_BLACK)
@@ -255,7 +255,8 @@ class CategoryWindow(tk.Toplevel):
         """Refresh the category list and optionally select the most recent category."""
         self.category_tree.delete(*self.category_tree.get_children())
         categories_with_dates = self.category_manager.get_all_categories_with_dates()
-        
+        categories_with_dates.sort(key=lambda x: x[1], reverse=True)
+
         items = []
         for category, _ in categories_with_dates:
             files = self.category_manager.get_category_files(category)
@@ -264,19 +265,19 @@ class CategoryWindow(tk.Toplevel):
                 for file in self.files:
                     if self.category_manager.is_file_in_category(category, file):
                         files_in_category += 1
-                        
+
             if not self.files:
-                status = "—"  # Em dash for empty state
+                status = "—"
             elif files_in_category == 0:
                 status = "None"
             elif files_in_category == len(self.files):
                 status = "All"
             else:
                 status = f"{files_in_category}/{len(self.files)}"
-                
+
             item_id = self.category_tree.insert("", tk.END, values=(category, str(len(files)), status))
             items.append(item_id)
-            
+
         if select_recent and items:
             self.category_tree.selection_set(items[0])
             self.category_tree.see(items[0])
@@ -290,24 +291,22 @@ class CategoryWindow(tk.Toplevel):
             category = self.category_tree.item(selection[0])['values'][0]
             self.selected_category = category
             files = self.category_manager.get_category_files(category)
-            
-            selected_files_in_category = []
-            if self.files:
-                selected_files_in_category = [f for f in self.files if self.category_manager.is_file_in_category(category, f)]
-            
+
+            # Batch load all categories for all files in this category
+            file_categories_map = {f: set(self.category_manager.get_categories_of_files(f)) for f in files}
+            selected_files_in_category = set(self.files) if self.files else set()
+
             for file in sorted(files):
                 filename = file.split('\\')[-1]
-                categories = self.category_manager.get_categories_of_files(file)
+                categories = file_categories_map[file].copy()
                 if category in categories:
                     categories.remove(category)
-                    
                 if not categories:
                     categories_text = ""
                 elif len(categories) <= 2:
                     categories_text = ", ".join(categories)
                 else:
-                    categories_text = f"{categories[0]}, {categories[1]} +{len(categories)-2}"
-                
+                    categories_text = f"{list(categories)[0]}, {list(categories)[1]} +{len(categories)-2}"
                 item_id = self.files_tree.insert("", tk.END, values=(filename, categories_text, file))
                 if file in selected_files_in_category:
                     self.files_tree.item(item_id, tags=('in_category',))
@@ -340,7 +339,7 @@ class CategoryWindow(tk.Toplevel):
                 showinfo(self, "Info", f"All {already_exists_count} files already exist in this category.")
         
         self.new_category_entry.delete(0, tk.END)
-        self.refresh_categories()
+        self.refresh_categories(select_recent=True)
 
     def rename_category(self):
         """Rename selected category."""
@@ -415,7 +414,8 @@ class CategoryWindow(tk.Toplevel):
             
             if removed_count > 0:
                 showinfo(self, "Success", 
-                    f"Removed {removed_count} file{'s' if removed_count > 1 else ''} from category '{category}'")
+                    f"Removed {removed_count} file{'s' if removed_count > 1 else ''} from category '{category}'"
+                )
                 self.refresh_categories()
                 self.on_category_select()
             else:
@@ -428,4 +428,4 @@ class CategoryWindow(tk.Toplevel):
         height = self.winfo_height()
         x = (self.winfo_screenwidth() // 2) - (width // 2)
         y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}') 
+        self.geometry(f'{width}x{height}+{x}+{y}')
