@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## **Version [3.5.0]** **2025-06-29**
+
+### Added
+- Subtitle support in videos, including speed management and dedicated keybindings.
+- Video Snippets feature: mark start/end points and trim snippets directly in the videoplayer.
+- **snippets_manager** module to manage trimmed video snippets in a dedicated folder.
+- New constants for Video Snippets folder and CSV in *`player_constants.py`*.
+- Playback speeds for 1.25x and 1.75x.
+- Keybinding to toggle Autoplay setting.
+- Messageboxes for filedialogs now appear on top of the parent window for better UX.
+
+### Changed
+- MediaPlayer now uses `Toplevel` instead of a separate `tk.Tk` instance, preventing crashes.
+- Added Always on Top Functionality for Mediaplayer, allowing user to work on the background while the Mediaplayer stays in place.
+- Improved error handling and media releasing in `release_current_media`, `play_next`, and `play_previous`.
+- Updated **Colors** class for consistent theme and increased max volume to 200 (as supported by python-vlc).
+- Modified volume bar to support new max volume.
+
+### Fixed
+- Autoplay settings now correctly update via keybinding.
+- Improved speed of `refresh_categories` and `on_category_select` methods for large file sets.
+
 ## **Version [3.4.0]** **2025-06-03**
 
 ### Added
