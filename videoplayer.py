@@ -4,9 +4,11 @@ import subprocess
 import threading
 import time
 import timeit
+import tkinter as tk
+
 from datetime import timedelta
 
-import tkinter as tk
+
 # from tkinter import messagebox  # Remove this import
 
 import vlc
@@ -31,7 +33,7 @@ from volume_bar import VolumeBar
 from watch_dictionary import WatchDict
 from watch_history_logger import WatchHistoryLogger
 from snippets_manager import SnippetsManager
-from custom_messagebox import showinfo, showwarning, showerror, askyesno  # Add this import
+from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno  # Add this import
 
 
 class MediaPlayerApp(tk.Toplevel):
@@ -46,8 +48,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
         self.snippets_manager = SnippetsManager()
 
-        self.bg_color = "black"
-        self.fg_color = "white"
+        self.bg_color = Colors.PLAIN_BLACK
+        self.fg_color = Colors.PLAIN_WHITE
         self.title("Media Player")
         self.geometry("1000x600")
         self.center_window()
@@ -133,6 +135,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.watched_videos = WatchDict()
         self.feedback_var = tk.StringVar()
         self.feedback_label = None 
+        self.subtitle_delay = 0  # in microseconds
+        self.subtitles_visible = True
         
         
         self._create_widgets()
@@ -337,10 +341,19 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind("<KeyPress-A>", self.toggle_autoplay)
         self.bind("<Alt-t>", self.toggle_always_on_top)
         self.bind("<Alt-T>", self.toggle_always_on_top)
-        self.bind('<KeyPress-S>', self.mark_start)
-        self.bind('<KeyPress-s>', self.mark_start)
-        self.bind('<KeyPress-E>', self.mark_end)
-        self.bind('<KeyPress-e>', self.mark_end)
+        self.bind('<Control-S>', self.mark_start)
+        self.bind('<Control-s>', self.mark_start)
+        self.bind('<Control-E>', self.mark_end)
+        self.bind('<Control-e>', self.mark_end)
+        self.bind('<Shift-b>', self.add_subtitle)
+        self.bind('<Shift-B>', self.add_subtitle)
+        self.bind('<KeyPress-B>', self.toggle_subtitles)
+        self.bind('<KeyPress-b>', self.toggle_subtitles)
+        self.bind('<KeyPress-,>', self.decrease_sub_delay)
+        self.bind('<KeyPress-.>', self.increase_sub_delay)
+        self.bind('<Control-b>', self.next_subtitle_track)
+        self.bind('<Control-B>', self.next_subtitle_track)
+
 
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
@@ -951,13 +964,12 @@ class MediaPlayerApp(tk.Toplevel):
                 self.reset_trim()
                 return
 
-            # Ask user: fast or accurate
+            # fast or accurate
             # choice = askquestion("Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
             # choice = askyesno(self, "Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
             # fast_mode = (choice == 'yes')
             fast_mode = (True)
 
-            # Launch trimming thread
             threading.Thread(
                 target=self._trim_worker,
                 args=(start_ms, end_ms, fast_mode),
@@ -980,7 +992,7 @@ class MediaPlayerApp(tk.Toplevel):
             duration_s = (end_ms - start_ms) / 1000.0
             base_name = os.path.splitext(os.path.basename(self.current_file))[0]
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            out_file = f"{base_name}_{self.seconds_to_hhmmss(start_s)}_to_{self.seconds_to_hhmmss(start_s+duration_s)}.mp4"
+            out_file = f"{base_name[:100]}_{self.seconds_to_hhmmss(start_s)}_to_{self.seconds_to_hhmmss(start_s+duration_s)}.mp4"
             # out_file = f"{base_name}_{start_s}_to_{start_s+duration_s}.mp4"
             out_path = os.path.join(VIDEO_SNIPPETS_FOLDER, out_file)
 
@@ -1015,7 +1027,7 @@ class MediaPlayerApp(tk.Toplevel):
                 total_duration_s=duration_s,
                 resolution=self.get_video_resolution(),
                 file_size=os.path.getsize(out_path),
-                video_format=os.path.splitext(out_path)[1][1:],  # e.g., 'mp4'
+                video_format=os.path.splitext(out_path)[1][1:],
                 notes=""
             )
         except FileNotFoundError:
@@ -1027,6 +1039,86 @@ class MediaPlayerApp(tk.Toplevel):
             self.logger.error_logs(f"Unexpected error during trimming: {e}")
             showerror(self, "Trim Error", f"Unexpected error:\n{e}")
 
+    def increase_sub_delay(self, event=None):
+        self.subtitle_delay += 50_000  # 0.05 seconds
+        self.media_player.video_set_spu_delay(self.subtitle_delay)
+        print(f"Subtitle delay: +{self.subtitle_delay / 1_000_000:.3f}s")
+        self.show_marquee(f"Subtitle delay: +{self.subtitle_delay / 1_000_000:.3f}s")
+
+    def decrease_sub_delay(self, event=None):
+        self.subtitle_delay -= 50_000
+        self.media_player.video_set_spu_delay(self.subtitle_delay)
+        print(f"Subtitle delay: {self.subtitle_delay / 1_000_000:.3f}s")
+        self.show_marquee(f"Subtitle delay: -{self.subtitle_delay / 1_000_000:.3f}s")
+
+
+    def toggle_subtitles(self, event=None):
+        if self.subtitles_visible:
+            self.media_player.video_set_spu(-1)
+            print("Subtitles hidden")
+        else:
+            track_list = self.media_player.video_get_spu_description()
+            if track_list:
+                for (id, name) in track_list:
+                    if id != -1:
+                        self.media_player.video_set_spu(id)
+                        print(f"Subtitles shown: {name}")
+                        break
+            else:
+                print("No subtitle tracks available to show")
+        self.subtitles_visible = not self.subtitles_visible
+
+    def add_subtitle(self, event=None):
+        from pathlib import Path
+
+        def path_to_uri(path):
+            return Path(path).absolute().as_uri()
+        
+        if not self.current_file:
+            showwarning("Warning", "Please open a media file first!")
+            return
+            
+        current_folder = os.path.dirname(self.current_file)
+
+        subtitle_file = askopenfilename(
+            parent=self,
+            title="Select Subtitle File",
+            initialdir=current_folder, 
+            filetypes=[
+                ("Subtitle files", "*.srt *.vtt *.ass *.ssa *.sub"),
+                ("All files", "*.*")
+            ]
+        )
+        
+        if subtitle_file:
+            try:
+                print(subtitle_file)
+                self.media_player.add_slave(0, path_to_uri(subtitle_file), True)
+                filename = os.path.basename(subtitle_file)
+                showinfo(self, "Success", f"Subtitle loaded: {filename}")
+            except Exception as e:
+                showerror(self, "Error", f"Failed to load subtitle: {str(e)}")
+    
+    def next_subtitle_track(self, event=None):
+        tracks = self.media_player.video_get_spu_description()
+        if not tracks:
+            print("No subtitles loaded.")
+            return
+
+        current = self.media_player.video_get_spu()
+        ids = [id for id, name in tracks if id != -1]
+
+        if current in ids:
+            current_index = ids.index(current)
+            next_index = (current_index + 1) % len(ids)
+        else:
+            next_index = 0
+
+        self.media_player.video_set_spu(ids[next_index])
+        print(f"Switched to subtitle: {tracks[next_index][1]}")
+        self.show_marquee(f"Subtitle: {tracks[next_index][1]}")
+    
+
 if __name__ == "__main__":
     # for testing purposes
     import sys
@@ -1034,4 +1126,6 @@ if __name__ == "__main__":
     dummy_video_files = ["sample1.mp4", "sample2.mkv", "sample3.avi"]
     app = MediaPlayerApp(video_files=dummy_video_files, random_select=False)
     app.play_video = lambda: None
+    # app.update_video_progress = lambda: None
+    app.update_video_progress()
     app.mainloop()
