@@ -2,8 +2,9 @@ import csv
 from datetime import datetime
 import os
 import re
-from player_constants import ALL_MEDIA_CSV, DELETE_FILES_CSV, FILES_FOLDER, FOLDER_LOGS, LOG_PATH
+from player_constants import ALL_MEDIA_CSV, DELETE_FILES_CSV, FILE_TRANSFER_LOG, FILES_FOLDER, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, SNIPPETS_HISTORY_CSV, WATCHED_HISTORY_LOG_PATH
 from logs_writer import LogManager
+from collections import defaultdict, deque
 
 logger = LogManager(LOG_PATH)
 
@@ -21,7 +22,14 @@ def create_csv_file(headers=None, filename="New_CSV.csv"):
     
     print(f"CSV file '{filename}' created with headers: {headers}")
 
-def normalise_path(path):
+def normalise_path(path) -> str:
+        """
+        Normalizes a file path to use backslashes '\' as separators instead of '/'.
+        Args:
+            path (str): The file path to normalize.
+        Returns:
+            str: The normalized file path with backslashes.
+        """
         return path.replace("/", "\\")
 
 def get_favs_folder():
@@ -138,7 +146,7 @@ def compare_folders(filepath, folderpath):
     
     # Compare the paths
     if file_directory == folderpath:
-        print("The folders match!")
+        # print("The folders match!")
         return True
     else:
         # print("The folders don't match!")
@@ -201,6 +209,22 @@ def gather_all_media():
         print(f"Error gathering all media: {e}")
         return None
 
+def seconds_to_hhmmss(seconds):
+        hours = int(seconds) // 3600
+        minutes = (int(seconds) % 3600) // 60
+        secs = int(seconds) % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+def convert_bytes(bytes_size):
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        index = 0
+        size = float(bytes_size)
+
+        while size >= 1024 and index < len(units) - 1:
+            size /= 1024
+            index += 1
+
+        return f"{size:.2f} {units[index]}"
 
 def open_in_default_app(file_path):
     """
@@ -242,3 +266,238 @@ def sort_treeview_column(treeview, col, reverse):
     for index, (val, k) in enumerate(data):
         treeview.move(k, '', index)
     treeview.heading(col, command=lambda: sort_treeview_column(treeview, col, not reverse))
+
+def get_screenshots_for_file(filename):
+    """
+    Returns a list of screenshot file paths for the given filename from the screenshots folder.
+    Screenshots are named as: screenshot_{filename}_<timestamp>.png
+    If no screenshots are found, returns an empty list.
+    Handles errors gracefully.
+    """
+    screenshots = []
+    if not filename:
+        print("No filename provided.")
+        return screenshots
+    try:
+        if not os.path.exists(SCREENSHOTS_FOLDER):
+            print(f"Screenshots folder does not exist: {SCREENSHOTS_FOLDER}")
+            return screenshots
+        for file in os.listdir(SCREENSHOTS_FOLDER):
+            if file.startswith(f"screenshot_{filename}_") and file.endswith(".png"):
+                screenshots.append(os.path.join(SCREENSHOTS_FOLDER, file))
+        if not screenshots:
+            print(f"No screenshots found for file: {filename}")
+        return screenshots
+    except Exception as e:
+        print(f"Error while getting screenshots for {filename}: {e}")
+        return []
+    
+def get_video_snippets_for_file(filename):
+    """
+    Returns a list of output file paths for video snippets that match the given original filename.
+    Args:
+        filename (str): The original video filename to match.
+        snippets_csv_path (str): Path to the snippets CSV file.
+    Returns:
+        List[str]: List of output file paths for the matching snippets.
+    """
+    snippets = []
+    if not filename or not os.path.exists(SNIPPETS_HISTORY_CSV):
+        print("Invalid filename or snippets CSV path.")
+        return snippets
+    try:
+        with open(SNIPPETS_HISTORY_CSV, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if row.get("Original File") == filename:
+                    output_file = row.get("Output File")
+                    if output_file:
+                        snippets.append(output_file)
+        if not snippets:
+            print(f"No video snippets found for file: {filename}")
+        return snippets
+    except Exception as e:
+        print(f"Error while getting video snippets for {filename}: {e}")
+        return []
+
+def get_file_transfer_history(file_path):
+    """
+    Given a file path, returns its previous path (if it was moved from somewhere),
+    its destination path (if it was moved to somewhere), and the current path.
+    Args:
+        file_path (str): The file path to look up.
+    Returns:
+        dict: {'previous': <previous_path or None>, 'current': <file_path>, 'destination': <destination_path or None>}
+    """
+    previous = None
+    destination = None
+    if not os.path.exists(FILE_TRANSFER_LOG):
+        print(f"Transfer log not found: {FILE_TRANSFER_LOG}")
+        return {'previous': None, 'current': normalise_path(file_path), 'destination': None}
+    try:
+        with open(FILE_TRANSFER_LOG, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                src = row.get("Source Path")
+                dst = row.get("Destination Path")
+                if src and os.path.normcase(src) == os.path.normcase(file_path):
+                    destination = dst
+                if dst and os.path.normcase(dst) == os.path.normcase(file_path):
+                    previous = src
+        return {
+            'previous': normalise_path(previous) if previous else None,
+            'current': normalise_path(file_path),
+            'destination': normalise_path(destination) if destination else None
+        }
+    except Exception as e:
+        print(f"Error reading transfer log: {e}")
+        return {'previous': None, 'current': normalise_path(file_path), 'destination': None}
+
+# def get_watch_stats_for_files(file_paths, by_filename=True):
+#     """
+#     Get aggregated watch stats for multiple file paths efficiently.
+    
+#     file_paths: list of file paths (full or filename)
+#     by_filename: whether to match only filename or full normalized path
+#     """
+#     if by_filename:
+#         targets = set(os.path.basename(fp).lower() for fp in file_paths)
+#     else:
+#         targets = set(normalise_path(fp) for fp in file_paths)
+
+#     watch_count = 0
+#     total_seconds = 0
+#     last_watched = None
+
+#     try:
+#         with open(WATCHED_HISTORY_LOG_PATH, newline='', encoding='utf-8') as f:
+#             reader = csv.DictReader(f)
+#             for row in reader:
+#                 if by_filename:
+#                     row_val = os.path.basename(row.get("File Name", "")).lower()
+#                 else:
+#                     row_val = normalise_path(row.get("File Name", ""))
+#                 if row_val in targets:
+#                     watch_count += 1
+#                     try:
+#                         total_seconds += calculate_duration_in_seconds(row.get("Duration Watched", "0:00.0"))
+#                     except Exception:
+#                         pass
+#                     try:
+#                         dt = datetime.strptime(row.get("Date Watched", ""), "%Y-%m-%d %H:%M:%S")
+#                         if not last_watched or dt > last_watched:
+#                             last_watched = dt
+#                     except Exception:
+#                         pass
+#     except Exception:
+#         pass
+
+#     return {
+#         "watch_count": watch_count,
+#         "total_seconds": total_seconds,
+#         "last_watched": last_watched.strftime("%Y-%m-%d %H:%M:%S") if last_watched else "Never"
+#     }
+
+def get_watch_stats_for_filenames(file_paths):
+    """
+    Efficiently get combined watch stats for a set of filenames
+    derived from related file paths.
+    Matches only by filename, not full path.
+    """
+    filenames = set(os.path.basename(p).lower() for p in file_paths)
+
+    watch_count = 0
+    total_seconds = 0
+    last_watched = None
+
+    try:
+        with open(WATCHED_HISTORY_LOG_PATH, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row_filename = os.path.basename(row.get("File Name", "")).lower()
+                if row_filename in filenames:
+                    watch_count += 1
+
+                    try:
+                        total_seconds += calculate_duration_in_seconds(row.get("Duration Watched", "0:00.0"))
+                    except Exception:
+                        pass
+
+                    try:
+                        dt = datetime.strptime(row.get("Date Watched", ""), "%Y-%m-%d %H:%M:%S")
+                        if not last_watched or dt > last_watched:
+                            last_watched = dt
+                    except Exception:
+                        pass
+    except Exception as e:
+        print("Error reading watch log:", e)
+
+    return {
+        "watch_count": watch_count,
+        "total_seconds": total_seconds,
+        "last_watched": last_watched.strftime("%Y-%m-%d %H:%M:%S") if last_watched else "Never"
+    }
+
+
+
+def calculate_duration_in_seconds(duration_str):
+        """
+        Convert a duration string (e.g., '00:10.8' or '00:00:10.8') to seconds.
+        """
+        if '.' in duration_str:
+            duration_parts = duration_str.split('.')
+            if ':' in duration_parts[0]:
+                # case for format HH:MM:SS.microseconds
+                time_part = datetime.strptime(duration_parts[0], '%H:%M:%S')
+            else:
+                # case for format MM:SS.microseconds
+                time_part = datetime.strptime(duration_parts[0], '%M:%S')
+            
+            seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second + float(f"0.{duration_parts[1]}")
+        else:
+            if ':' in duration_str:
+                # case for format HH:MM:SS
+                time_part = datetime.strptime(duration_str, '%H:%M:%S')
+            else:
+                # case for format MM:SS
+                time_part = datetime.strptime(duration_str, '%M:%S')
+            
+            seconds = time_part.hour * 3600 + time_part.minute * 60 + time_part.second
+        
+        return seconds
+
+
+def get_all_related_paths(target_path):
+    graph = defaultdict(set)
+    
+    with open(FILE_TRANSFER_LOG, newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            src = normalise_path(row['Source Path'])
+            dst = normalise_path(row['Destination Path'])
+            graph[src].add(dst)
+            graph[dst].add(src)
+
+    target_path = normalise_path(target_path)
+    visited = set()
+    queue = deque([target_path])
+    related_paths = []
+
+    while queue:
+        path = queue.popleft()
+        if path not in visited:
+            visited.add(path)
+            related_paths.append(path)
+            queue.extend(graph[path] - visited)
+
+    return sorted(related_paths)
+
+
+if __name__ == "__main__":
+    print("Static methods module loaded successfully.")
+    filepath_to_search = r"sample.mp4"
+    all_paths = get_all_related_paths(filepath_to_search)
+
+    print("All known paths for the file:")
+    for p in all_paths:
+        print(p)
