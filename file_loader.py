@@ -99,6 +99,7 @@ class VideoFileLoader:
             # for folder in folders_without_csv:
             csv_files = []
             for folder in folder_paths:
+                folder = self.ensure_trailing_backslash(folder)
                 stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False)
                 # testing_csv_path = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{os.path.basename(folder)}.csv")
                 testing_csv_path = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv")
@@ -120,6 +121,7 @@ class VideoFileLoader:
         """
         try:
             for folder in folder_paths:
+                folder = self.ensure_trailing_backslash(folder)
                 csv_file = os.path.join(self.csv_folder, CSV_FOLDER, f"Testing_{self.hash_string(folder, hash_length=32)}.csv")
                 stats = filestatser.FileStatsCollector(folder, self.video_extensions, all_files=False, skip_folders=SKIP_FOLDERS)
                 stats.generate_file_stats_csv(csv_path=csv_file)
@@ -245,7 +247,7 @@ class VideoFileLoader:
                 continue
         return video_files
     
-    def ensure_trailing_backslash(self, path):
+    def ensure_trailing_backslash(self, path) -> str:
         """Ensure the path ends with a backslash if it's a directory."""
         if path and not path.endswith("\\"):
             return path + "\\"
