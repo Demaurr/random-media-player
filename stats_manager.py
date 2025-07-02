@@ -113,6 +113,7 @@ class VideoStatsManager:
             writer.writeheader()
             writer.writerows(rows)
         if deleted:
+            logger.update_logs("[STATS DELETED]", file_path)
             self.stats.pop((normalise_path(file_path), str(file_size)), None)
         return deleted
 
@@ -131,6 +132,58 @@ class VideoStatsManager:
             if row.get("Orientation") == "Horizontal":
                 horizontal.append(row["File Path"])
         return horizontal
+
+    def refresh_stats(self, file_path, file_size=None):
+        """
+        Refresh the stats for a given file_path (and optional file_size).
+        Deletes the old stats and adds new stats for the file.
+        Returns True if refreshed, False if not found or failed.
+        """
+        file_path = normalise_path(file_path)
+
+        if not os.path.exists(file_path):
+            return False
+        
+        if file_size is None:
+            file_size = str(os.path.getsize(file_path))
+        else:
+            file_size = str(file_size)
+
+        self.delete_stat(file_path, file_size)
+        return self.add_stats(file_path, file_size)
+
+    def add_stats(self, file_path, file_size=None):
+        """
+        Add stats for a single file given its file_path (and optional file_size).
+        If file_size is not provided, it will be determined automatically.
+        Returns True if added, False if already exists or failed.
+        """
+        file_path = normalise_path(file_path)
+        if not os.path.exists(file_path):
+            return False
+        if file_size is None:
+            file_size = str(os.path.getsize(file_path))
+        else:
+            file_size = str(file_size)
+        key = (file_path, file_size)
+        if key in self.stats:
+            print(f"Stats already exist for this file: {file_path}")
+            return False
+        # print(f"Processing file: {file_path}")
+        result = self.processor.process_videos([file_path])
+        if not result or not result[0]:
+            return False 
+
+        new_row = result[0]
+        with open(self.stats_csv, "a", newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=self.STATS_HEADER)
+            if os.stat(self.stats_csv).st_size == 0:
+                writer.writeheader()
+            writer.writerow(new_row)
+        self.stats[key] = new_row
+        logger.update_logs("[STATS ADDED]",file_path)
+        print(f"[Processed Stats] {file_path}")
+        return True
 
 if __name__ == "__main__":
     manager = VideoStatsManager()
