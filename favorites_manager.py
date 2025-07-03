@@ -14,6 +14,7 @@ class FavoritesManager:
         self._ensure_favorites_csv()
         self.logger = LogManager(LOG_PATH)
         self.total_size = 0.0
+        self._hash_cache = None  # Add a cache for hashes
 
     def _ensure_favorites_csv(self):
         create_csv_file(["Hash", "Video Name", "Source Path", "Date Added"], self.fav_csv)
@@ -26,6 +27,28 @@ class FavoritesManager:
         hasher.update(input_bytes)
         hashed_string = hasher.hexdigest()
         return hashed_string[:hash_length]
+
+    def _load_hash_cache(self):
+        """Load all hashes from the CSV into a set for fast lookup."""
+        self._hash_cache = set()
+        try:
+            with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    self._hash_cache.add(row["Hash"])
+        except FileNotFoundError:
+            pass
+
+    def check_favorites(self, current_file):
+        """Checks if the given file is already in the favorites."""
+        if not current_file:
+            return False
+        video_name = os.path.basename(current_file)
+        source_path = os.path.dirname(current_file)
+        hash_value = self.hash_string(video_name + source_path)
+        if self._hash_cache is None:
+            self._load_hash_cache()
+        return hash_value in self._hash_cache
 
     def add_to_favorites(self, current_file):
         """Adds the currently playing video to favorites and writes data to CSV."""
@@ -44,21 +67,9 @@ class FavoritesManager:
                 writer.writerow({"Hash": hashed_string, "Video Name": video_name, "Source Path": source_path, "Date Added": date_added})
                 print(f"ADDED {current_file} to Favorites\n")
                 self.logger.update_logs(f"[FAVORITES ADDED]", current_file)
+            if self._hash_cache is not None:
+                self._hash_cache.add(hashed_string)
             return True
-        return False
-
-    def check_favorites(self, current_file):
-        """Checks if the given file is already in the favorites."""
-        if not current_file:
-            return False
-        video_name = os.path.basename(current_file)
-        source_path = os.path.dirname(current_file)
-        hash_value = self.hash_string(video_name + source_path)
-        with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                if row["Hash"] == hash_value:
-                    return True
         return False
 
     def delete_from_favorites(self, current_file):
@@ -81,6 +92,8 @@ class FavoritesManager:
             os.replace(temp_csv, self.fav_csv)
             print(f"REMOVED {current_file} from Favorites.\n")
             self.logger.update_logs(f"[FAVORITES REMOVED]", current_file)
+            if self._hash_cache is not None:
+                self._hash_cache.discard(hash_value)
             return True
         return False
 
