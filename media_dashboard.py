@@ -6,7 +6,7 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from player_constants import DEMO_WATCHED_HISTORY
-from static_methods import sort_treeview_column
+from static_methods import normalise_path, sort_treeview_column
 from category_manager import CategoryManager
 
 plt.style.use('dark_background')
@@ -172,7 +172,7 @@ class DashboardWindow():
         # Video name/folder
         if COL_FILE_NAME in df.columns:
             df["video_name"] = df[COL_FILE_NAME].apply(lambda x: os.path.basename(x) if isinstance(x, str) else "Unknown")
-            df["primary_folder"] = df[COL_FILE_NAME].apply(lambda x: os.path.dirname(x) if isinstance(x, str) else "Unknown")
+            df["primary_folder"] = df[COL_FILE_NAME].apply(lambda x: os.path.dirname(normalise_path(x)) if isinstance(x, str) else "Unknown")
 
         # --- Stats ---
         total_duration = df[COL_TOTAL_DURATION].sum() if COL_TOTAL_DURATION in df.columns else pd.Timedelta(0)

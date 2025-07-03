@@ -11,9 +11,9 @@ import shutil
 from custom_messagebox import showinfo, showwarning, showerror, askyesno
 
 class DeletionManager:
-    def __init__(self):
+    def __init__(self, fav_manager=None):
         self.delete_csv = DELETE_FILES_CSV  
-        self.fav_manager = FavoritesManager(FAV_FILES) 
+        self.fav_manager = fav_manager or FavoritesManager(FAV_FILES) 
         self.logger = LogManager(LOG_PATH)
         self.parent_window = None
 
@@ -94,7 +94,8 @@ class DeletionManager:
             elif existing_status == "Deleted":
                 showinfo(self.parent_window, "Already Deleted", f"{video_file} is already deleted and cannot be undeleted.")
         else:
-            print(f"{video_file} is not in the deletion list.")
+            # print(f"{video_file} is not in the deletion list.")
+            pass
 
         self.write_csv_file(file_status_dict)
 
@@ -234,7 +235,8 @@ class DeletionManager:
             else:
                 print(f"{old_name} is not marked for deletion.")
         else:
-            print(f"{old_name} is not in the deletion list.")
+            # print(f"{old_name} is not in the deletion list.")
+            pass
         self.write_csv_file(file_status_dict)
 
     def refactor_csv(self):

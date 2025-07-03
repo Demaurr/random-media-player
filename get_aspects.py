@@ -9,7 +9,7 @@ class VideoProcessor:
     def __init__(self, video_files=None, max_workers=None):
         self.video_files = video_files or []
         self.logger = LogManager(STATS_LOG_PATH)
-        self.max_workers = max_workers or max(1, (os.cpu_count() or 4) - 3)
+        self.max_workers = max_workers or max(1, (os.cpu_count() or 4) - 4)
 
     def is_video_vertical(self, video_file):
         try:

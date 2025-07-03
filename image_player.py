@@ -142,7 +142,7 @@ class ImageViewer:
         image_name = os.path.basename(image_path)
         title_parts = []
         
-        title_parts.append(f"{image_name} [{self.current_index + 1}/{self.total_files}]")
+        title_parts.append(f"[{self.current_index + 1}/{self.total_files}] {image_name}")
         title_parts.append(f"Zoom: {zoom_level}%")
         
         if self.rotation_angle != 0:
