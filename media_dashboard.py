@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from player_constants import DEMO_WATCHED_HISTORY
 from static_methods import sort_treeview_column
+from category_manager import CategoryManager
 
 plt.style.use('dark_background')
 # sns.set_palette(sns.color_palette(["#e74c3c", "#44b300", "#ffffff", "#222222"]))
@@ -36,11 +37,12 @@ class ScrollableFrame(tk.Frame):
             self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
 class DashboardWindow():
-    def __init__(self, master=None, csv_path=DEMO_WATCHED_HISTORY):
+    def __init__(self, master=None, csv_path=DEMO_WATCHED_HISTORY, category_manager=None):
         self.master = master
         self.master.title("Media Consumption Statistics")
         self.master.configure(bg="black")
         self.csv_path = csv_path
+        self.category_manager = category_manager if category_manager else CategoryManager()
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Set window size and center it
@@ -109,6 +111,7 @@ class DashboardWindow():
         self.folder_scroll = ScrollableFrame(self.notebook)
         self.hour_scroll = ScrollableFrame(self.notebook)
         self.weekday_scroll = ScrollableFrame(self.notebook)
+        self.category_scroll = ScrollableFrame(self.notebook)
 
         self.month_scroll = ScrollableFrame(self.notebook)
         self.notebook.add(self.overview_scroll, text="Overview")
@@ -116,6 +119,7 @@ class DashboardWindow():
         self.notebook.add(self.hour_scroll, text="Hourly Consumption")
         self.notebook.add(self.weekday_scroll, text="Weekly Consumption")
         self.notebook.add(self.month_scroll, text="Monthly Consumption")
+        self.notebook.add(self.category_scroll, text="Category Analysis")
         style.configure(
             "dashboardStyle.Treeview.Heading",
             background="red",
@@ -188,12 +192,6 @@ class DashboardWindow():
             unique_videos = df["video_name"].nunique()
             info_items.append(("Rewatched Videos", str(rewatched)))
             info_items.append(("Unique Videos", str(unique_videos)))
-
-        # --- Top 10 Most Watched Videos by Count ---
-        # if "video_name" in df.columns and "primary_folder" in df.columns:
-        #     top_10_count = df.groupby(['video_name', 'primary_folder']).size().nlargest(10).reset_index(name='Count')
-        # else:
-        #     top_10_count = pd.DataFrame(columns=['video_name', 'primary_folder', 'Count'])
 
         # --- Top 10 Most Watched Videos by Duration ---
         if "video_name" in df.columns and COL_DURATION_WATCHED in df.columns:
@@ -292,6 +290,146 @@ class DashboardWindow():
         self._populate_hour_tab(df)
         self._populate_weekday_tab(df, weekday_counts, COL_TOTAL_DURATION)
         self._populate_monthly_tab(df)
+        self._populate_category_tab(df, self.category_manager)
+    
+    def _merge_categories(self, df, category_manager):
+        """
+        Returns a copy of df with a new column 'Category Name' (list of categories for each file).
+        If a file has multiple categories, they are joined with '; '.
+        """
+        file_to_categories = category_manager.file_to_categories
+        def get_cats(file_path):
+            cats = file_to_categories.get(file_path, [])
+            if isinstance(cats, set):
+                cats = list(cats)
+            return "; ".join(sorted(cats)) if cats else None
+
+        df = df.copy()
+        file_col = None
+        for col in df.columns:
+            if "File Name" in col:
+                file_col = col
+                break
+        if not file_col:
+            raise ValueError("No file path column found in DataFrame.")
+        df["Category Name"] = df[file_col].apply(get_cats)
+        return df
+    
+    def _populate_category_tab(self, df, category_manager):
+        """Populate the category tab with plots and tables."""
+        df = self._merge_categories(df, category_manager)
+        category_content = self.category_scroll.scrollable_frame
+        for widget in category_content.winfo_children():
+            widget.destroy()
+        left = tk.Frame(category_content, bg="black")
+        right = tk.Frame(category_content, bg="black")
+        left.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=20)
+        right.pack(side="right", fill="both", expand=True, padx=(5, 10), pady=20)
+        df_cat = df[df["Category Name"].notnull() & (df["Category Name"] != "")]
+
+        if not df_cat.empty:
+            from collections import Counter
+            all_cats = df_cat["Category Name"].str.split("; ").explode()
+            cat_counts = all_cats.value_counts().head(10)
+            fig1, ax1 = plt.subplots(figsize=(6.5, 3.3))
+            sns.barplot(y=cat_counts.index, x=cat_counts.values, ax=ax1, palette="mako")
+            ax1.set_title("Top 10 Categories by Watch Count", color="white")
+            ax1.set_xlabel("Watch Count", color="white")
+            ax1.set_ylabel("Category", color="white")
+            ax1.tick_params(axis='y', labelcolor="white")
+            ax1.tick_params(axis='x', labelcolor="white")
+            fig1.tight_layout()
+            self._embed_plot(left, fig1, 0)
+            if "Duration Watched" in df_cat.columns:
+                cat_duration = (
+                    df_cat.explode("Category Name")
+                    .groupby("Category Name")["Duration Watched"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .head(10)
+                )
+                fig2, ax2 = plt.subplots(figsize=(6.5, 3.3))
+                sns.barplot(
+                    y=cat_duration.index,
+                    x=cat_duration.values / pd.Timedelta(minutes=1),
+                    ax=ax2,
+                    palette="crest"
+                )
+                ax2.set_title("Top 10 Categories by Total Duration Watched", color="white")
+                ax2.set_xlabel("Total Duration Watched (minutes)", color="white")
+                ax2.set_ylabel("Category", color="white")
+                ax2.tick_params(axis='y', labelcolor="white")
+                ax2.tick_params(axis='x', labelcolor="white")
+                fig2.tight_layout()
+                self._embed_plot(left, fig2, 1)
+
+            if "video_name" in df_cat.columns:
+                cat_unique_videos = (
+                    df_cat.explode("Category Name")
+                    .groupby("Category Name")["video_name"]
+                    .nunique()
+                    .sort_values(ascending=False)
+                    .head(10)
+                )
+                fig3, ax3 = plt.subplots(figsize=(6.5, 3.3))
+                sns.barplot(
+                    y=cat_unique_videos.index,
+                    x=cat_unique_videos.values,
+                    ax=ax3,
+                    palette="flare"
+                )
+                ax3.set_title("Top 10 Categories by Unique Videos", color="white")
+                ax3.set_xlabel("Unique Videos", color="white")
+                ax3.set_ylabel("Category", color="white")
+                ax3.tick_params(axis='y', labelcolor="white")
+                ax3.tick_params(axis='x', labelcolor="white")
+                fig3.tight_layout()
+                self._embed_plot(left, fig3, 2)
+
+            total_videos = df["video_name"].nunique() if "video_name" in df.columns else len(df)
+            categorized_videos = df_cat["video_name"].nunique() if "video_name" in df_cat.columns else len(df_cat)
+            uncategorized_videos = total_videos - categorized_videos
+            pie_labels = ["Categorized", "Uncategorized"]
+            pie_sizes = [categorized_videos, uncategorized_videos]
+            fig4, ax4 = plt.subplots(figsize=(4.5, 3.3))
+            ax4.pie(
+                pie_sizes,
+                labels=pie_labels,
+                autopct='%1.1f%%',
+                startangle=140,
+                colors=["#44b300", "#e74c3c"],
+                textprops={'color':"white"}
+            )
+            ax4.set_title("Categorized vs. Uncategorized Videos", color="white")
+            fig4.tight_layout()
+            self._embed_plot(right, fig4, 0)
+
+            if "Duration Watched" in df_cat.columns:
+                cat_table = (
+                    df_cat.explode("Category Name")
+                    .groupby("Category Name")
+                    .agg(
+                        Count=("video_name", "count"),
+                        Unique_Videos=("video_name", "nunique"),
+                        Total_Duration=("Duration Watched", "sum")
+                    )
+                    .sort_values(by="Count", ascending=False)
+                )
+                cat_table["Total_Duration"] = cat_table["Total_Duration"].apply(lambda td: str(td))
+            else:
+                cat_table = (
+                    df_cat.explode("Category Name")
+                    .groupby("Category Name")
+                    .agg(
+                        Count=("video_name", "count"),
+                        Unique_Videos=("video_name", "nunique")
+                    )
+                    .sort_values(by="Count", ascending=False)
+                )
+            self._make_table(right, cat_table.reset_index(), "Category Summary", 1, "#44b300", table_height=8)
+        else:
+            tk.Label(left, text="No category data available.", bg="black", fg="#e74c3c", font=("Segoe UI", 14)).pack(pady=40)
+            tk.Label(right, text="No category data available.", bg="black", fg="#e74c3c", font=("Segoe UI", 14)).pack(pady=40)
 
     def _populate_hour_tab(self, df):
         """Populate the hour tab with plots and tables."""
@@ -444,6 +582,12 @@ class DashboardWindow():
             tk.Label(left, text="No monthly data.", bg="black", fg="#e74c3c", font=("Segoe UI", 12)).pack(pady=10)
             tk.Label(right, text="No monthly data.", bg="black", fg="#e74c3c", font=("Segoe UI", 12)).pack(pady=10)
 
+    def _shorten_folder_name(self, folder, max_len=35, head=15, tail=15):
+        """Shorten long folder names for display."""
+        if len(folder) > max_len:
+            return folder[:head] + "..." + folder[-tail:]
+        return folder
+
     def _populate_folder_tab(self, df):
         """Populate the folder tab with plots and tables."""
         folder_content = self.folder_scroll.scrollable_frame
@@ -456,8 +600,9 @@ class DashboardWindow():
 
         if "primary_folder" in df.columns:
             folder_counts = df["primary_folder"].value_counts().head(10)
-            fig, ax = plt.subplots(figsize=(8, 4))
-            sns.barplot(y=folder_counts.index, x=folder_counts.values, ax=ax, palette=["#e74c3c"])
+            short_labels = [self._shorten_folder_name(f) for f in folder_counts.index]
+            fig, ax = plt.subplots(figsize=(7, 3.3))
+            sns.barplot(y=short_labels, x=folder_counts.values, ax=ax, palette=["#e74c3c"])
             ax.set_title("Top 10 Most Watched Folders", color="white")
             ax.set_xlabel("Watch Count", color="white")
             ax.set_ylabel("Folder", color="white")
@@ -465,6 +610,24 @@ class DashboardWindow():
             ax.tick_params(axis='x', labelcolor="white")
             fig.tight_layout()
             self._embed_plot(folder_right, fig, 0)
+
+            if "Total Duration" in df.columns:
+                folder_duration = df.groupby("primary_folder")["Duration Watched"].sum().sort_values(ascending=False).head(10)
+                short_labels_dur = [self._shorten_folder_name(f) for f in folder_duration.index]
+                fig_dur, ax_dur = plt.subplots(figsize=(7, 3.3))
+                sns.barplot(
+                    y=short_labels_dur,
+                    x=folder_duration.values / pd.Timedelta(minutes=1),  # Convert to minutes
+                    ax=ax_dur,
+                    palette=["#44b300"]
+                )
+                ax_dur.set_title("Top 10 Folders by Duration Watched", color="white")
+                ax_dur.set_xlabel("Total Duration Watched (minutes)", color="white")
+                ax_dur.set_ylabel("Folder", color="white")
+                ax_dur.tick_params(axis='y', labelcolor="white")
+                ax_dur.tick_params(axis='x', labelcolor="white")
+                fig_dur.tight_layout()
+                self._embed_plot(folder_right, fig_dur, 1)
             
             if "Total Duration" in df.columns:
                 folder_duration = df.groupby("primary_folder")["Total Duration"].sum().reindex(folder_counts.index).fillna(pd.Timedelta(0))
@@ -484,7 +647,7 @@ class DashboardWindow():
                     df.groupby("video_name")["Duration Watched"]
                     .agg(['count', 'sum'])
                     .sort_values(by='count', ascending=False)
-                    .head(50)
+                    .head(100)
                     .reset_index()
                 )
                 video_stats.rename(
@@ -702,7 +865,7 @@ class DashboardWindow():
         for col in cols:
             tree.heading(col, text=col,
                 command=lambda: sort_treeview_column(tree, col, False))
-            tree.column(col, anchor="center")
+            tree.column(col, anchor="w", stretch=True, width=175)
         for _, rowdata in df.iterrows():
             tree.insert('', 'end', values=tuple(rowdata))
         tree.grid(row=row*2+1, column=0, sticky="ew", padx=10, pady=5)
