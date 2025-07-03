@@ -65,6 +65,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.segment_prev = 0
         self.autoplay = True
         self.trim_start = None
+        self.loop_video = False
         # self.input_path = None
 
         self.random_select = random_select
@@ -160,8 +161,11 @@ class MediaPlayerApp(tk.Toplevel):
             self.video_index += 1
 
     def _on_video_end(self, event):
-        # Schedule play_next on the main thread
-        if self.autoplay:
+        # Schedule play_next or loop on the main thread
+        if self.loop_video:
+            self.after(50, self.stop)
+            self.after(200, self.play_video)
+        elif self.autoplay:
             # self.current_media.release()
             self.after(200, self.play_next)
 
@@ -238,14 +242,19 @@ class MediaPlayerApp(tk.Toplevel):
         style_btn(self.category_button, "purple", "white", "#4B0082")
 
         self.autoplay_button = tk.Button(
-            control_frame, text="Autoplay: ON", command=self.toggle_autoplay
+            control_frame, text="Auto: ON", command=self.toggle_autoplay
         )
-        style_btn(self.autoplay_button, "#2196F3", "white", "#1565C0")
+        style_btn(self.autoplay_button, "#00C853", "white", "#1565C0")
+
+        self.loop_button = tk.Button(
+            control_frame, text="⟲", command=self.toggle_loop
+        )
+        style_btn(self.loop_button, "#000000", "white", "#37474F")
 
         for btn in [
             self.current_stats_button, self.prev_button, self.rewind_button,
             self.play_button, self.pause_button, self.fast_forward_button,
-            self.next_button, self.category_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
+            self.next_button, self.category_button, self.autoplay_button, self.loop_button
         ]:
             btn.pack(side=tk.LEFT, padx=3, pady=2)
 
@@ -282,8 +291,10 @@ class MediaPlayerApp(tk.Toplevel):
                 e.widget.config(bg="black")
             elif "Pause" in txt or "Resume" in txt:
                 e.widget.config(bg="#FF9800")
-            elif "Autoplay" in txt:
-                e.widget.config(bg="#2196F3")
+            elif "Auto" in txt:
+                e.widget.config(bg="#00C853") if self.autoplay else e.widget.config(bg="#000000")
+            elif "⟲" in txt:
+                e.widget.config(bg="#000000") if not self.loop_video else e.widget.config(bg="#00C853")
             elif "☰" in txt:
                 e.widget.config(bg="purple")
             else:
@@ -292,7 +303,7 @@ class MediaPlayerApp(tk.Toplevel):
         for btn in [
             self.current_stats_button, self.category_button, self.prev_button, self.rewind_button,
             self.play_button, self.pause_button, self.fast_forward_button,
-            self.next_button, self.autoplay_button # , self.add_to_favorites_button, self.remove_from_favorites_button
+            self.next_button, self.autoplay_button, self.loop_button
         ]:
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
@@ -301,10 +312,18 @@ class MediaPlayerApp(tk.Toplevel):
         """Toggle the autoplay setting."""
         self.autoplay = not self.autoplay
         self.autoplay_button.config(
-            text=f"Autoplay: {'ON' if self.autoplay else 'OFF'}",
-            bg="#2196F3" if self.autoplay else "#757575"
+            text=f"Auto: {'ON' if self.autoplay else 'OFF'}",
+            bg="#00C853" if self.autoplay else "#000000"
         )
         self.show_marquee("Autoplay is ON" if self.autoplay else "Autoplay is OFF")
+
+    def toggle_loop(self, event=None):
+        self.loop_video = not self.loop_video
+        if self.loop_video:
+            self.loop_button.config(bg="#00C853")
+        else:
+            self.loop_button.config(bg="#000000")
+        self.show_marquee("Looping is ON" if self.loop_video else "Looping is OFF")
 
     def _keybinding(self):
         """
@@ -353,6 +372,9 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind('<KeyPress-.>', self.increase_sub_delay)
         self.bind('<Control-b>', self.next_subtitle_track)
         self.bind('<Control-B>', self.next_subtitle_track)
+        self.bind('<KeyPress-l>', self.toggle_loop)
+        self.bind('<KeyPress-L>', self.toggle_loop)
+
 
 
     def _on_video_loaded(self, title):
@@ -448,7 +470,7 @@ class MediaPlayerApp(tk.Toplevel):
         """Toggle the visibility of all control buttons and progress bars."""
         widgets_with_default_padding = [self.current_stats_button, self.prev_button, self.rewind_button, self.play_button,
                                         self.pause_button, self.fast_forward_button, self.next_button,
-                                          self.category_button, self.autoplay_button]
+                                          self.category_button, self.autoplay_button, self.loop_button]
         widgets_with_custom_padding = [self.time_label, self.progress_bar, self.volume_bar]
 
         if visibility:
@@ -652,6 +674,7 @@ class MediaPlayerApp(tk.Toplevel):
             self.random_select = False
             current_index = self.video_files.index(self.current_file)
             self.video_index = current_index + 1 if current_index < len(self.video_files) else 0
+            # self.after(50, self.play_next)
             self.play_next()
             self.random_select = True
         else:
@@ -684,7 +707,7 @@ class MediaPlayerApp(tk.Toplevel):
                     #     self.media_player.release()
                     time.sleep(0.3)
                 if os.path.exists(self.current_file):
-                    title = self.current_file.split("\\")[-1] + f" [{self.video_files.index(self.current_file)} / {len(self.video_files)}]"
+                    title = f"[{self.video_files.index(self.current_file)} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
