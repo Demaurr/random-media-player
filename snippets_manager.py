@@ -64,10 +64,30 @@ class SnippetsManager:
 
     def update_snippet(self, output_file, **updates):
         snippet = self.get_snippet_by_output_file(output_file)
+        if not snippet:
+            return False
+
+        if "Output File" in updates:
+            self.logger.update_logs("[WARNING]", f"Cannot update 'Output File'. Use rename_output_file() instead.")
+            print("[WARNING] 'Output File' cannot be updated directly. Use rename_output_file().")
+            updates.pop("Output File")
+
+        valid_updates = {k: v for k, v in updates.items() if k in self.headers}
+        snippet.update(valid_updates)
+        self._save_snippets()
+        self.logger.update_logs("[SNIPPET UPDATED]", f"Updated snippet: {output_file}")
+        return True
+    
+    def rename_snippet_file(self, old_output_file, new_output_file):
+        if self.get_snippet_by_output_file(new_output_file):
+            self.logger.error_logs(f"Snippet name already exists: {new_output_file}")
+            return False
+
+        snippet = self.get_snippet_by_output_file(old_output_file)
         if snippet:
-            snippet.update({k: v for k, v in updates.items() if k in self.headers})
+            snippet["Output File"] = new_output_file
             self._save_snippets()
-            self.logger.update_logs("[SNIPPET UPDATED]", f"Updated snippet: {output_file}")
+            self.logger.update_logs("[SNIPPET RENAMED]", f"{old_output_file} → {new_output_file}")
             return True
         return False
 
