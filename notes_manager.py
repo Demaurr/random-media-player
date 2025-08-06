@@ -181,6 +181,42 @@ class NotesManager:
                 results.append((key, data))
         return results
 
+    def search_notes_by_keys(self, query, allowed_keys, match_threshold=0.6):
+        """
+        Search for a query inside notes, tags, mood, context, or key,
+        but only within the given list of allowed file keys.
+        Uses token-based partial matching: if enough words from the query appear, it's a match.
+        """
+        query_words = query.lower().split()
+        if not query_words:
+            return []
+
+        allowed_keys_set = set(allowed_keys)
+        results = []
+
+        for key, data in self.notes.items():
+            if key not in allowed_keys_set:
+                continue
+
+            # Combine searchable text fields
+            text_fields = [
+                data.get("note") or "",
+                " ".join(data.get("tags", [])),
+                data.get("mood") or "",
+                data.get("context") or "",
+                key
+            ]
+            combined_text = " ".join(text_fields).lower()
+
+            # Count how many query words appear in combined_text
+            match_count = sum(1 for word in query_words if word in combined_text)
+            match_ratio = match_count / len(query_words)
+
+            if match_ratio >= match_threshold:
+                results.append(key)
+
+        return results
+
     def get_notes_by_tag(self, tag):
         """Return all notes that have a specific tag."""
         tag = tag.lower()

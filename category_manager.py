@@ -144,3 +144,35 @@ class CategoryManager:
 
     def get_categories_of_files(self, file_path: str) -> list:
         return sorted(self.file_to_categories.get(file_path, []))
+
+    def search_categories_by_keys(self, query: str, allowed_keys: list[str] = None) -> list[str]:
+        """
+        Search for categories based on whether all words in the query appear
+        in either the category name or file paths (case-insensitive).
+        Optionally restrict search to allowed_keys.
+        """
+        if not query:
+            return []
+
+        words = query.lower().split()
+        allowed_keys_set = set(allowed_keys) if allowed_keys else None
+        results = set()
+
+        for category, file_paths in self.category_to_files.items():
+            category_lc = category.lower()
+
+            for file_path in file_paths:
+                if allowed_keys_set and file_path not in allowed_keys_set:
+                    continue
+
+                file_path_lc = file_path.lower()
+
+                # Combine searchable content
+                combined_text = f"{category_lc} {file_path_lc}"
+
+                if all(word in combined_text for word in words):
+                    results.add(file_path)
+                    # break  # Avoid duplicate checks for the same category
+
+        return sorted(results)
+
