@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 from datetime import datetime
 import os
@@ -492,12 +493,108 @@ def get_all_related_paths(target_path):
 
     return sorted(related_paths)
 
+def get_split_stats_by_folder(file_paths):
+    """
+    Given a list or tuple of file paths, returns a dict with folder as key and stats as value.
+    Stats include: number of files and total size in bytes for each folder.
+    Returns:
+        dict: {folder_path: {"file_count": int, "total_size": int, "files": [file1, ...]}}
+    """
+    from collections import defaultdict
+    folder_stats = defaultdict(lambda: {"file_count": 0, "total_size": 0, "files": []})
+    for path in file_paths:
+        folder = os.path.dirname(path)
+        try:
+            size = os.path.getsize(path)
+        except Exception:
+            size = 0
+        folder_stats[folder]["file_count"] += 1
+        folder_stats[folder]["total_size"] += size
+        folder_stats[folder]["files"].append(path)
+    return dict(folder_stats)
+
+def get_video_and_screenshots_map():
+    """
+    Efficiently maps video file paths to screenshot paths using threading and optimization.
+    Returns:
+        dict: {video_path: [screenshot_path1, screenshot_path2, ...]}
+    """
+    MAX_WORKERS = 2
+    video_to_screenshots = {}
+
+    if not os.path.exists(ALL_MEDIA_CSV):
+        print(f"CSV not found: {ALL_MEDIA_CSV}")
+        return video_to_screenshots
+
+    try:
+        with open(ALL_MEDIA_CSV, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            video_rows = [normalise_path(row["File Name"]) for row in reader if row.get("File Name")]
+
+        def process_video(video_path):
+            try:
+                filename = os.path.basename(video_path)
+                screenshots = get_screenshots_for_file(filename)
+                return (video_path, screenshots)
+            except Exception as e:
+                print(f"Error processing {video_path}: {e}")
+                return (video_path, [])
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_to_path = {executor.submit(process_video, path): path for path in video_rows}
+            for future in as_completed(future_to_path):
+                video_path, screenshots = future.result()
+                video_to_screenshots[video_path] = screenshots
+
+    except Exception as e:
+        print(f"Error reading {ALL_MEDIA_CSV}: {e}")
+
+    return video_to_screenshots
+
+def get_video_file_from_screenshot(screenshot_path):
+    """
+    Given a screenshot path, returns the original video file path(s) based on the naming pattern.
+    Pattern: screenshot_{filename}_{timestamp}.png
+    Returns:
+        List[str]: List of possible video file paths (with extension).
+    """
+    if not screenshot_path or not os.path.exists(screenshot_path):
+        return []
+
+    base = os.path.basename(screenshot_path)
+    if not base.startswith("screenshot_") or not base.endswith(".png"):
+        return []
+
+    middle = base[len("screenshot_"):-len(".png")]
+    parts = middle.rsplit("_", 1)
+    if len(parts) != 2:
+        return []
+
+    filename = parts[0]  
+    file_paths = []
+    try:
+        if os.path.exists(ALL_MEDIA_CSV):
+            with open(ALL_MEDIA_CSV, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    file_name = os.path.basename(row.get("File Name", ""))
+                    if file_name == filename:
+                        file_paths.append(normalise_path(row.get("File Name")))
+    except Exception as e:
+        print(f"Error searching for video file in CSV: {e}")
+
+    if not file_paths:
+        file_paths.append(filename)
+
+    return file_paths
 
 if __name__ == "__main__":
-    print("Static methods module loaded successfully.")
-    filepath_to_search = r"sample.mp4"
-    all_paths = get_all_related_paths(filepath_to_search)
+    # print("Static methods module loaded successfully.")
+    # filepath_to_search = r"sample.mp4"
+    # all_paths = get_all_related_paths(filepath_to_search)
 
-    print("All known paths for the file:")
-    for p in all_paths:
-        print(p)
+    # print("All known paths for the file:")
+    # for p in all_paths:
+    #     print(p)
+    # get_video_and_screenshots_map()
+    print()
