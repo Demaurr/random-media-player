@@ -8,9 +8,6 @@ import tkinter as tk
 
 from datetime import timedelta
 
-
-# from tkinter import messagebox  # Remove this import
-
 import vlc
 
 from category_manager import CategoryManager
@@ -18,6 +15,7 @@ from category_window import CategoryWindow
 from deletion_manager import DeletionManager
 from favorites_manager import FavoritesManager
 from logs_writer import LogManager
+from notes_window import NotesManagerGUI
 from player_constants import (
     FILES_FOLDER, 
     LOG_PATH, 
@@ -33,25 +31,31 @@ from volume_bar import VolumeBar
 from watch_dictionary import WatchDict
 from watch_history_logger import WatchHistoryLogger
 from snippets_manager import SnippetsManager
-from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno  # Add this import
+from notes_manager import NotesManager
+from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno
 
 
 class MediaPlayerApp(tk.Toplevel):
-    def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH, parent=None):
+    def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
+                  parent=None, category_manager=None, favorites_manager=None, deletion_manaager=None,
+                  notes_manager=None, snippets_manager=None):
         super().__init__(parent)
         self._get_history_csvfile(watch_history_csv)
-        self.favorites_manager = FavoritesManager()
+        self.favorites_manager = favorites_manager or FavoritesManager()
         self.logger = LogManager(LOG_PATH)
-        self.deleter = DeletionManager()
-        self.deleter.set_parent_window(self)  # Set parent window for message boxes
-        self.category_manager = CategoryManager()
+        self.deleter = deletion_manaager or DeletionManager(self.favorites_manager)
+        self.deleter.set_parent_window(self)
+        self.category_manager = category_manager or CategoryManager()
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
-        self.snippets_manager = SnippetsManager()
+        self.snippets_manager = snippets_manager or SnippetsManager()
+        self.notes_manager = notes_manager or NotesManager()
 
         self.bg_color = Colors.PLAIN_BLACK
         self.fg_color = Colors.PLAIN_WHITE
         self.title("Media Player")
         self.geometry("1000x600")
+        self.lift()
+        self.focus_force()
         self.center_window()
         self.configure(bg=self.bg_color)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -90,7 +94,7 @@ class MediaPlayerApp(tk.Toplevel):
         except FileNotFoundError:
             self.watch_history_csv = watch_history_csv
     
-    def _on_close(self):
+    def _on_close(self, event=None):
         self.session_end = timeit.default_timer()
         self.stop()  # Call the stop method when the window is closed
         # tk.Tk.quit(self)
@@ -132,13 +136,13 @@ class MediaPlayerApp(tk.Toplevel):
         self.playing_video = False
         self.video_paused = False
         self.session_start = None
+        self.minimized = False
         # self.watched_videos = {}
         self.watched_videos = WatchDict()
         self.feedback_var = tk.StringVar()
         self.feedback_label = None 
         self.subtitle_delay = 0  # in microseconds
         self.subtitles_visible = True
-        
         
         self._create_widgets()
         if self.random_select:
@@ -172,8 +176,20 @@ class MediaPlayerApp(tk.Toplevel):
 
     def _create_widgets(self):
         """Creates the GUI elements for the media player with improved style and responsiveness."""
-        self.media_canvas = tk.Canvas(self, bg="black", width=800, height=400, highlightthickness=0)
-        self.media_canvas.pack(pady=(5, 0), fill=tk.BOTH, expand=True)
+        self.drag_bar = tk.Frame(self, height=0, bg=Colors.PLAIN_BLACK, cursor="fleur", pady=0)
+        self.drag_bar.pack(fill=tk.X, side=tk.TOP)
+
+        # self.drag_label = tk.Label(self.drag_bar, text="---------", bg="#222", fg=Colors.PLAIN_WHITE, padx=0, pady=0)
+        # self.drag_label.pack(side=tk.TOP, fill=tk.X, padx=0, pady=0)
+
+        self.drag_bar.bind("<ButtonPress-1>", self._start_move)
+        self.drag_bar.bind("<ButtonRelease-1>", self._stop_move)
+        self.drag_bar.bind("<B1-Motion>", self._do_move)
+        # self.drag_label.pack_forget()
+        # self.drag_bar.pack_forget()
+
+        self.media_canvas = tk.Canvas(self, bg="black", width=900, height=400, highlightthickness=0)
+        self.media_canvas.pack(pady=(0, 0), fill=tk.BOTH, expand=True)
 
         control_frame = tk.Frame(self, bg="black")
         control_frame.pack(pady=(5, 0), fill=tk.X)
@@ -308,6 +324,28 @@ class MediaPlayerApp(tk.Toplevel):
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
 
+    def _start_move(self, event=None):
+        self._drag_last_x = event.x_root
+        self._drag_last_y = event.y_root
+
+    def _stop_move(self, event=None):
+        # self.drag_bar.config(bg=Colors.PLAIN_BLACK)
+        # self.drag_label.pack_forget()
+        self._drag_last_x = None
+        self._drag_last_y = None
+
+    def _do_move(self, event=None):
+        if getattr(self, "_drag_last_x", None) is None:
+            return
+        # self.drag_bar.config(bg=Colors.HEADER_COLOR_RED)
+        # self.drag_label.pack(side=tk.LEFT, padx=3)
+        dx = event.x_root - self._drag_last_x
+        dy = event.y_root - self._drag_last_y
+        self.geometry(f"+{self.winfo_x() + dx}+{self.winfo_y() + dy}")
+        self._drag_last_x = event.x_root
+        self._drag_last_y = event.y_root
+
+
     def toggle_autoplay(self, event=None):
         """Toggle the autoplay setting."""
         self.autoplay = not self.autoplay
@@ -317,6 +355,46 @@ class MediaPlayerApp(tk.Toplevel):
         )
         self.show_marquee("Autoplay is ON" if self.autoplay else "Autoplay is OFF")
 
+    def toggle_always_on_top(self, event=None):
+        """Toggle whether the window stays on top of other windows."""
+        is_on_top = self.attributes("-topmost")
+        self.attributes("-topmost", not is_on_top)
+        # self.drag_label.pack(side=tk.LEFT, padx=0, pady=0)
+        # self.drag_bar.config(height=5 if not is_on_top else 0)
+        if not is_on_top:
+            self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED)
+        else:
+            self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK)
+        
+        self.toggle_shorten_window(event=event)
+        self.show_marquee("Always on top: " + ("ON" if not is_on_top else "OFF"))
+
+    def toggle_shorten_window(self, event=None):
+        if not self.minimized:
+            if self.attributes("-fullscreen"):
+                self.attributes("-fullscreen", False)
+                self.update_idletasks()
+            self.prev_geometry = self.geometry()
+            self.toggle_controls_visibility(False)
+
+            self.overrideredirect(True)
+
+            screen_width = self.winfo_screenwidth()
+            new_width, new_height = 450, 270
+            x = screen_width - (new_width + 20)
+            y = 35
+            self.geometry(f"{new_width}x{new_height}+{x}+{y}")
+
+            self.minimized = True
+        else:
+            self.overrideredirect(False)
+            if self.prev_geometry:
+                self.geometry(self.prev_geometry)
+            self.toggle_controls_visibility(True)
+
+            self.minimized = False
+
+    
     def toggle_loop(self, event=None):
         self.loop_video = not self.loop_video
         if self.loop_video:
@@ -374,7 +452,32 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind('<Control-B>', self.next_subtitle_track)
         self.bind('<KeyPress-l>', self.toggle_loop)
         self.bind('<KeyPress-L>', self.toggle_loop)
+        self.bind('<Shift-KeyPress-n>', self.show_notes)
+        self.bind('<Shift-KeyPress-N>', self.show_notes)
+        self.bind('<Escape>', self._on_close)
 
+    def show_notes(self, event=None):
+        if not self.current_file:
+            showwarning(self, "No Video Loaded", "Please load a video in order to view or add notes.")
+            return
+
+        file_path = self.current_file
+        was_topmost = self.attributes("-topmost")
+        was_playing = not self.video_paused
+
+        if was_playing:
+            self.pause_video()
+        if was_topmost:
+            self.attributes("-topmost", False)
+
+        try:
+            notes_window = NotesManagerGUI(self.notes_manager, snippets_manager=self.snippets_manager, parent=self, file_path=file_path)
+            self.wait_window(notes_window.root)
+        finally:
+            if was_playing:
+                self.pause_video()
+            if was_topmost:
+                self.attributes("-topmost", True)
 
 
     def _on_video_loaded(self, title):
@@ -492,20 +595,20 @@ class MediaPlayerApp(tk.Toplevel):
             self.volume_bar.pack_forget()
             # self.time_label.pack_forget()
 
-
-
     def toggle_fullscreen(self, event=None):
         """Toggle fullscreen mode."""
-        self.fullscreen = not self.attributes("-fullscreen")
-        self.attributes("-fullscreen", self.fullscreen) 
-        if self.fullscreen:
-            self.toggle_controls_visibility(visibility=False)
-            # Hide cursor in fullscreen mode
-            self.config(cursor="none")
-        else:
-            self.toggle_controls_visibility(visibility=True)
-            # Show cursor when exiting fullscreen mode
-            self.config(cursor="")
+        try:
+            self.fullscreen = not self.attributes("-fullscreen")
+            self.attributes("-fullscreen", self.fullscreen) 
+            if self.fullscreen:
+                self.toggle_controls_visibility(visibility=False)
+                self.config(cursor="none")
+            else:
+                self.toggle_controls_visibility(visibility=True)
+                self.config(cursor="")
+        except Exception as e:
+            print(f"Error toggling fullscreen: {e}")
+            showerror(self, "Fullscreen Error", f"Could not toggle fullscreen mode:\n{e}")
 
     def save_screenshot(self, event):
         """Saves a screenshot of the video frame."""
@@ -698,6 +801,13 @@ class MediaPlayerApp(tk.Toplevel):
         """Starts loading and playing the video in a background thread."""
         def load_and_play():
             try:
+                if self.loop_video and hasattr(self, 'current_media') and self.current_file == getattr(self, 'last_looped_file', None):
+                    print("Looping: Seeking to start and replaying cached media.")
+                    self.media_player.set_time(0)
+                    self.media_player.play()
+                    self._on_video_loaded(self.current_file)
+                    return
+            
                 if self.playing_video:
                     self.media_player.stop()
                     # if hasattr(self, 'current_media'):
@@ -714,6 +824,7 @@ class MediaPlayerApp(tk.Toplevel):
                     media.parse_async()  # Preloads meta info
                     # self._create_new_player()
                     self.media_player.set_media(media)
+                    self.last_looped_file = self.current_file
                     self.after(0, lambda: self._on_video_loaded(title))
                 else:
                     print(f"The file Doesn't Exists: {self.current_file}")
@@ -795,7 +906,7 @@ class MediaPlayerApp(tk.Toplevel):
                 self.video_paused = True
                 self.pause_button.config(text="⏯️ Resume", bg="#FF9800")
 
-    def stop(self):
+    def stop(self, event=None):
         """
         Stops playback of the currently playing video.
         Logs the watch history before stopping, using real elapsed time.
@@ -806,6 +917,7 @@ class MediaPlayerApp(tk.Toplevel):
             duration_watched = self.get_time_str(total_watched)
             total_duration = self.get_duration_str()
             print(f"Real Elapsed Time: {duration_watched}")
+            self._release_current_media()
 
             skipped_time = (self.prev_counts * 4990) - (self.forward_counts * 9990)
             print(f"Skipped Time: {self.get_time_str(skipped_time)}")
@@ -943,21 +1055,30 @@ class MediaPlayerApp(tk.Toplevel):
         pass
 
     def open_category_manager(self, event=None):
-        """Open the category manager window."""
-        if not self.video_paused:
-            self.pause_video()
-        category_window = CategoryWindow(self, self.current_file)
-        category_window.lift()
-        category_window.focus_force()
-        self.wait_window(category_window)
-        self.pause_video()
-        # self.pause_video(event=event)
+        """Open the category manager window as a modal dialog."""
 
-    def toggle_always_on_top(self, event=None):
-        """Toggle whether the window stays on top of other windows."""
-        is_on_top = self.attributes("-topmost")
-        self.attributes("-topmost", not is_on_top)
-        self.show_marquee("Always on top: " + ("ON" if not is_on_top else "OFF"))
+        was_playing = not self.video_paused
+        was_topmost = self.attributes("-topmost")
+
+        if was_playing:
+            self.pause_video()
+
+        if was_topmost:
+            self.attributes("-topmost", False)
+
+        try:
+            category_window = CategoryWindow(self, self.current_file, category_manager=self.category_manager)
+            category_window.lift()
+            category_window.focus_force()
+            self.wait_window(category_window)
+            self.category_manager._load_entries()
+        finally:
+            if was_playing:
+                self.pause_video()
+            if was_topmost:
+                self.attributes("-topmost", True)
+
+        # self.pause_video(event=event)
 
     def mark_start(self, event=None):
         try:
@@ -965,7 +1086,8 @@ class MediaPlayerApp(tk.Toplevel):
             #     return
             ms = self.media_player.get_time()
             self.trim_start = ms
-            showinfo(self, "Trim", f"Start marked at {ms/1000:.2f} seconds")
+            # showinfo(self, "Trim", f"Start marked at {ms/1000:.2f} seconds")
+            self.show_marquee(f"Start marked at {self.get_time_str(ms)}")
             self.time_label.config(fg="red")
         except Exception as e:
             showerror(self,"Trim Error", f"Could not mark start:\n{e}")
@@ -1031,11 +1153,10 @@ class MediaPlayerApp(tk.Toplevel):
                 ]
 
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            showinfo(
-                self,
-                "Trim Complete",
-                f"Saved clipped video from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}\nPath: {out_path}"
-            )
+            if self.winfo_exists():
+                self.after(0, lambda: showinfo(self, "Trim Complete", 
+                                           f"Saved clipped video from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}\nPath: {out_path}"))
+            self.show_marquee(f"Trimmed video saved: {out_path}")
             self.logger.update_logs(
                 f"[TRIMMED VIDEO] {self.current_file} from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}",
                 out_path
@@ -1079,6 +1200,7 @@ class MediaPlayerApp(tk.Toplevel):
         if self.subtitles_visible:
             self.media_player.video_set_spu(-1)
             print("Subtitles hidden")
+            self.show_marquee("Subtitles hidden")
         else:
             track_list = self.media_player.video_get_spu_description()
             if track_list:
@@ -1086,9 +1208,11 @@ class MediaPlayerApp(tk.Toplevel):
                     if id != -1:
                         self.media_player.video_set_spu(id)
                         print(f"Subtitles shown: {name}")
+                        self.show_marquee(f"Subtitles shown: {name}")
                         break
             else:
                 print("No subtitle tracks available to show")
+                self.show_marquee("No subtitle tracks.")
         self.subtitles_visible = not self.subtitles_visible
 
     def add_subtitle(self, event=None):
