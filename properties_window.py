@@ -14,9 +14,7 @@ from static_methods import (
     get_file_transfer_history, 
     get_screenshots_for_file, 
     normalise_path, 
-    seconds_to_hhmmss, 
-    get_video_snippets_for_file, 
-    # get_watch_stats_for_files,
+    seconds_to_hhmmss,
     get_watch_stats_for_filenames,
     get_all_related_paths
 )
@@ -25,14 +23,26 @@ from image_player import ImageViewer
 from videoplayer import MediaPlayerApp
 from favorites_manager import FavoritesManager
 from category_manager import CategoryManager
+from notes_manager import NotesManager
+from description_manager import DescriptionManager
 
-class PropertiesWindow:
-    def __init__(self, parent, file_path, category_manager = None, favorites_manager=None):
+class PropertiesWindow(tk.Toplevel):
+    def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, description_manager=None):
+        super().__init__(parent)
         self.parent = parent
         self.file_path = file_path
         self.category_manager = category_manager or CategoryManager()
         self.favorites_manager = favorites_manager or FavoritesManager()
+        self.notes_manager = notes_manager or NotesManager()
+        self.description_manager = description_manager or DescriptionManager()
         self._setup_styles()
+        self.geometry("1000x600")
+        self.minsize(600, 400)
+        self.maxsize(1000, 600)
+        self.configure(bg=self.colors['bg_primary'])
+        self.transient(self.parent)
+        self.grab_set()
+        self._center_window(self, 1000, 600)
         self._show_properties_window()
 
     def _setup_styles(self):
@@ -63,21 +73,24 @@ class PropertiesWindow:
         else:
             deleted_notice = False
 
+        
+        related_paths = get_all_related_paths(self.file_path)
         stats = self._get_video_stats()
-        screenshots = get_screenshots_for_file(os.path.basename(self.file_path))
+        # screenshots = sorted(get_screenshots_for_file(os.path.basename(self.file_path)))
+        screenshots = self._get_screenshots(related_paths)
         snippets = self._get_video_snippets()
 
-        win = tk.Toplevel(self.parent)
-        win.title(f"Properties - {os.path.basename(self.file_path)}")
-        win.geometry("900x600")
-        win.minsize(600, 400)
-        win.maxsize(900, 1000)
-        win.configure(bg=self.colors['bg_primary'])
-        win.transient(self.parent)
-        win.grab_set()
-        self._center_window(win, 900, 600)
+        # win = tk.Toplevel(self.parent)
+        # win.title(f"Properties - {os.path.basename(self.file_path)}")
+        # win.geometry("1000x600")
+        # win.minsize(600, 400)
+        # win.maxsize(1000, 600)
+        # win.configure(bg=self.colors['bg_primary'])
+        # win.transient(self.parent)
+        # win.grab_set()
+        # self._center_window(win, 1000, 600)
 
-        main_container = tk.Frame(win, bg=self.colors['bg_primary'])
+        main_container = tk.Frame(self, bg=self.colors['bg_primary'])
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
         self._create_header(main_container, stats, screenshots)
 
@@ -93,11 +106,18 @@ class PropertiesWindow:
             warning_label.pack(fill="x", pady=(0, 10), padx=10)
 
         self._create_scrollable_content(main_container, stats, screenshots, snippets)
-        self._bind_window_events(win)
+        self._bind_window_events()
         # win.bind('<Escape>', lambda e: self.destroy())
         # print(self.file_path)
         # print(get_file_transfer_history(self.file_path).values())
         # print(normalise_path(self.file_path) in get_file_transfer_history(self.file_path).values())
+
+    def _get_screenshots(self, file_paths):
+        file_names = set(os.path.basename(path) for path in file_paths)
+        screenshots = []
+        for file_name in file_names:
+            screenshots += get_screenshots_for_file(file_name)
+        return sorted(screenshots)
 
     def _create_header(self, parent, stats, screenshots):
         header_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief="flat", bd=0)
@@ -123,7 +143,7 @@ class PropertiesWindow:
             bg=self.colors['bg_card'], 
             fg=self.colors['text_primary'],
             anchor="w",
-            wraplength=650,
+            wraplength=700,
             justify="left"
         )
         name_label.pack(fill="x", pady=(0, 8))
@@ -231,12 +251,14 @@ class PropertiesWindow:
         left_frame = tk.Frame(content_container, bg=self.colors['bg_primary'], width=400)
         left_frame.pack(side="left", fill="y", expand=True, padx=(0, 10))
 
-        right_frame = tk.Frame(content_container, bg=self.colors['bg_primary'], width=650)  # <-- Increase width
-        right_frame.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        right_frame = tk.Frame(content_container, bg=self.colors['bg_primary'], width=450)
+        right_frame.pack(side="right", fill="both", expand=False, padx=(10, 0))
 
         self._create_categories_section(left_frame)
         self._create_watch_stats_section(left_frame)
         self._create_stats_section(left_frame, stats)
+        self._create_description_section(right_frame, stats.get("File Size", 0))
+        self._create_notes_section(right_frame)
         self._create_screenshots_section(right_frame, screenshots)
         self._create_snippets_section(right_frame, snippets)
 
@@ -246,20 +268,181 @@ class PropertiesWindow:
         canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
-    def _create_section_card(self, parent, title, icon=""):
-        card_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief="flat", bd=0)
-        card_frame.pack(fill="x", pady=(0, 20))
+    def _create_description_section(self, parent, size=None):
+        content_frame = self._create_section_card(parent, "Description", "ℹ️", self.colors['bg_primary'])
         
-        # Card header
-        header_frame = tk.Frame(card_frame, bg=self.colors['bg_card'])
-        header_frame.pack(fill="x", padx=20, pady=(15, 10))
+        desc_container = tk.Frame(
+            content_frame, 
+            width=450, 
+            bg=self.colors["bg_primary"]
+            )
+        desc_container.pack(anchor="w", fill="x", pady=(2, 6), padx=10)
+
+        description = self.description_manager.get_description(self.file_path)
+        self.file_size = size
+        self._desc_var = tk.StringVar(value=description)
+
+        self._desc_label = tk.Label(
+            desc_container,
+            text=description if description else "Double-click to add a description.",
+            font=("Segoe UI", 11, "italic"),
+            bg=self.colors['bg_primary'],
+            fg=self.colors['text_primary'],
+            wraplength=480,
+            justify="left",
+            anchor="w"
+        )
+        self._desc_label.pack(anchor="w", pady=(2, 6), fill="x")
+
+        self._desc_entry = tk.Text(
+            desc_container,
+            height=6,
+            font=("Segoe UI", 11),
+            wrap="word",
+            width=70,
+            bg=self.colors['bg_primary'],
+            fg=self.colors['text_primary']
+        )
+
+        def switch_to_entry(event=None):
+            self._desc_label.pack_forget()
+            self._desc_entry.delete("1.0", "end")
+            self._desc_entry.insert("1.0", self._desc_var.get())
+            self._desc_entry.pack(anchor="w", fill="x", pady=(2, 6))
+            self._desc_entry.focus_set()
+
+        def save_description(event=None):
+            new_desc = self._desc_entry.get("1.0", "end").strip()
+            self.description_manager.set_description(self.file_path, self.file_size, new_desc)
+            self.description_manager._load_descriptions()
+            self._desc_var.set(new_desc)
+            self._desc_label.config(
+                text=new_desc if new_desc else "Double-click to add a description."
+            )
+            self._desc_entry.pack_forget()
+            self._desc_label.pack(anchor="w", pady=(2, 6), fill="x")
+
+        self._desc_label.bind("<Double-Button-1>", switch_to_entry)
+        self._desc_entry.bind("<FocusOut>", save_description)
+        self._desc_entry.bind("<Control-Return>", save_description)
+
+
+
+    def _create_notes_section(self, parent):
+        content_frame = self._create_section_card(parent, "Notes", "📝")
+        note_data = self.notes_manager.get_note(self.file_path)
+        if note_data:
+            note_card = tk.Frame(
+                content_frame,
+                bg=self.colors['bg_card'],
+                bd=0, relief="flat")
+            note_card.pack(fill="none", pady=5, padx=5)
+
+            note_text = note_data.get("note", "")
+            tk.Label(
+                note_card,
+                text=f"“{note_text}”" if note_text else "No note.",
+                font=("Segoe UI", 11, "italic"),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_primary'],
+                wraplength=450,
+                justify="left",
+                anchor="w"
+            ).pack(anchor="w", pady=(2, 6))
+
+            mood = note_data.get("mood")
+            if mood and mood != "None":
+                mood_label = tk.Label(
+                    note_card,
+                    text=f"Mood: {mood}",
+                    font=("Segoe UI", 8, "italic"),
+                    bg=self.colors['bg_card'],
+                    fg=self.colors['text_secondary'],
+                    anchor="e"
+                )
+                mood_label.place(relx=1.0, y=0, anchor="ne", x=-2)
+
+            tags = note_data.get("tags", [])
+            if tags:
+                tag_frame = tk.Frame(note_card, bg=self.colors['bg_card'])
+                tag_frame.pack(anchor="w", pady=(0, 2), fill="x")
+                tag_strs = [f"#{t}" for t in tags]
+                max_width = 380
+                row = 0
+                col = 0
+                cur_width = 0
+                for tag in tag_strs:
+                    tag_lbl = tk.Label(
+                        tag_frame,
+                        text=tag,
+                        font=("Segoe UI", 10, "bold"),
+                        bg=self.colors['bg_card'],
+                        fg=self.colors['accent'],
+                        padx=6, pady=2,
+                        relief="flat",
+                        bd=0
+                    )
+                    tag_lbl.update_idletasks()
+                    tag_width = tag_lbl.winfo_reqwidth() + 8
+                    if cur_width + tag_width > max_width:
+                        row += 1
+                        col = 0
+                        cur_width = 0
+                    tag_lbl.grid(row=row, column=col, padx=(0, 4), pady=(0, 2), sticky="w")
+                    cur_width += tag_width
+                    col += 1
+
+            rating = note_data.get("rating")
+            if rating:
+                stars = "★" * int(round(float(rating))) + "☆" * (5 - int(round(float(rating))))
+                rating_label = tk.Label(
+                    note_card,
+                    text=f"{stars}",
+                    font=("Segoe UI", 11, "bold"),
+                    bg=self.colors['bg_card'],
+                    fg="#FFD700"
+                )
+                rating_label.pack(anchor="w", pady=(2, 2))
+
+            timestamp = note_data.get("timestamp")
+            if timestamp:
+                tk.Label(
+                    note_card,
+                    text=f"🕒 {timestamp[:19].replace('T', ' ')}",
+                    font=("Segoe UI", 8),
+                    bg=self.colors['bg_card'],
+                    fg=self.colors['text_muted']
+                ).pack(anchor="e", pady=(2, 0))
+        else:
+            tk.Label(
+                content_frame,
+                text="No notes for this file.",
+                font=("Segoe UI", 10, "italic"),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']
+            ).pack(anchor="w", pady=10)
+
+    def _create_section_card(self, parent, title, icon="", bg_color=None):
+        card_frame = tk.Frame(
+            parent, 
+            bg=self.colors['bg_card'] if not bg_color else bg_color, 
+            relief="flat", 
+            bd=0
+        )
+        card_frame.pack(fill="x", pady=(0, 20))
+
+        header_frame = tk.Frame(
+            card_frame, 
+            bg=self.colors['bg_card'] if not bg_color else bg_color
+            )
+        header_frame.pack(fill="x", padx=15, pady=(15, 10))
         
         if icon:
             tk.Label(
                 header_frame,
                 text=icon,
                 font=("Segoe UI", 16),
-                bg=self.colors['bg_card'],
+                bg=self.colors['bg_card'] if not bg_color else bg_color,
                 fg=self.colors['accent']
             ).pack(side="left", padx=(0, 10))
         
@@ -267,14 +450,20 @@ class PropertiesWindow:
             header_frame,
             text=title,
             font=("Segoe UI", 16, "bold"),
-            bg=self.colors['bg_card'],
+            bg=self.colors['bg_card'] if not bg_color else bg_color,
             fg=self.colors['text_primary']
         ).pack(side="left")
         
-        separator = tk.Frame(card_frame, bg=self.colors['border'], height=1)
+        separator = tk.Frame(
+            card_frame,
+            bg=self.colors['border'] if not bg_color else bg_color, 
+            height=1)
         separator.pack(fill="x", padx=20)
         
-        content_frame = tk.Frame(card_frame, bg=self.colors['bg_card'])
+        content_frame = tk.Frame(
+            card_frame, 
+            bg=self.colors['bg_card'] if not bg_color else bg_color
+            )
         content_frame.pack(fill="x", padx=20, pady=(10, 15))
         
         return content_frame
@@ -333,23 +522,40 @@ class PropertiesWindow:
         thumbnails_frame = tk.Frame(content_frame, bg=self.colors['bg_card'])
         thumbnails_frame.pack(fill="both", expand=True)
 
-        self._screenshots_thumbnails_frame = thumbnails_frame
         self._screenshots_images = screenshots
+        self._screenshots_loaded_thumbnails = []
+        self._screenshots_render_index = 0
 
         loading_label = tk.Label(
-            thumbnails_frame,
+            content_frame,
             text="⏳ Loading thumbnails...",
             font=("Segoe UI", 10),
             bg=self.colors['bg_card'],
             fg=self.colors['text_muted'],
         )
-        loading_label.pack(pady=20)
 
-        def draw_thumbnails_threaded(event=None):
+        load_more_btn = tk.Button(
+            content_frame,
+            text="Load More",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.colors['accent'],
+            fg="white",
+            relief="flat",
+            padx=10,
+            pady=5,
+            command=lambda: draw_next_batch()
+        )
+
+        def draw_next_batch():
+            loading_label.pack(pady=20)
+            load_more_btn.config(state="disabled")
+
             def worker():
-                loaded_thumbnails = []
+                start = self._screenshots_render_index
+                end = min(start + 100, len(self._screenshots_images))
+                new_thumbnails = []
 
-                for img_path in self._screenshots_images:
+                for img_path in self._screenshots_images[start:end]:
                     try:
                         if not os.path.exists(img_path):
                             continue
@@ -357,21 +563,22 @@ class PropertiesWindow:
                             if img.mode in ('RGBA', 'P'):
                                 img = img.convert('RGB')
                             img.thumbnail((200, 150), Image.Resampling.LANCZOS)
-                            thumb_img = ImageTk.PhotoImage(img.copy())  # ensure thread-safe
+                            thumb_img = ImageTk.PhotoImage(img.copy())
                             filename = os.path.basename(img_path)
                             if len(filename) > 15:
                                 filename = filename[:12] + "..." + filename[-12:]
-                            loaded_thumbnails.append((thumb_img, filename, img_path))
-                    except Exception as e:
-                        loaded_thumbnails.append(("error", os.path.basename(img_path), img_path))
+                            new_thumbnails.append((thumb_img, filename, img_path))
+                    except Exception:
+                        new_thumbnails.append(("error", os.path.basename(img_path), img_path))
 
                 def update_ui():
                     if not thumbnails_frame.winfo_exists():
                         return
-                    for widget in thumbnails_frame.winfo_children():
-                        widget.destroy()
+                    
+                    loading_label.pack_forget()
+                    load_more_btn.config(state="normal")
 
-                    if not loaded_thumbnails:
+                    if self._screenshots_render_index == 0 and not new_thumbnails:
                         no_screenshots_frame = tk.Frame(content_frame, bg=self.colors['bg_card'], width=250, height=100)
                         no_screenshots_frame.pack_propagate(False)
                         no_screenshots_frame.pack()
@@ -383,14 +590,18 @@ class PropertiesWindow:
                             fg=self.colors['text_muted'],
                             justify="center"
                         ).pack(expand=True)
+                        load_more_btn.pack_forget()
                         return
 
                     frame_width = thumbnails_frame.winfo_width() or 500
-                    thumb_width = 230
+                    thumb_width = 240
+                    # print(frame_width // thumb_width)
                     max_cols = max(2, frame_width // thumb_width)
-                    row = col = 0
+                    total = self._screenshots_render_index
+                    row = total // max_cols
+                    col = total % max_cols
 
-                    for idx, item in enumerate(loaded_thumbnails):
+                    for idx, item in enumerate(new_thumbnails):
                         if item[0] == "error":
                             error_frame = tk.Frame(thumbnails_frame, bg=self.colors['bg_hover'], width=100, height=75)
                             error_frame.grid(row=row, column=col, padx=5, pady=5, sticky="w")
@@ -425,7 +636,7 @@ class PropertiesWindow:
                                 font=("Segoe UI", 8),
                                 bg=self.colors['bg_hover'],
                                 fg=self.colors['text_secondary'],
-                                wraplength=120
+                                wraplength=160
                             )
                             name_label.pack(pady=(0, 3))
 
@@ -445,7 +656,7 @@ class PropertiesWindow:
                                 widget.bind("<Enter>", on_thumb_enter)
                                 widget.bind("<Leave>", on_thumb_leave)
 
-                            def open_image_viewer(event, img_idx=idx):
+                            def open_image_viewer(event, img_idx=total + idx):
                                 valid_files = [f for f in self._screenshots_images if os.path.exists(f)]
                                 if not valid_files:
                                     messagebox.showerror("No Images", "No valid screenshot files found.")
@@ -456,24 +667,43 @@ class PropertiesWindow:
                                     viewer_win.focus_force()
                                     viewer_win.grab_set()
                                     parent.grab_release()
-                                    ImageViewer(viewer_win, valid_files, index=img_idx, width=900, height=600)
+                                    ImageViewer(viewer_win, valid_files, index=img_idx, width=1000, height=600)
                                 except Exception as ex:
                                     messagebox.showerror("Error", f"Could not open image viewer:\n{ex}")
 
-                            thumb_label.bind("<Button-1>", lambda e, idx=idx: open_image_viewer(e, img_idx=idx))
+                            thumb_label.bind("<Button-1>", lambda e, idx=total + idx: open_image_viewer(e, img_idx=idx))
 
                         col += 1
                         if col >= max_cols:
                             col = 0
                             row += 1
 
-                thumbnails_frame.after(0, update_ui)
+                    self._screenshots_render_index += len(new_thumbnails)
+                    self._screenshots_loaded_thumbnails.extend(new_thumbnails)
+
+                    if self._screenshots_render_index >= len(self._screenshots_images):
+                        load_more_btn.pack_forget()
+                    else:
+                        load_more_btn.pack(pady=10)
+
+                thumbnails_frame.after(100, update_ui)
 
             threading.Thread(target=worker, daemon=True).start()
 
-        thumbnails_frame.bind("<Configure>", draw_thumbnails_threaded)
-        thumbnails_frame.after(100, draw_thumbnails_threaded)
-
+        if screenshots:
+            draw_next_batch()
+        else:
+            no_screenshots_frame = tk.Frame(content_frame, bg=self.colors['bg_card'], width=250, height=100)
+            no_screenshots_frame.pack_propagate(False)
+            no_screenshots_frame.pack()
+            tk.Label(
+                no_screenshots_frame,
+                text="📷\nNo screenshots found",
+                font=("Segoe UI", 12),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted'],
+                justify="center"
+            ).pack(expand=True)
 
     def _create_snippets_section(self, parent, snippets):
         content_frame = self._create_section_card(parent, "Video Snippets", "✂️")
@@ -509,7 +739,7 @@ class PropertiesWindow:
                         font=("Segoe UI", 10),
                         bg=self.colors['bg_hover'],
                         fg=self.colors['text_secondary'],
-                        wraplength=250,
+                        wraplength=400,
                         justify="left",
                         anchor="w"
                     ).pack(anchor="w", pady=1)
@@ -530,7 +760,8 @@ class PropertiesWindow:
                             current_file=output_file, 
                             random_select=False,
                             favorites_manager = self.favorites_manager,
-                            category_manager=self.category_manager
+                            category_manager=self.category_manager,
+                            notes_manager=self.notes_manager,
                         )
                         app.update_video_progress()
                         app.lift()
@@ -622,7 +853,6 @@ class PropertiesWindow:
         def update_stats():
             related_paths = get_all_related_paths(self.file_path)
             stats = get_watch_stats_for_filenames(related_paths)
-            # Update UI in main thread
             def update_ui():
                 if not content_frame.winfo_exists():
                     return
@@ -670,15 +900,16 @@ class PropertiesWindow:
 
                     tk.Label(content_frame, text="", bg=self.colors['bg_card']).pack()
                 
-            content_frame.after(0, update_ui)
+            if content_frame.winfo_exists():
+                content_frame.after(0, update_ui)
 
         threading.Thread(target=update_stats, daemon=True).start()
 
-    def _bind_window_events(self, window):
+    def _bind_window_events(self):
         """Bind window events for better UX"""
         # ESC key to close
-        window.bind('<Escape>', lambda e: self._close_window(window))
-        window.focus_set()
+        self.bind('<Escape>', lambda e: self._close_window())
+        self.focus_set()
 
     def _get_video_stats(self):
         try:
@@ -718,6 +949,27 @@ class PropertiesWindow:
         y_coordinate = (screen_height - height) // 2
         window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
 
-    def _close_window(self, window):
-        window.unbind_all("<MouseWheel>")
-        window.destroy()
+    # def _close_window(self, window):
+    #     def do_close():
+    #         if hasattr(self, '_desc_entry') and self._desc_entry is not None:
+    #             try:
+    #                 new_desc = self._desc_entry.get("1.0", "end").strip()
+    #                 self.description_manager.set_description(self.file_path, self.file_size, new_desc)
+    #             except Exception:
+    #                 pass
+    #         window.unbind_all("<MouseWheel>")
+    #         window.destroy()
+    #     window.after(0, do_close)
+    def _close_window(self):
+        def do_close():
+            if hasattr(self, '_desc_entry') and self._desc_entry is not None:
+                try:
+                    new_desc = self._desc_entry.get("1.0", "end").strip()
+                    self.description_manager.set_description(self.file_path, self.file_size, new_desc)
+                except Exception:
+                    pass
+            self.unbind_all("<MouseWheel>")
+            self.destroy()
+
+        # Always schedule cleanup in the main loop
+        self.after(0, do_close)
