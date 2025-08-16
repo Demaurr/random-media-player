@@ -1,14 +1,14 @@
 import importlib
-from tkinter import filedialog, messagebox
 import player_constants
 import default_settings
 import tkinter as tk
 import os
 from datetime import datetime
-from custom_messagebox import showinfo, showwarning, showerror, askyesno
+from custom_messagebox import askdirectory, askopenfilename, showinfo, showwarning, showerror, askyesno
+from backup_manager import BackupManager
 
 class SettingsWindow(tk.Toplevel):
-    def __init__(self, parent, on_save_callback=None):
+    def __init__(self, parent, backup_manager=None, on_save_callback=None):
         super().__init__(parent)
         self.title("Settings")
         self.configure(bg="black")
@@ -25,8 +25,11 @@ class SettingsWindow(tk.Toplevel):
             "DEMO_FOLDER": player_constants.DEMO_FOLDER,
             "FAV_PATH": player_constants.FAV_PATH,
             "FAV_FILES": player_constants.FAV_FILES,
-            "SKIP_FOLDERS": player_constants.SKIP_FOLDERS
+            "SKIP_FOLDERS": player_constants.SKIP_FOLDERS,
+            "VIDEO_SNIPPETS_FOLDER": player_constants.VIDEO_SNIPPETS_FOLDER
         }
+
+        self.backup_manager = backup_manager or BackupManager({})
 
         self.constants_path = os.path.join(os.path.dirname(__file__), "player_constants.py")
         self.default_content = self._read_file(self.constants_path)
@@ -61,7 +64,7 @@ class SettingsWindow(tk.Toplevel):
             row += 1
 
         add_category_header("Base Folders")
-        folder_keys = ["FILES_FOLDER", "LOGS_FOLDER", "STYLES_FOLDER", "DEMO_FOLDER"]
+        folder_keys = ["FILES_FOLDER", "LOGS_FOLDER", "STYLES_FOLDER", "DEMO_FOLDER", "VIDEO_SNIPPETS_FOLDER"]
         for key in folder_keys:
             if key in self.constants:
                 self._add_setting_row(self.scrollable_frame, key, self.constants[key], row, label_font, entry_font, base_dir, True)
@@ -99,30 +102,50 @@ class SettingsWindow(tk.Toplevel):
         button_container.pack(anchor="center")
 
         save_btn = tk.Button(button_container, text="Save", command=self.save_settings, 
-                            bg="red", fg="white", font=("Open Sans", 12, "bold"), 
-                            width=12, relief=tk.FLAT, activebackground="#aa0000", 
+                            bg="red", fg="white", font=("Open Sans", 8, "bold"), 
+                            width=10, relief=tk.FLAT, activebackground="#aa0000", 
                             activeforeground="white", cursor="hand2")
-        save_btn.pack(side="left", padx=8)
+        save_btn.pack(side="left", padx=8, pady=3)
         
         cancel_btn = tk.Button(button_container, text="Cancel", command=self.destroy, 
-                              bg="white", fg="black", font=("Open Sans", 12, "bold"), 
-                              width=12, relief=tk.FLAT, activebackground="#ddd", 
+                              bg="white", fg="black", font=("Open Sans", 8, "bold"), 
+                              width=10, relief=tk.FLAT, activebackground="#ddd", 
                               activeforeground="black", cursor="hand2")
-        cancel_btn.pack(side="left", padx=8)
+        cancel_btn.pack(side="left", padx=8, pady=3)
         
         reset_btn = tk.Button(button_container, text="Reset to Default", command=self.reset_to_default, 
-                             bg="black", fg="red", font=("Open Sans", 12, "bold"), 
-                             width=16, relief=tk.FLAT, activebackground="#222", 
+                             bg="black", fg="red", font=("Open Sans", 8, "bold"), 
+                             width=14, relief=tk.FLAT, activebackground="#222", 
                              activeforeground="red", cursor="hand2", 
                              borderwidth=2, highlightbackground="red", highlightcolor="red")
-        reset_btn.pack(side="left", padx=8)
+        reset_btn.pack(side="left", padx=8, pady=3)
 
-        self.center_window(730, 600)
+        backup_btn = tk.Button(
+            button_container, text="Create Backup",
+            command=self.create_backup,
+            bg="black", fg="white", font=("Open Sans", 8, "bold"),
+            width=14, relief=tk.FLAT, activebackground="#222",
+            activeforeground="white", cursor="hand2"
+        )
+        backup_btn.pack(side="left", padx=8, pady=3)
+
+        restore_btn = tk.Button(
+            button_container, text="Restore Backup",
+            command=self.restore_backup,
+            bg="black", fg="orange", font=("Open Sans", 8, "bold"),
+            width=14, relief=tk.FLAT, activebackground="#222",
+            activeforeground="orange", cursor="hand2"
+        )
+        restore_btn.pack(side="left", padx=8, pady=3)
+
+        self.center_window()
         
         for btn, bg, fg in [
             (save_btn, "red", "white"),
             (cancel_btn, "white", "black"),
             (reset_btn, "black", "red"),
+            (backup_btn, "black", "white"),
+            (restore_btn, "black", "orange")
         ]:
             btn.bind("<Enter>", lambda e, b=btn, c=bg, f=fg: b.config(bg=f, fg=c))
             btn.bind("<Leave>", lambda e, b=btn, c=bg, f=fg: b.config(bg=c, fg=f))
@@ -131,30 +154,13 @@ class SettingsWindow(tk.Toplevel):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
         
-    def center_window(self, width=700, height=600):
-        num_settings = len(self.constants)
-        header_height = 80  
-        setting_height = 45 
-        category_header_height = 40
-        button_frame_height = 70
-        skip_folders_extra = 100
-        
-        content_height = (
-            header_height +                    
-            (3 * category_header_height) +     
-            (num_settings * setting_height) +  
-            skip_folders_extra +           
-            button_frame_height                
-        )
-        
-        estimated_height = min(800, max(400, content_height))
-        
+    def center_window(self, width=800, height=550):
         self.update_idletasks()
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (estimated_height // 2)
-        self.geometry(f"{width}x{estimated_height}+{x}+{y}")
+        y = (screen_height // 2) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def bind_mousewheel(self):
         """Bind mousewheel to canvas for all platforms."""
@@ -249,10 +255,6 @@ class SettingsWindow(tk.Toplevel):
 
     def reset_to_default(self):
         """Reset settings to default values."""
-        # confirm = messagebox.askyesno(
-        #     "Confirm Reset",
-        #     "Are you sure you want to reset all settings to default values?"
-        # )
         confirm = askyesno(self, "Confirm Reset", "Are you sure you want to reset all settings to default values?")
         
         if confirm:
@@ -283,10 +285,6 @@ class SettingsWindow(tk.Toplevel):
                 self.destroy()
                 
             except Exception as e:
-                # messagebox.showerror(
-                #     "Reset Failed",
-                #     f"Failed to reset settings: {str(e)}"
-                # )
                 showerror(self, "Reset Failed", f"Failed to reset settings: {str(e)}")
 
     def _add_setting_row(self, parent, key, value, row, label_font, entry_font, base_dir, add_browse_button):
@@ -301,16 +299,37 @@ class SettingsWindow(tk.Toplevel):
 
         if add_browse_button:
             def browse_folder(entry=entry):
-                folder_selected = filedialog.askdirectory(initialdir=base_dir, title="Select Folder")
+                folder_selected = askdirectory(self, initialdir=base_dir, title="Select Folder")
                 if folder_selected:
                     abs_folder = os.path.abspath(folder_selected)
                     if os.path.commonpath([abs_folder, base_dir]) == base_dir:
                         entry.delete(0, tk.END)
                         entry.insert(0, abs_folder)
                     else:
-                        # messagebox.showwarning("Invalid Folder", "Please select a folder within the application's directory.")
                         showwarning(self, "Invalid Folder", "Please select a folder within the application's directory.")
 
             browse_btn = tk.Button(parent, text="📁", command=browse_folder, bg="#333", fg="white", 
                                 font=("Open Sans", 12), relief=tk.FLAT, cursor="hand2")
             browse_btn.grid(row=row, column=2, padx=(0, 5), pady=6, sticky="ew")
+
+    def create_backup(self):
+        try:
+            bm = self.backup_manager
+            bm.create_backup()
+            showinfo(self, "Backup", "Backup created successfully.")
+        except Exception as e:
+            showerror(self, "Backup Failed", f"Failed to create backup:\n{e}")
+
+    def restore_backup(self):
+        backup_path = askopenfilename(self,
+            title="Select Backup File",
+            initialdir=self.backup_manager.backup_folder,
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
+             )
+        if backup_path:
+            try:
+                bm = self.backup_manager
+                bm.restore_backup(backup_path)
+                showinfo(self, "Restore", "Backup restored successfully.")
+            except Exception as e:
+                showerror(self, "Restore Failed", f"Failed to restore backup:\n{e}")
