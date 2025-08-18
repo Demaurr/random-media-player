@@ -1,8 +1,10 @@
+from collections import defaultdict, deque
 import csv
 import os
 import datetime
-from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH
-from static_methods import create_csv_file
+
+from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH, FILE_TRANSFER_LOG
+from static_methods import create_csv_file, normalise_path
 from logs_writer import LogManager
 
 logger = LogManager(DESCRIPTION_LOG_PATH)
@@ -13,6 +15,7 @@ class DescriptionManager:
         self.descriptions = {}  # in-memory cache
         create_csv_file(headers=["video_path", "size", "description", "timestamp"], filename=csv_path)
         self._load_descriptions()
+        self.graph = self.build_graph()
 
     def _load_descriptions(self):
         if not os.path.exists(self.csv_path):
@@ -38,9 +41,51 @@ class DescriptionManager:
                     "timestamp": data.get("timestamp", "")
                 })
 
+    def build_graph(self):
+        """Builds the transfer graph from FILE_TRANSFER_LOG once."""
+        graph = defaultdict(set)
+        if not os.path.exists(FILE_TRANSFER_LOG):
+            return graph
+
+        with open(FILE_TRANSFER_LOG, newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                src = normalise_path(row['Source Path'])
+                dst = normalise_path(row['Destination Path'])
+                graph[src].add(dst)
+                graph[dst].add(src)
+        return graph
+
+    def get_related_paths(self, start_path):
+        """BFS traversal to get all related paths for one starting path."""
+        related = set()
+        visited = set([start_path])
+        queue = deque([start_path])
+
+        while queue:
+            current = queue.popleft()
+            related.add(current)
+            for neighbor in self.graph.get(current, []):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        return related
+
     def get_description(self, video_path):
         desc = self.descriptions.get(video_path)
         return desc.get("description", "") if desc else ""
+    
+    def get_all_related_descriptions(self, target_path):
+        """
+        Return all descriptions for paths related to the given file.
+        Uses the transfer log graph to collect connected paths.
+        """
+        related_paths = self.get_related_paths(target_path)  # ✅ use class method
+        descs = {}
+        for path in related_paths:
+            descs[path] = self.get_description(path)
+        return descs
+
 
     def set_description(self, video_path, size, description):
         timestamp = datetime.datetime.now().isoformat()
@@ -65,13 +110,20 @@ class DescriptionManager:
                 })
         return results
 
-    def search_description_by_keys(self, query, allowed_paths):
+    def search_description_by_keys(self, query, allowed_paths, also_related=True):
         query = query.lower()
-        allowed_set = set(allowed_paths)
-        results = []
-        for path in allowed_set:
-            data = self.descriptions.get(path)
+        expanded_paths = set()
+
+        for path in allowed_paths:
+            related = self.get_related_paths(path)
+            expanded_paths.update(related)
+
+        results = set() 
+        for p in expanded_paths:
+            data = self.descriptions.get(p)
             if data and query in data.get("description", "").lower():
-                results.append(path)
-                # print(f"Found in {path}: {data['description']}")
-        return results
+                results.add(p)
+                if also_related:
+                    results.update(self.get_related_paths(p))
+
+        return list(results)
