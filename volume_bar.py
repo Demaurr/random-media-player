@@ -43,23 +43,23 @@ class VolumeBar(tk.Scale):
             **kwargs: Additional keyword arguments to configure the VolumeBar.
         """
         kwargs.setdefault("bg", "black")
-        kwargs.setdefault("fg", "#2196F3")  # blue
+        kwargs.setdefault("fg", "#2196F3")
         kwargs.setdefault("troughcolor", "#222")
         kwargs.setdefault("highlightthickness", 0)
         kwargs.setdefault("sliderrelief", tk.FLAT)
         kwargs.setdefault("activebackground", "#2196F3")
         kwargs.setdefault("bd", 1)
-        kwargs.setdefault("font", ("Segoe UI", 10, "bold"))
+        kwargs.setdefault("font", ("Segoe UI", 8, "bold"))
         super().__init__(
             master,
             from_=0,
             to=200,  # Changed from 100 to 200 to support up to 200% volume
             orient=tk.HORIZONTAL,
-            length=200,
+            length=100,
             command=self.set_volume,
             **kwargs,
         )
-        self.set(50)  # Set initial volume to 100% (normal volume)
+        self.set(50)
         self.media_player = media_player
 
     def set_volume(self, volume):
