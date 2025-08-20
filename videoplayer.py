@@ -25,6 +25,7 @@ from player_constants import (
     VIDEO_SNIPPETS_FOLDER, 
     Colors
     )
+from static_methods import get_file_transfer_history, normalise_path
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -38,7 +39,7 @@ from custom_messagebox import askopenfilename, showinfo, showwarning, showerror,
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manaager=None,
-                  notes_manager=None, snippets_manager=None):
+                  notes_manager=None, snippets_manager=None, trimmed_segments=None):
         super().__init__(parent)
         self._get_history_csvfile(watch_history_csv)
         self.favorites_manager = favorites_manager or FavoritesManager()
@@ -49,6 +50,9 @@ class MediaPlayerApp(tk.Toplevel):
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
+
+        self.trimmed_segments = trimmed_segments
+        self._precompute_trimmed_segments(video_files)
 
         self.bg_color = Colors.PLAIN_BLACK
         self.fg_color = Colors.PLAIN_WHITE
@@ -80,7 +84,6 @@ class MediaPlayerApp(tk.Toplevel):
         
         self._keybinding()
         self.initialize_player(video_files, video_path, cur_file=current_file)
-        
 
     def _get_history_csvfile(self, watch_history_csv):
         try:
@@ -120,14 +123,7 @@ class MediaPlayerApp(tk.Toplevel):
           
 
     def initialize_player(self, video_files, folder_path, cur_file=None):
-        # self.fav_csv = FILES_FOLDER +"Favorites.csv"
-        self.instance = vlc.Instance()
-        # self.media_player = self.instance.media_player_new()
-
-        # self.media_player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self.handle_error)
-        # self.media_player.event_manager().event_attach(
-        #     vlc.EventType.MediaPlayerEndReached, self._on_video_end
-        # )
+        self.instance = vlc.Instance("--aout=directsound")
         self._create_new_player()
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
@@ -165,13 +161,28 @@ class MediaPlayerApp(tk.Toplevel):
             self.video_index += 1
 
     def _on_video_end(self, event):
+        print(f"Video ended. Loop: {self.loop_video}, Autoplay: {self.autoplay}")
         # Schedule play_next or loop on the main thread
         if self.loop_video:
-            self.after(50, self.stop)
-            self.after(200, self.play_video)
+            print("Looping video...")
+            self.after(50, self._loop_video)
         elif self.autoplay:
-            # self.current_media.release()
+            print("Autoplay next video...")
             self.after(200, self.play_next)
+
+    def _loop_video(self):
+        """Handle video looping with proper error handling"""
+        try:
+            if self.current_file and os.path.exists(self.current_file):
+                print(f"Restarting looped video: {self.current_file}")
+                self.after(0, self.stop)
+                self.after(0, self.play_video)
+            else:
+                print("Current file not available for looping")
+                self.loop_video = False
+        except Exception as e:
+            print(f"Error during looping: {e}")
+            self.loop_video = False
 
 
     def _create_widgets(self):
@@ -285,12 +296,13 @@ class MediaPlayerApp(tk.Toplevel):
         self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
 
         self.progress_bar = VideoProgressBar(
-            self, self.set_video_position, bg=self.bg_color, highlightthickness=0
+            self, self.set_video_position, bg=self.bg_color, highlightthickness=0,
+            trimmed_segments=self._get_trimmed_segments()
         )
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=8)
 
         self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
+        self.volume_bar.pack(side=tk.RIGHT, padx=0, pady=0)
 
         def on_enter(e): e.widget.config(bg="#444")
         def on_leave(e):
@@ -394,14 +406,37 @@ class MediaPlayerApp(tk.Toplevel):
 
             self.minimized = False
 
+    def toggle_always_on_top_minimized_only(self, event=None):
+        """
+        Toggle always-on-top ON/OFF but keep minimized state.
+        Only valid if already minimized.
+        """
+        if not self.minimized:
+            self.show_marquee("Must be minimized to use this toggle")
+            return
+
+        is_on_top = self.attributes("-topmost")
+        self.attributes("-topmost", not is_on_top)
+
+        if not is_on_top:
+            self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED)
+            self.show_marquee("Always on top: ON (Minimized)")
+        else:
+            self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK)
+            self.show_marquee("Always on top: OFF (Minimized)")
+
     
     def toggle_loop(self, event=None):
         self.loop_video = not self.loop_video
         if self.loop_video:
             self.loop_button.config(bg="#00C853")
+            print("Loop enabled")
         else:
             self.loop_button.config(bg="#000000")
+            print("Loop disabled")
         self.show_marquee("Looping is ON" if self.loop_video else "Looping is OFF")
+        if self.loop_video and self.current_file:
+            self.last_looped_file = self.current_file
 
     def _keybinding(self):
         """
@@ -438,6 +473,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind("<KeyPress-A>", self.toggle_autoplay)
         self.bind("<Alt-t>", self.toggle_always_on_top)
         self.bind("<Alt-T>", self.toggle_always_on_top)
+        # self.bind("<F10>", self.toggle_always_on_top_minimized_only)
         self.bind('<Control-S>', self.mark_start)
         self.bind('<Control-s>', self.mark_start)
         self.bind('<Control-E>', self.mark_end)
@@ -483,6 +519,8 @@ class MediaPlayerApp(tk.Toplevel):
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
         self.reset_trim()
+        if self.loop_video:
+            print(f"Looping video: {title}")
 
         self.title(title)
         self.media_player.set_hwnd(self.media_canvas.winfo_id())
@@ -492,7 +530,40 @@ class MediaPlayerApp(tk.Toplevel):
         self.session_start = timeit.default_timer() if self.session_start is None else self.session_start
         self.playing_video = True
         self.watched_videos.add_watch(self.current_file)
-        self.progress_bar.set(0)
+        self.progress_bar.update_progress()
+
+    def _precompute_trimmed_segments(self, video_files):
+        """Precompute trimmed segments for all files in the background."""
+        def worker():
+            for f in video_files:
+                segments = []
+                file_paths = set(
+                    filter(
+                        None,
+                        [normalise_path(p) for p in get_file_transfer_history(f).values() if p is not None]
+                    )
+                )
+                for fp in file_paths:
+                    snippets = self.snippets_manager.get_snippets_by_original_file(fp)
+                    for snippet in snippets:
+                        try:
+                            start = float(snippet["Start Time (s)"])
+                            end = float(snippet["End Time (s)"])
+                            segments.append((start, end))
+                        except Exception:
+                            continue
+                self.trimmed_segments[f] = segments
+
+            if hasattr(self,"current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
+                self.after(0, lambda: self.progress_bar.set_trimmed_segments(self._get_trimmed_segments()))
+
+            print("[INFO] Precomputation of trimmed segments completed.")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _get_trimmed_segments(self):
+        """Get trimmed segments for the current file from the precomputed dict."""
+        return self.trimmed_segments.get(self.current_file, [])
 
     def reset_values(self, segment_speed=None):
         self.playback_segments = []
@@ -508,7 +579,6 @@ class MediaPlayerApp(tk.Toplevel):
         if self.playing_video:
             speeds = [1.0, 1.25, 1.5, 1.75, 2.0]
             current_speed = self.media_player.get_rate()
-            # Find the closest speed in the list
             try:
                 index = next(i for i, s in enumerate(speeds) if abs(s - current_speed) < 0.1)
                 new_index = (index + 1) % len(speeds)
@@ -537,7 +607,6 @@ class MediaPlayerApp(tk.Toplevel):
                 "forward_counts": self.segment_forward,
                 "prev_counts": self.segment_prev
             })
-        # Reset for next segment
         self.segment_start = segment_end
         self.segment_forward = 0
         self.segment_prev = 0
@@ -801,31 +870,31 @@ class MediaPlayerApp(tk.Toplevel):
         """Starts loading and playing the video in a background thread."""
         def load_and_play():
             try:
-                if self.loop_video and hasattr(self, 'current_media') and self.current_file == getattr(self, 'last_looped_file', None):
+                if self.loop_video and hasattr(self, 'current_media'):
                     print("Looping: Seeking to start and replaying cached media.")
-                    self.media_player.set_time(0)
-                    self.media_player.play()
-                    self._on_video_loaded(self.current_file)
-                    return
-            
+                    try:
+                        self.media_player.set_time(0)
+                        self.media_player.play()
+                        self._on_video_loaded(self.previous_title)
+                        self.after(220, lambda: self.redraw_progress_bar(self.total_duration))
+                    except Exception as e:
+                        print(f"Error during loop replay: {e}")
+                
                 if self.playing_video:
                     self.media_player.stop()
-                    # if hasattr(self, 'current_media'):
-                    #     print("Releasing current media...")
-                    #     self.current_media.release()
-                    # if hasattr(self, 'media_player'):
-                    #     self.media_player.release()
-                    time.sleep(0.3)
+                    time.sleep(0.1)
+                    
                 if os.path.exists(self.current_file):
                     title = f"[{self.video_files.index(self.current_file)} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
-                    media.parse_async()  # Preloads meta info
-                    # self._create_new_player()
+                    media.parse_async()
                     self.media_player.set_media(media)
                     self.last_looped_file = self.current_file
+                    self.previous_title = title
                     self.after(0, lambda: self._on_video_loaded(title))
+                    self.after(220, lambda: self.redraw_progress_bar(self.total_duration))
                 else:
                     print(f"The file Doesn't Exists: {self.current_file}")
                     self.logger.error_logs(f"File Not Found: {self.current_file}")
@@ -833,6 +902,7 @@ class MediaPlayerApp(tk.Toplevel):
             except Exception as e:
                 print(f"An Exception Occurred in play_video: {e}")
                 showerror(self, "Error", f"Error loading {self.current_file}: {e}")
+                self.logger.error_logs(f"Error loading {self.current_file}: {e}")
                 # self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
         if hasattr(self, '_video_thread') and self._video_thread.is_alive():
             print("Video thread is already running. Waiting for it to finish.")
@@ -841,21 +911,52 @@ class MediaPlayerApp(tk.Toplevel):
         self._video_thread.start()
 
         # threading.Thread(target=load_and_play, daemon=True).start()
+        
+    def redraw_progress_bar(self, total_duration=None):
+        if self.current_file in self.trimmed_segments:
+            # print(f"Redrawing progress bar with trimmed segments for {self.current_file}")
+            self.progress_bar.set_trimmed_segments(self._get_trimmed_segments(), total_duration)
+
 
     def _release_current_media(self):
+        """
+        Releases the current media player and media instance.
+        Also handles potential VLC operation timeouts by creating a new VLC instance.
+        """
         try:
-            if hasattr(self, 'media_player'):
-                print("Releasing current media player...")
-                self.media_player.stop()
-                self.media_player.set_media(None)
-            if hasattr(self, 'current_media') and self.current_media:
-                print("Releasing current media...")
-                self.current_media.release()
-                self.current_media = None
-                print("Released current media.")
+            # print("About to release current media player...")
+            def vlc_operations():
+                try:
+                    if hasattr(self, 'media_player'):
+                        self.media_player.stop()
+                        self.media_player.set_media(None)
+                    if hasattr(self, 'current_media') and self.current_media:
+                        self.current_media.release()
+                        self.current_media = None
+                        print("Released current media.")
+                except Exception as e:
+                    print(f"Error in VLC operations: {e}")
+            
+            vlc_thread = threading.Thread(target=vlc_operations, daemon=True)
+            vlc_thread.start()
+            vlc_thread.join(timeout=2)
+            
+            if vlc_thread.is_alive():
+                print("VLC operations timed out, forcing continue...")
+                try:
+                    self.media_player = None
+                    self.current_media = None
+                    self.instance = vlc.Instance("--aout=directsound")
+                    self._create_new_player()
+                    print("Created a fresh VLC instance after timeout.")
+                except Exception as e:
+                    print(f"Error while forcing new VLC instance: {e}")
+                    self.logger.error_logs(f"Error while forcing new VLC instance: {e}")
+                
         except Exception as e:
             print(f"Error during media release: {e}")
-        time.sleep(0.25)
+            self.logger.error_logs(f"Error during media release: {e}")
+        time.sleep(0.2)
 
     def fast_forward(self, event=None):
         """
@@ -868,13 +969,13 @@ class MediaPlayerApp(tk.Toplevel):
             current_time_str = str(timedelta(milliseconds=current_time))[:-3]
             self.media_player.set_time(current_time)
             self.show_marquee(f"{current_time_str} / {self.total_duration_str}")
+            self.progress_bar.update_progress()
             
     def toggle_mute(self, event=None):
         """Toggle mute/unmute for the media player."""
         if self.media_player:
             is_muted = self.media_player.audio_get_mute()
             self.media_player.audio_toggle_mute()
-            # Optionally show feedback
             self.show_marquee("🔇Muted" if not is_muted else "🔊 Unmuted")
 
     def rewind(self, event=None):
@@ -887,7 +988,7 @@ class MediaPlayerApp(tk.Toplevel):
             current_time = max(self.media_player.get_time() - 5000, 0)
             self.media_player.set_time(current_time)
             self.show_marquee(f"{self.current_time_str} / {self.total_duration_str}")
-
+            self.progress_bar.update_progress()
 
     def pause_video(self, event=None):
         """
@@ -940,7 +1041,7 @@ class MediaPlayerApp(tk.Toplevel):
             total += watched
         return int(total)  # in ms
 
-    def set_video_position(self, value):
+    def set_video_position_percentage(self, value):
         """
         Sets the playback position of the currently playing video based on the provided value.
 
@@ -953,13 +1054,20 @@ class MediaPlayerApp(tk.Toplevel):
             position = int((float(value) / 100) * total_duration)
             self.media_player.set_time(position)
 
+    def set_video_position(self, new_time_in_seconds):
+        """
+        Takes seconds instead of percentage
+        """
+        if self.playing_video:
+            self.media_player.set_time(int(new_time_in_seconds * 1000))
+
     def update_video_progress(self):
         """
         Updates the progress of the currently playing video.
         Updates the time label with the current playback time and total duration.
         """
         if self.playing_video and not self.video_paused:
-            total_duration = self.media_player.get_length()
+            self.total_duration = self.media_player.get_length()
             current_time = self.media_player.get_time()
 
             # if total_duration - current_time <= 1000:
@@ -971,7 +1079,7 @@ class MediaPlayerApp(tk.Toplevel):
             # self.progress_bar.set(progress_percentage)
 
             self.current_time_str = str(timedelta(milliseconds=current_time))[:-3]
-            self.total_duration_str = str(timedelta(milliseconds=total_duration))[:-3]
+            self.total_duration_str = str(timedelta(milliseconds=self.total_duration))[:-3]
             self.time_label.config(text=f"{self.current_time_str} / {self.total_duration_str}")
             # print(total_duration, current_time)
             # if total_duration - current_time <= 500 and (total_duration != 0 or not self.video_paused):
@@ -1082,11 +1190,8 @@ class MediaPlayerApp(tk.Toplevel):
 
     def mark_start(self, event=None):
         try:
-            # if not self.media_player.is_playing():
-            #     return
             ms = self.media_player.get_time()
             self.trim_start = ms
-            # showinfo(self, "Trim", f"Start marked at {ms/1000:.2f} seconds")
             self.show_marquee(f"Start marked at {self.get_time_str(ms)}")
             self.time_label.config(fg="red")
         except Exception as e:
@@ -1098,33 +1203,35 @@ class MediaPlayerApp(tk.Toplevel):
             if self.trim_start is None or not self.current_file:
                 return
             end_ms = self.media_player.get_time()
-            if end_ms < self.trim_start:
-                start_ms, end_ms = end_ms, self.trim_start
-            else:
-                start_ms, end_ms = self.trim_start, end_ms
-                
+
+            start_ms, end_ms = sorted([self.trim_start, end_ms])
+
             duration_ms = self.media_player.get_length()
             if start_ms >= duration_ms or end_ms > duration_ms:
                 showwarning(self, "Trim", "Invalid positions or video ended. Operation canceled.")
                 self.reset_trim()
                 return
 
-            # fast or accurate
-            # choice = askquestion("Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
-            # choice = askyesno(self, "Trimming Mode", "Do you want fast trimming (not frame-accurate)?\nChoose 'No' for accurate trimming.")
-            # fast_mode = (choice == 'yes')
-            fast_mode = (True)
+            start_s = start_ms / 1000.0
+            end_s = end_ms / 1000.0
+
+            fast_mode = True  # or ask user
 
             threading.Thread(
                 target=self._trim_worker,
                 args=(start_ms, end_ms, fast_mode),
                 daemon=True
             ).start()
+
             self.trim_start = None
             self.time_label.config(fg=Colors.PLAIN_WHITE)
 
+            self.trimmed_segments.setdefault(self.current_file, []).append((start_s, end_s))
+
+            self.after(200, lambda: self.redraw_progress_bar(self.total_duration))
+
         except Exception as e:
-            showerror(self, "Trim Error", f"Could not mark end or start trimming:\n{e}")
+            showerror(self, "Trim Error", f"Could not mark end:\n{e}")
             self.reset_trim()
             self.logger.error_logs(f"Error marking end for trimming: {e}")
 
@@ -1177,8 +1284,6 @@ class MediaPlayerApp(tk.Toplevel):
         except FileNotFoundError:
             self.logger.error_logs("ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
             showerror(self, "Trim Error", "ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
-        # except subprocess.CalledProcessError:
-        #     showerror(self, "Trim Failed", "An error occurred during trimming.")
         except Exception as e:
             self.logger.error_logs(f"Unexpected error during trimming: {e}")
             showerror(self, "Trim Error", f"Unexpected error:\n{e}")
@@ -1198,18 +1303,24 @@ class MediaPlayerApp(tk.Toplevel):
 
     def toggle_subtitles(self, event=None):
         if self.subtitles_visible:
+            self.last_subtitle_id = self.media_player.video_get_spu()
             self.media_player.video_set_spu(-1)
             print("Subtitles hidden")
             self.show_marquee("Subtitles hidden")
         else:
             track_list = self.media_player.video_get_spu_description()
             if track_list:
-                for (id, name) in track_list:
-                    if id != -1:
-                        self.media_player.video_set_spu(id)
-                        print(f"Subtitles shown: {name}")
-                        self.show_marquee(f"Subtitles shown: {name}")
-                        break
+                valid_ids = [id for id, name in track_list if id != -1]
+                if hasattr(self, "last_subtitle_id") and self.last_subtitle_id in valid_ids:
+                    self.media_player.video_set_spu(self.last_subtitle_id)
+                    chosen = [name for (id, name) in track_list if id == self.last_subtitle_id][0]
+                    print(f"Subtitles shown: {chosen}")
+                    self.show_marquee(f"Subtitles shown: {chosen}")
+                else:
+                    first_id, first_name = valid_ids[0], [name for id, name in track_list if id == valid_ids[0]][0]
+                    self.media_player.video_set_spu(first_id)
+                    print(f"Subtitles shown: {first_name}")
+                    self.show_marquee(f"Subtitles shown: {first_name}")
             else:
                 print("No subtitle tracks available to show")
                 self.show_marquee("No subtitle tracks.")
