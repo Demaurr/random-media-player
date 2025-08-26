@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 from datetime import datetime
 import os
 import re
+import tracemalloc
 from player_constants import ALL_MEDIA_CSV, DELETE_FILES_CSV, FILE_TRANSFER_LOG, FILES_FOLDER, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, SNIPPETS_HISTORY_CSV, WATCHED_HISTORY_LOG_PATH
 from logs_writer import LogManager
 from collections import defaultdict, deque
@@ -12,7 +14,7 @@ logger = LogManager(LOG_PATH)
 def create_csv_file(headers=None, filename="New_CSV.csv"):
     if os.path.exists(filename):
         # print(f"{filename} File Exists...")
-        return 
+        return False
     # If no headers are provided, create three random headers
     if headers is None:
         headers = ["Heading_1", "Heading_2", "Heading_3"]
@@ -22,6 +24,7 @@ def create_csv_file(headers=None, filename="New_CSV.csv"):
         writer.writerow(headers)
     
     print(f"CSV file '{filename}' created with headers: {headers}")
+    return True
 
 def normalise_path(path) -> str:
         """
@@ -155,7 +158,7 @@ def compare_folders(filepath, folderpath):
         # print(f"Folder path: {folderpath}")
         return False
     
-def gather_all_media():
+def gather_all_media(refresh=False):
     try:
         LOG_FOLDERS_CSV = FOLDER_LOGS
         OUTPUT_CSV = ALL_MEDIA_CSV
@@ -166,17 +169,33 @@ def gather_all_media():
             "File Size (Human Readable)",
             "Creation Date",
             "Modification Date",
-            "Source Folder"
+            "Source Folder",
+            "Status"
         ]
+
         if not os.path.exists(LOG_FOLDERS_CSV):
-            create_csv_file(headers=["Folder Path","Csv Path","Date"], filename=LOG_FOLDERS_CSV)
+            # create_csv_file(headers=["Folder Path", "Csv Path", "Date"], filename=LOG_FOLDERS_CSV)
             create_csv_file(headers=HEADER, filename=OUTPUT_CSV)
             return OUTPUT_CSV
-        seen = set()
+
+        if not refresh and os.path.exists(OUTPUT_CSV) and os.path.getsize(OUTPUT_CSV) > 0:
+            return OUTPUT_CSV
+
+        old_data = {}
+        if os.path.exists(OUTPUT_CSV):
+            with open(OUTPUT_CSV, newline='', encoding='utf-8') as oldf:
+                reader = csv.DictReader(oldf)
+                for row in reader:
+                    if len(row) < 7:
+                        continue
+                    key = (normalise_path(row["Source Folder"]), row["File Name"].lower())
+                    row["Status"] = row.get("Status", "Present")
+                    old_data[key] = row
+
         csv_paths = set()
         with open(LOG_FOLDERS_CSV, newline='', encoding='utf-8') as logf:
             reader = csv.reader(logf)
-            next(reader, None)  # skip header
+            next(reader, None)
             for row in reader:
                 if len(row) < 2:
                     continue
@@ -184,31 +203,90 @@ def gather_all_media():
                 if csv_path:
                     csv_paths.add(normalise_path(csv_path))
 
-        all_rows = []
+        new_data = {}
         for csv_file in csv_paths:
             if not os.path.exists(csv_file):
                 continue
             with open(csv_file, newline='', encoding='utf-8') as inf:
-                reader = csv.reader(inf)
-                next(reader, None)  # skip header
+                reader = csv.DictReader(inf)
                 for row in reader:
                     if len(row) < 7:
                         continue
-                    key = (normalise_path(row[6]), row[0].lower())
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    all_rows.append(row)
+                    key = (normalise_path(row["Source Folder"]), row["File Name"].lower())
+                    file_path = os.path.join(row["Source Folder"], row["File Name"])
+                    row["Status"] = "Present" if os.path.exists(file_path) else "Missing"
+                    new_data[key] = row
+
+        merged_data = old_data.copy()
+        merged_data.update(new_data)
 
         with open(OUTPUT_CSV, "w", newline='', encoding='utf-8') as outf:
-            writer = csv.writer(outf)
-            writer.writerow(HEADER)
-            writer.writerows(all_rows)
+            writer = csv.DictWriter(outf, fieldnames=HEADER)
+            writer.writeheader()
+            writer.writerows(merged_data.values())
+
         return OUTPUT_CSV
+
     except Exception as e:
         logger.error_logs(f"Error gathering all media: {e}")
         print(f"Error gathering all media: {e}")
         return None
+
+def remove_media_entries(file_paths, csv_path=ALL_MEDIA_CSV):
+    """
+    Remove entries from ALL_MEDIA_CSV that match the given file paths.
+
+    :param file_paths: An iterable of absolute file paths (Source Folder + File Name).
+    :param csv_path: Path to the ALL_MEDIA_CSV file.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+            return False
+
+        # Normalize incoming paths for matching
+        to_remove = set()
+        for fp in file_paths:
+            folder, fname = os.path.split(normalise_path(fp))
+            to_remove.add((folder, fname.lower()))
+
+        # Read existing data
+        with open(csv_path, newline='', encoding='utf-8') as inf:
+            reader = csv.DictReader(inf)
+            rows = list(reader)
+            headers = reader.fieldnames
+
+        # Filter out unwanted rows
+        updated_rows = []
+        for row in rows:
+            key = (normalise_path(row["Source Folder"]), row["File Name"].lower())
+            if key not in to_remove:
+                updated_rows.append(row)
+
+        # Rewrite the file
+        with open(csv_path, "w", newline='', encoding='utf-8') as outf:
+            writer = csv.DictWriter(outf, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(updated_rows)
+
+        return True
+
+    except Exception as e:
+        logger.error_logs(f"Error removing media entries: {e}")
+        print(f"Error removing media entries: {e}")
+        return False
+
+    
+def get_all_media_files():
+    all_file_paths = []
+    with open(ALL_MEDIA_CSV, "r",newline="", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        next(reader, None)
+        for row in reader:
+            all_file_paths.append(row[6] + "\\" + row[0])
+
+    return all_file_paths
+
 
 def seconds_to_hhmmss(seconds):
         hours = int(seconds) // 3600
@@ -467,17 +545,34 @@ def calculate_duration_in_seconds(duration_str):
         
         return seconds
 
-
-def get_all_related_paths(target_path):
+def build_transfer_graph():
     graph = defaultdict(set)
-    
     with open(FILE_TRANSFER_LOG, newline='', encoding='utf-8') as file:
         reader = csv.DictReader(file)
         for row in reader:
             src = normalise_path(row['Source Path'])
             dst = normalise_path(row['Destination Path'])
-            graph[src].add(dst)
-            graph[dst].add(src)
+            if src and dst:
+                graph[src].add(dst)
+                graph[dst].add(src)
+    return graph
+
+
+def get_all_related_paths(target_path, graph=None):
+    """
+    Return all related file paths connected to target_path in the transfer graph.
+    
+    If graph is not provided, it will be built from FILE_TRANSFER_LOG.
+    """
+    if graph is None:
+        graph = defaultdict(set)
+        with open(FILE_TRANSFER_LOG, newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                src = normalise_path(row['Source Path'])
+                dst = normalise_path(row['Destination Path'])
+                graph[src].add(dst)
+                graph[dst].add(src)
 
     target_path = normalise_path(target_path)
     visited = set()
@@ -492,6 +587,7 @@ def get_all_related_paths(target_path):
             queue.extend(graph[path] - visited)
 
     return sorted(related_paths)
+
 
 def get_split_stats_by_folder(file_paths):
     """
@@ -587,6 +683,37 @@ def get_video_file_from_screenshot(screenshot_path):
         file_paths.append(filename)
 
     return file_paths
+
+def natural_sort_key(s):
+    """
+    Split string into text and numbers.
+    Numbers are converted to int for proper sorting.
+    """
+    return [int(text) if text.isdigit() else text.lower() 
+            for text in re.split(r'(\d+)', s)]
+
+def natural_sort_iterables(data):
+    """
+    Sorts any iterable of iterables (list, tuple, set) containing strings.
+    Works on list of lists, tuple of lists, set of tuples, etc.
+    """
+    # Convert outer container to a stable type (list) for sorting
+    sorted_data = sorted(
+        data,
+        key=lambda sub: [natural_sort_key(item) for item in sub]
+        if isinstance(sub, Iterable) and not isinstance(sub, (str, bytes))
+        else natural_sort_key(sub)
+    )
+    
+    return sorted_data
+
+def get_memory_usage():
+    """
+    Returns the current and peak memory usage (in MB) 
+    since tracemalloc.start() was called.
+    """
+    current, peak = tracemalloc.get_traced_memory()
+    return round(current / 1024 / 1024, 2), round(peak / 1024 / 1024, 2)
 
 if __name__ == "__main__":
     # print("Static methods module loaded successfully.")
