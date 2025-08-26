@@ -1,8 +1,10 @@
 import tkinter as tk
+from player_constants import Colors
+from tooltips import ToolTip
 
 class VideoProgressBar(tk.Canvas):
     def __init__(self, parent, set_position_callback, bg="#222", trimmed_segments=None, height=40, highlightthickness=0):
-        super().__init__(parent, bg=bg, highlightthickness=highlightthickness, height=height)
+        super().__init__(parent, bg=bg, highlightthickness=highlightthickness, height=height, cursor="arrow")
         self.parent = parent
         self.set_position_callback = set_position_callback
         self.trimmed_segments = trimmed_segments or []
@@ -11,11 +13,14 @@ class VideoProgressBar(tk.Canvas):
         self.handle_radius = 6
         self.dragging = False
         self.current_time = 0
+        self.tooltip = ToolTip(self, wraplength=100)
 
         self.bind("<Button-1>", self.on_click)
         self.bind("<B1-Motion>", self.on_drag)
         self.bind("<ButtonRelease-1>", self.on_release)
         self.bind("<Configure>", self._on_resize)
+        self.bind("<Motion>", self.on_motion)
+        self.bind("<Leave>", self.on_leave)
 
     def _on_resize(self, event):
         self.redraw()
@@ -26,8 +31,11 @@ class VideoProgressBar(tk.Canvas):
     
     def redraw(self, total_duration=None):
         """Alternative: Use a vertical line as position indicator"""
+        if not self.parent:
+            return
         if not hasattr(self.parent, "progress_bar"):
             return
+
         
         self.delete("all")
         width = max(1, self.winfo_width())
@@ -36,22 +44,23 @@ class VideoProgressBar(tk.Canvas):
         bar_y1, bar_y2 = 10, 25
 
         self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444", outline="")
-
+        
         total_duration = None
         if hasattr(self.parent, "media_player") and self.parent.media_player:
             total_duration = self.parent.media_player.get_length() / 1000
+
+        if total_duration and self.current_time > 0:
+            progress_width = int((self.current_time / total_duration) * width)
+            self.create_rectangle(0, bar_y1, progress_width, bar_y2, fill=Colors.RED_PROGRESS_BAR, outline="")
+
 
         if total_duration and self.trimmed_segments:
             for start, end in self.trimmed_segments:
                 x1 = int((start / total_duration) * width)
                 x2 = int((end / total_duration) * width)
-                self.create_line(x1, 5, x2, 5, fill="#FF9800", width=3, dash=(5,2))
-                self.create_line(x1, 2, x1, 8, fill="#FF9800", width=2)
-                self.create_line(x2, 2, x2, 8, fill="#FF9800", width=2)
-
-        if total_duration and self.current_time > 0:
-            progress_width = int((self.current_time / total_duration) * width)
-            self.create_rectangle(0, bar_y1, progress_width, bar_y2, fill="#666", outline="")
+                self.create_rectangle(x1, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, stipple="gray25", outline="")
+                self.create_line(x1, bar_y1, x1, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
+                self.create_line(x2, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
 
         if total_duration:
             handle_x = int((self.current_time / total_duration) * width)
@@ -59,17 +68,64 @@ class VideoProgressBar(tk.Canvas):
                 handle_x, bar_y1, handle_x, bar_y2, 
                 fill="red", width=3
             )
+            # self.draw_last_position(total_duration, width, bar_y1, bar_y2)
+            
+    def draw_last_position(self, total_duration, width, bar_y1, bar_y2):
+        if not hasattr(self, "last_pos_str"):
+            if hasattr(self.parent, "watch_history_logger") and hasattr(self.parent, "current_file"):
+                self.last_pos_str = self.parent.watch_history_logger.get_last_position(self.parent.current_file)
+                if self.last_pos_str:
+                    try:
+                        parts = [int(float(x)) for x in self.last_pos_str.split(":")]
 
-    def update_progress(self):
+                        if len(parts) == 2:
+                            h, m, s = 0, parts[0], parts[1]
+                        elif len(parts) == 3:
+                            h, m, s = parts
+                        else:
+                            raise ValueError(f"Unexpected time format: {self.last_pos_str}")
+
+                        last_pos_seconds = h * 3600 + m * 60 + s
+
+                        if 0 < last_pos_seconds < total_duration:
+                            last_x = int((last_pos_seconds / total_duration) * width)
+                            self.create_line(last_x, bar_y1, last_x, bar_y2, fill="black", width=2)
+
+                    except Exception as e:
+                        print(f"Error parsing last position '{self.last_pos_str}': {e}")
+
+
+            
+    def update_progress(self, total_duration=None):
         """Update the handle according to the video playback."""
         if hasattr(self.parent, "media_player") and self.parent.media_player:
             try:
                 total_duration = self.parent.media_player.get_length() / 1000
                 if total_duration > 0 and not self.dragging:
                     self.current_time = min(max(0, self.parent.media_player.get_time()/1000), total_duration)
-                    self.redraw()
+                    self.redraw(total_duration=total_duration)
             except Exception as e:
                 print(f"Error updating progress: {e}")
+
+    def on_motion(self, event):
+        """Show tooltip with time at hovered position."""
+        width = self.winfo_width()
+        if hasattr(self.parent, "media_player") and self.parent.media_player:
+            total_duration = self.parent.media_player.get_length() / 1000
+            if total_duration > 0:
+                hovered_time = (event.x / width) * total_duration
+                # Format as hh:mm:ss
+                hours, remainder = divmod(int(hovered_time), 3600)
+                mins, secs = divmod(remainder, 60)
+                time_str = f"{hours:02}:{mins:02}:{secs:02}"
+                self.tooltip.show_tooltip(event.x_root + 20, event.y_root + 10, time_str)
+            else:
+                self.tooltip.hide_tooltip()
+        else:
+            self.tooltip.hide_tooltip()
+
+    def on_leave(self, event):
+        self.tooltip.hide_tooltip()
 
     def move_handle(self, x):
         """Move handle to x and update video position"""
