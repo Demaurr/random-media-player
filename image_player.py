@@ -4,10 +4,12 @@ from tkinter import *
 # from tkinter import messagebox
 from custom_messagebox import *
 from PIL import Image, ImageTk
+import random
+from deletion_manager import DeletionManager
 
 
 class ImageViewer:
-    def __init__(self, master, image_files, index=0, width=1000, height=600, fullscreen=False):
+    def __init__(self, master, image_files, index=0, width=1000, height=600, fullscreen=False, deletion_manager=None):
         self.master = master
         self.master.geometry(f"{width}x{height}")
         self.scale_factor = 1.0
@@ -20,7 +22,11 @@ class ImageViewer:
         self.total_files = len(image_files)
         self.icommand = "Forward"
         self.original_image = None
+        self.original_image_files = list(image_files) 
+        self.shuffled_image_files = []
+        self.shuffle_mode = False
         self.fullscreen = fullscreen
+        self.deletion_manager = deletion_manager or DeletionManager()
         self.master.attributes("-fullscreen", self.fullscreen)
 
         self.status_label = Label(master, text="", bg="black", fg="lime", font=("Segoe UI", 12, "bold"))
@@ -32,12 +38,34 @@ class ImageViewer:
         self.bind_keys()
         self.center_window(width=width, height=height)
 
+    def toggle_shuffle(self, event=None):
+        self.shuffle_mode = not self.shuffle_mode
+
+        if self.shuffle_mode:
+            current_image = self.image_files[self.current_index]
+            self.shuffled_image_files = list(self.original_image_files)
+            random.shuffle(self.shuffled_image_files)
+            self.image_files = self.shuffled_image_files
+            self.current_index = self.image_files.index(current_image)
+            self.show_status("🔀 Shuffle ON")
+        else:
+            current_image = self.image_files[self.current_index]
+            self.image_files = self.original_image_files
+            self.current_index = self.image_files.index(current_image)
+            self.show_status("➡️ Shuffle OFF")
+
+        self._load_image_threaded()
+
+    def show_status(self, message, duration=2000):
+        self.status_label.config(text=message)
+        self.master.after(duration, lambda: self.status_label.config(text=""))
+
     def bind_keys(self):
         self.master.bind("<Left>", self.prev_image)
         self.master.bind("<Right>", self.next_image)
         self.master.bind("<Control-KeyPress-Right>", self.to_end)
         self.master.bind("<Control-KeyPress-Left>", self.to_start)
-        self.master.bind("<Escape>", self.toggle_fullscreen)
+        self.master.bind("<Escape>", self.close_window)
         self.master.bind("<F11>", self.toggle_fullscreen)
         self.master.bind("<KeyPress-F>", self.toggle_fullscreen)
         self.master.bind("<KeyPress-f>", self.toggle_fullscreen)
@@ -56,6 +84,13 @@ class ImageViewer:
         self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
         self.master.bind("<Up>", self.scroll_up)
         self.master.bind("<Down>", self.scroll_down)
+        self.master.bind("<s>", self.toggle_shuffle)
+        self.master.bind("<S>", self.toggle_shuffle)
+        self.master.bind("<Delete>", self.set_to_delete)
+        self.master.bind("<BackSpace>", self.remove_from_delete)
+
+    def close_window(self, event=None):
+        self.master.destroy()
 
     def to_end(self, event=None):
         self.current_index = len(self.image_files) - 1
@@ -214,6 +249,15 @@ class ImageViewer:
     def on_mouse_release(self, event):
         self.dragging = False
 
+    def set_to_delete(self, event=None):
+        image_path = self.image_files[self.current_index]
+        self.deletion_manager.mark_for_deletion(image_path)
+        self.show_status(f"Marked for deletion: {os.path.basename(image_path)}")
+    
+    def remove_from_delete(self, event=None):
+        image_path = self.image_files[self.current_index]
+        self.deletion_manager.remove_from_deletion(image_path)
+        self.show_status(f"Removed from deletion: {os.path.basename(image_path)}")
 
     # def add_to_favorites(self, event=None):
         # image_path = self.image_files[self.current_index]
