@@ -25,7 +25,7 @@ from player_constants import (
     VIDEO_SNIPPETS_FOLDER, 
     Colors
     )
-from static_methods import get_file_transfer_history, normalise_path
+from static_methods import build_transfer_graph, get_all_related_paths, normalise_path
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -51,7 +51,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
 
-        self.trimmed_segments = trimmed_segments
+        self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
         self._precompute_trimmed_segments(video_files)
 
         self.bg_color = Colors.PLAIN_BLACK
@@ -87,7 +87,6 @@ class MediaPlayerApp(tk.Toplevel):
 
     def _get_history_csvfile(self, watch_history_csv):
         try:
-            # You Can Add a Folder in file_info.txt as default One
             with open(FILES_FOLDER + "file_info.txt", "r") as file:
                 reader = file.readline().strip()
             if reader:
@@ -99,7 +98,7 @@ class MediaPlayerApp(tk.Toplevel):
     
     def _on_close(self, event=None):
         self.session_end = timeit.default_timer()
-        self.stop()  # Call the stop method when the window is closed
+        self.stop()
         # tk.Tk.quit(self)
         self.show_seassion_stats(self.get_stats())
         if hasattr(self, 'media_player'):
@@ -199,18 +198,19 @@ class MediaPlayerApp(tk.Toplevel):
         # self.drag_label.pack_forget()
         # self.drag_bar.pack_forget()
 
-        self.media_canvas = tk.Canvas(self, bg="black", width=900, height=400, highlightthickness=0)
-        self.media_canvas.pack(pady=(0, 0), fill=tk.BOTH, expand=True)
+        self.media_canvas = tk.Canvas(self, bg=Colors.PLAIN_BLACK, width=1000, height=500, highlightthickness=0)
+        self.media_canvas.pack(pady=0, fill=tk.BOTH, expand=True)
 
-        control_frame = tk.Frame(self, bg="black")
-        control_frame.pack(pady=(5, 0), fill=tk.X)
+        control_frame = tk.Frame(self, bg=Colors.PLAIN_BLACK, width=1000)
+        control_frame.pack(pady=(5, 0), anchor=tk.CENTER)
 
+        # Not used, instead show marquee is best
         self.feedback_label = tk.Label(
             self,
             textvariable=self.feedback_var,
             font=("Segoe UI", 18, "bold"),
-            bg="black",
-            fg="white"
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_WHITE
         )
     
 
@@ -220,7 +220,7 @@ class MediaPlayerApp(tk.Toplevel):
                 fg=fg,
                 relief=tk.FLAT,
                 bd=0,
-                font=("Segoe UI", 12, "bold"),
+                font=("Segoe UI", 10, "bold"),
                 activebackground=activebg or bg,
                 activeforeground=activefg or fg,
                 cursor="hand2",
@@ -231,102 +231,103 @@ class MediaPlayerApp(tk.Toplevel):
         self.current_stats_button = tk.Button(
             control_frame, text="Current Stats", command=self.current_stats
         )
-        style_btn(self.current_stats_button, "white", "black", "#e0e0e0")
+        style_btn(self.current_stats_button, Colors.PLAIN_BLACK, Colors.PLAIN_WHITE, Colors.ACTIVE_WHITE)
 
         self.prev_button = tk.Button(
             control_frame, text="Previous", command=self.play_previous
         )
-        style_btn(self.prev_button, "red", "white", "#b30000")
+        style_btn(self.prev_button, Colors.PLAIN_BLACK, Colors.PLAIN_RED, Colors.ACTIVE_RED)
 
         self.rewind_button = tk.Button(
             control_frame, text="⏪", command=self.rewind
         )
-        style_btn(self.rewind_button, "red", "white", "#b30000")
+        style_btn(self.rewind_button, Colors.PLAIN_BLACK, Colors.PLAIN_RED, Colors.ACTIVE_RED)
 
         self.play_button = tk.Button(
             control_frame, text="▶️ Play", command=self.play_video
         )
-        style_btn(self.play_button, "black", "white", "#222")
+        style_btn(self.play_button, Colors.PLAIN_BLACK, Colors.PLAIN_WHITE, "#222222")
 
         self.pause_button = tk.Button(
             control_frame, text="⏸️ Pause", command=self.pause_video
         )
-        style_btn(self.pause_button, "#FF9800", "white", "#e65100")
+        style_btn(self.pause_button, Colors.PLAIN_BLACK, Colors.WARNING_ORANGE, "#e65100")
 
         self.fast_forward_button = tk.Button(
             control_frame, text="⏩", command=self.fast_forward
         )
-        style_btn(self.fast_forward_button, "red", "white", "#b30000")
+        style_btn(self.fast_forward_button, Colors.PLAIN_BLACK, Colors.PLAIN_RED, Colors.ACTIVE_RED)
 
         self.next_button = tk.Button(
             control_frame, text="Next", command=self.play_next
         )
-        style_btn(self.next_button, "red", "white", "#b30000")
+        style_btn(self.next_button, Colors.PLAIN_BLACK, Colors.PLAIN_RED, Colors.ACTIVE_RED)
 
         self.category_button = tk.Button(
             control_frame, text="☰", command=self.open_category_manager
         )
-        style_btn(self.category_button, "purple", "white", "#4B0082")
+        style_btn(self.category_button, Colors.PLAIN_BLACK, Colors.PLAIN_PURPLE, Colors.CATEGORY_PURPLE)
 
         self.autoplay_button = tk.Button(
             control_frame, text="Auto: ON", command=self.toggle_autoplay
         )
-        style_btn(self.autoplay_button, "#00C853", "white", "#1565C0")
+        style_btn(self.autoplay_button, Colors.PLAIN_BLACK, Colors.SUCCESS_GREEN, "#1565C0")
 
         self.loop_button = tk.Button(
             control_frame, text="⟲", command=self.toggle_loop
         )
-        style_btn(self.loop_button, "#000000", "white", "#37474F")
+        style_btn(self.loop_button, Colors.PLAIN_BLACK, Colors.PLAIN_WHITE, "#37474F")
 
         for btn in [
             self.current_stats_button, self.prev_button, self.rewind_button,
             self.play_button, self.pause_button, self.fast_forward_button,
             self.next_button, self.category_button, self.autoplay_button, self.loop_button
         ]:
-            btn.pack(side=tk.LEFT, padx=3, pady=2)
+            btn.pack(side=tk.LEFT, padx=3, pady=0)
 
         self.time_label = tk.Label(
             control_frame,
             text="00:00:00 / 00:00:00",
-            font=("Segoe UI", 13, "bold"),
-            fg="white",
-            bg="black",
+            font=("Segoe UI", 10, "bold"),
+            fg=Colors.PLAIN_WHITE,
+            bg=Colors.PLAIN_BLACK,
             padx=10
         )
-        self.time_label.pack(side=tk.RIGHT, padx=10, pady=0)
+        self.time_label.pack(side=tk.RIGHT, padx=(20,10), pady=0)
 
         self.progress_bar = VideoProgressBar(
             self, self.set_video_position, bg=self.bg_color, highlightthickness=0,
             trimmed_segments=self._get_trimmed_segments()
         )
-        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=8)
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=0)
 
-        self.volume_bar = VolumeBar(self, self.media_player, fg=self.fg_color, bg=self.bg_color)
-        self.volume_bar.pack(side=tk.RIGHT, padx=0, pady=0)
+        self.volume_bar = VolumeBar(self, self.media_player, bg=self.bg_color)
+        self.volume_bar.pack(side=tk.RIGHT, padx=5, pady=0)
 
-        def on_enter(e): e.widget.config(bg="#444")
+
+        def on_enter(e): e.widget.config(fg="#444")
         def on_leave(e):
             txt = e.widget["text"]
             if txt in ["Previous", "⏪", "⏩", "Next"]:
-                e.widget.config(bg="red")
+                e.widget.config(fg=Colors.PLAIN_RED, bg=Colors.PLAIN_BLACK)
             elif txt == "Current Stats":
-                e.widget.config(bg="white")
+                e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
             elif txt == "Categories":
-                e.widget.config(bg="purple")
+                e.widget.config(fg=Colors.CATEGORY_PURPLE, bg=Colors.PLAIN_BLACK)
             elif txt == "Fav +":
-                e.widget.config(bg="white")
+                e.widget.config(bg=Colors.PLAIN_WHITE)
             elif txt == "Fav -":
-                e.widget.config(bg="black")
+                e.widget.config(bg=Colors.PLAIN_BLACK)
             elif "Pause" in txt or "Resume" in txt:
-                e.widget.config(bg="#FF9800")
+                e.widget.config(fg=Colors.WARNING_ORANGE, bg=Colors.PLAIN_BLACK)
             elif "Auto" in txt:
-                e.widget.config(bg="#00C853") if self.autoplay else e.widget.config(bg="#000000")
+                e.widget.config(fg=Colors.SUCCESS_GREEN, bg=Colors.PLAIN_BLACK) if self.autoplay else e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
             elif "⟲" in txt:
-                e.widget.config(bg="#000000") if not self.loop_video else e.widget.config(bg="#00C853")
+                e.widget.config(fg=Colors.SUCCESS_GREEN, bg=Colors.PLAIN_BLACK) if self.loop_video else e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
             elif "☰" in txt:
-                e.widget.config(bg="purple")
+                e.widget.config(fg=Colors.PLAIN_PURPLE, bg=Colors.PLAIN_BLACK)
             else:
-                e.widget.config(bg="black")
+                e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
 
         for btn in [
             self.current_stats_button, self.category_button, self.prev_button, self.rewind_button,
@@ -363,76 +364,97 @@ class MediaPlayerApp(tk.Toplevel):
         self.autoplay = not self.autoplay
         self.autoplay_button.config(
             text=f"Auto: {'ON' if self.autoplay else 'OFF'}",
-            bg="#00C853" if self.autoplay else "#000000"
+            fg=Colors.SUCCESS_GREEN if self.autoplay else Colors.PLAIN_WHITE,
+            bg=Colors.PLAIN_BLACK
         )
         self.show_marquee("Autoplay is ON" if self.autoplay else "Autoplay is OFF")
 
     def toggle_always_on_top(self, event=None):
         """Toggle whether the window stays on top of other windows."""
-        is_on_top = self.attributes("-topmost")
-        self.attributes("-topmost", not is_on_top)
+        self.is_on_top = self.attributes("-topmost")
+        self.attributes("-topmost", not self.is_on_top)
         # self.drag_label.pack(side=tk.LEFT, padx=0, pady=0)
         # self.drag_bar.config(height=5 if not is_on_top else 0)
-        if not is_on_top:
+        if not self.is_on_top:
             self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED)
         else:
             self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK)
         
         self.toggle_shorten_window(event=event)
-        self.show_marquee("Always on top: " + ("ON" if not is_on_top else "OFF"))
+        self.show_marquee("Always on top: " + ("ON" if not self.is_on_top else "OFF"))
 
     def toggle_shorten_window(self, event=None):
         if not self.minimized:
             if self.attributes("-fullscreen"):
                 self.attributes("-fullscreen", False)
                 self.update_idletasks()
-            self.prev_geometry = self.geometry()
-            self.toggle_controls_visibility(False)
 
+            if self.state() == "zoomed":
+                self.prev_geometry = "zoomed"
+                self.state("normal")
+            else:
+                self.prev_geometry = self.geometry()
+
+            self.toggle_controls_visibility(False)
             self.overrideredirect(True)
 
-            screen_width = self.winfo_screenwidth()
-            new_width, new_height = 450, 270
-            x = screen_width - (new_width + 20)
-            y = 35
-            self.geometry(f"{new_width}x{new_height}+{x}+{y}")
+            if hasattr(self, "minimized_geometry"):
+                self.geometry(self.minimized_geometry)
+            else:
+                self.minimized_geometry = self.shorten_window()
 
             self.minimized = True
-        else:
-            self.overrideredirect(False)
-            if self.prev_geometry:
-                self.geometry(self.prev_geometry)
-            self.toggle_controls_visibility(True)
 
+        else:
+            self.minimized_geometry = self.geometry()
+            self.overrideredirect(False)
+
+            if self.prev_geometry == "zoomed":
+                self.state("zoomed")
+            elif self.prev_geometry:
+                self.geometry(self.prev_geometry)
+
+            self.toggle_controls_visibility(True)
             self.minimized = False
+
+
+    def shorten_window(self):
+        screen_width = self.winfo_screenwidth()
+        new_width, new_height = 450, 270
+        x = screen_width - (new_width + 20)
+        y = 35
+        minimized_geometry = f"{new_width}x{new_height}+{x}+{y}"
+        self.geometry(minimized_geometry)
+        return minimized_geometry
 
     def toggle_always_on_top_minimized_only(self, event=None):
         """
         Toggle always-on-top ON/OFF but keep minimized state.
         Only valid if already minimized.
         """
-        if not self.minimized:
+        self.is_on_top = self.attributes("-topmost")
+        if not self.minimized and not self.is_on_top:
             self.show_marquee("Must be minimized to use this toggle")
             return
 
-        is_on_top = self.attributes("-topmost")
-        self.attributes("-topmost", not is_on_top)
+        self.attributes("-topmost", not self.is_on_top)
 
-        if not is_on_top:
+        if not self.is_on_top:
             self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED)
             self.show_marquee("Always on top: ON (Minimized)")
+            self.overrideredirect(True)
         else:
             self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK)
             self.show_marquee("Always on top: OFF (Minimized)")
-
+            self.overrideredirect(False)
     
     def toggle_loop(self, event=None):
         self.loop_video = not self.loop_video
         if self.loop_video:
-            self.loop_button.config(bg="#00C853")
+            self.loop_button.config(fg=Colors.SUCCESS_GREEN)
             print("Loop enabled")
         else:
-            self.loop_button.config(bg="#000000")
+            self.loop_button.config(fg=Colors.PLAIN_WHITE)
             print("Loop disabled")
         self.show_marquee("Looping is ON" if self.loop_video else "Looping is OFF")
         if self.loop_video and self.current_file:
@@ -473,7 +495,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind("<KeyPress-A>", self.toggle_autoplay)
         self.bind("<Alt-t>", self.toggle_always_on_top)
         self.bind("<Alt-T>", self.toggle_always_on_top)
-        # self.bind("<F10>", self.toggle_always_on_top_minimized_only)
+        self.bind("<F10>", self.toggle_always_on_top_minimized_only)
         self.bind('<Control-S>', self.mark_start)
         self.bind('<Control-s>', self.mark_start)
         self.bind('<Control-E>', self.mark_end)
@@ -507,7 +529,8 @@ class MediaPlayerApp(tk.Toplevel):
             self.attributes("-topmost", False)
 
         try:
-            notes_window = NotesManagerGUI(self.notes_manager, snippets_manager=self.snippets_manager, parent=self, file_path=file_path)
+            notes_window = NotesManagerGUI(self.notes_manager, snippets_manager=self.snippets_manager, 
+                                           parent=self, file_path=file_path, minimal=True)
             self.wait_window(notes_window.root)
         finally:
             if was_playing:
@@ -534,17 +557,30 @@ class MediaPlayerApp(tk.Toplevel):
 
     def _precompute_trimmed_segments(self, video_files):
         """Precompute trimmed segments for all files in the background."""
+        
+        if not any(f not in self.trimmed_segments for f in video_files):
+            print("[INFO] All trimmed segments already precomputed, skipping thread.")
+            if hasattr(self, "current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
+                self.after(0, lambda: self.progress_bar.set_trimmed_segments(self._get_trimmed_segments()))
+            return
+
         def worker():
+            if not hasattr(self, "transfer_graph"):
+                self.transfer_graph = build_transfer_graph()
+
             for f in video_files:
+                if f in self.trimmed_segments:
+                    continue
+
                 segments = []
-                file_paths = set(
-                    filter(
-                        None,
-                        [normalise_path(p) for p in get_file_transfer_history(f).values() if p is not None]
-                    )
-                )
-                for fp in file_paths:
-                    snippets = self.snippets_manager.get_snippets_by_original_file(fp)
+                related_paths = get_all_related_paths(f, graph=self.transfer_graph)
+
+                for rp in related_paths:
+                    if rp in self.trimmed_segments:
+                        segments.extend(self.trimmed_segments[rp])
+                        continue
+
+                    snippets = self.snippets_manager.get_snippets_by_original_file(rp)
                     for snippet in snippets:
                         try:
                             start = float(snippet["Start Time (s)"])
@@ -552,14 +588,16 @@ class MediaPlayerApp(tk.Toplevel):
                             segments.append((start, end))
                         except Exception:
                             continue
+
                 self.trimmed_segments[f] = segments
 
-            if hasattr(self,"current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
+            if hasattr(self, "current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
                 self.after(0, lambda: self.progress_bar.set_trimmed_segments(self._get_trimmed_segments()))
 
             print("[INFO] Precomputation of trimmed segments completed.")
 
         threading.Thread(target=worker, daemon=True).start()
+
 
     def _get_trimmed_segments(self):
         """Get trimmed segments for the current file from the precomputed dict."""
@@ -583,7 +621,7 @@ class MediaPlayerApp(tk.Toplevel):
                 index = next(i for i, s in enumerate(speeds) if abs(s - current_speed) < 0.1)
                 new_index = (index + 1) % len(speeds)
             except StopIteration:
-                new_index = 0  # Default to the first speed if current is unknown
+                new_index = 0
             new_speed = speeds[new_index]
             self.set_playback_speed(new_speed)
             print(f"Playback Speed Changed to: {new_speed}x")
@@ -693,7 +731,8 @@ class MediaPlayerApp(tk.Toplevel):
         new_volume = min(current_volume + 5, 200)  # Increase volume by 5%, up to 200%
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
-        self.volume_bar.set(new_volume)  # Update volume bar
+        # self.volume_bar.set(new_volume)  # Update volume bar
+        self.volume_bar.update_volume(new_volume)
 
     def volume_decrease(self, event):
         """Decreases the volume."""
@@ -701,7 +740,8 @@ class MediaPlayerApp(tk.Toplevel):
         new_volume = max(current_volume - 5, 0)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
-        self.volume_bar.set(new_volume) 
+        # self.volume_bar.set(new_volume) 
+        self.volume_bar.update_volume(new_volume)
 
 
     def select_file(self):
@@ -882,19 +922,22 @@ class MediaPlayerApp(tk.Toplevel):
                 
                 if self.playing_video:
                     self.media_player.stop()
-                    time.sleep(0.1)
+                    time.sleep(0.15)
                     
                 if os.path.exists(self.current_file):
                     title = f"[{self.video_files.index(self.current_file)} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
-                    media.parse_async()
+                    # media.parse_async()
                     self.media_player.set_media(media)
+                    self.total_duration = int(self.media_player.get_length()) or 0
                     self.last_looped_file = self.current_file
                     self.previous_title = title
+                    # self.last_pos_seconds = self.parse_last_position()
                     self.after(0, lambda: self._on_video_loaded(title))
                     self.after(220, lambda: self.redraw_progress_bar(self.total_duration))
+                    # print(self.watch_history_logger.get_last_position(self.current_file))
                 else:
                     print(f"The file Doesn't Exists: {self.current_file}")
                     self.logger.error_logs(f"File Not Found: {self.current_file}")
@@ -903,14 +946,12 @@ class MediaPlayerApp(tk.Toplevel):
                 print(f"An Exception Occurred in play_video: {e}")
                 showerror(self, "Error", f"Error loading {self.current_file}: {e}")
                 self.logger.error_logs(f"Error loading {self.current_file}: {e}")
-                # self.after(0, lambda: self.show_marquee(f"Error loading {self.current_file}: {e}"))
+
         if hasattr(self, '_video_thread') and self._video_thread.is_alive():
             print("Video thread is already running. Waiting for it to finish.")
             return
         self._video_thread = threading.Thread(target=load_and_play, daemon=True)
         self._video_thread.start()
-
-        # threading.Thread(target=load_and_play, daemon=True).start()
         
     def redraw_progress_bar(self, total_duration=None):
         if self.current_file in self.trimmed_segments:
@@ -924,7 +965,6 @@ class MediaPlayerApp(tk.Toplevel):
         Also handles potential VLC operation timeouts by creating a new VLC instance.
         """
         try:
-            # print("About to release current media player...")
             def vlc_operations():
                 try:
                     if hasattr(self, 'media_player'):
@@ -939,7 +979,7 @@ class MediaPlayerApp(tk.Toplevel):
             
             vlc_thread = threading.Thread(target=vlc_operations, daemon=True)
             vlc_thread.start()
-            vlc_thread.join(timeout=2)
+            vlc_thread.join(timeout=1.5)
             
             if vlc_thread.is_alive():
                 print("VLC operations timed out, forcing continue...")
@@ -956,7 +996,7 @@ class MediaPlayerApp(tk.Toplevel):
         except Exception as e:
             print(f"Error during media release: {e}")
             self.logger.error_logs(f"Error during media release: {e}")
-        time.sleep(0.2)
+        time.sleep(0.15)
 
     def fast_forward(self, event=None):
         """
@@ -1005,7 +1045,7 @@ class MediaPlayerApp(tk.Toplevel):
                 self.record_segment()
                 self.media_player.pause()
                 self.video_paused = True
-                self.pause_button.config(text="⏯️ Resume", bg="#FF9800")
+                self.pause_button.config(text="⏯️ Resume")
 
     def stop(self, event=None):
         """
@@ -1017,17 +1057,18 @@ class MediaPlayerApp(tk.Toplevel):
             total_watched = self.calculate_total_watched()
             duration_watched = self.get_time_str(total_watched)
             total_duration = self.get_duration_str()
-            print(f"Real Elapsed Time: {duration_watched}")
+            last_position = self.get_time_str(self.media_player.get_time())
+            # print(f"Real Elapsed Time: {duration_watched}")
             self._release_current_media()
 
             skipped_time = (self.prev_counts * 4990) - (self.forward_counts * 9990)
-            print(f"Skipped Time: {self.get_time_str(skipped_time)}")
             print(f"Prev Counts: {self.prev_counts}, Forward Counts: {self.forward_counts}")
             
-            self.watch_history_logger.log_watch_history(self.current_file, total_duration, duration_watched)
+            self.watch_history_logger.log_watch_history(
+                self.current_file, total_duration, duration_watched, last_position
+            )
             self.watched_videos.increment_duration_and_count(self.current_file, total_watched)
             self.media_player.stop()
-            # self.media_player.release()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
 
@@ -1067,7 +1108,7 @@ class MediaPlayerApp(tk.Toplevel):
         Updates the time label with the current playback time and total duration.
         """
         if self.playing_video and not self.video_paused:
-            self.total_duration = self.media_player.get_length()
+            self.total_duration = int(self.media_player.get_length())
             current_time = self.media_player.get_time()
 
             # if total_duration - current_time <= 1000:
@@ -1087,7 +1128,21 @@ class MediaPlayerApp(tk.Toplevel):
                 # print(total_duration, current_time)
                 # return
                 # return
-        self.after(200, self.update_video_progress)
+            self.progress_bar.update_progress()
+        self.after(250, self.update_video_progress)
+
+    def parse_last_position(self):
+        last_pos_str = self.watch_history_logger.get_last_position(self.current_file)
+        if last_pos_str:
+            try:
+                h, m, s = [int(float(x)) for x in last_pos_str.split(":")]
+                last_pos_seconds = h * 3600 + m * 60 + s
+                if 0 < last_pos_seconds < self.total_duration:
+                    return last_pos_seconds
+            except Exception as e:
+                print(f"Error parsing last position: {e}")
+                return 0
+        
     
     def seconds_to_hhmmss(self, seconds, safe_for_filename=True):
         hours = int(seconds) // 3600
@@ -1193,7 +1248,7 @@ class MediaPlayerApp(tk.Toplevel):
             ms = self.media_player.get_time()
             self.trim_start = ms
             self.show_marquee(f"Start marked at {self.get_time_str(ms)}")
-            self.time_label.config(fg="red")
+            self.time_label.config(fg=Colors.PLAIN_RED)
         except Exception as e:
             showerror(self,"Trim Error", f"Could not mark start:\n{e}")
             self.logger.error_logs(f"Error marking start for trimming: {e}")
