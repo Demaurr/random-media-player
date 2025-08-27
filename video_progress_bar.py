@@ -3,17 +3,18 @@ from player_constants import Colors
 from tooltips import ToolTip
 
 class VideoProgressBar(tk.Canvas):
-    def __init__(self, parent, set_position_callback, bg="#222", trimmed_segments=None, height=40, highlightthickness=0):
+    def __init__(self, parent, set_position_callback, bg="#222", trimmed_segments=None, height=20, highlightthickness=0):
         super().__init__(parent, bg=bg, highlightthickness=highlightthickness, height=height, cursor="arrow")
         self.parent = parent
         self.set_position_callback = set_position_callback
         self.trimmed_segments = trimmed_segments or []
 
         self.handle = None
-        self.handle_radius = 6
         self.dragging = False
+        self.last_pos_str = ""
         self.current_time = 0
-        self.tooltip = ToolTip(self, wraplength=100)
+        self.tooltip = ToolTip(self, wraplength=100, position="above")
+        self._file = ""
 
         self.bind("<Button-1>", self.on_click)
         self.bind("<B1-Motion>", self.on_drag)
@@ -41,9 +42,9 @@ class VideoProgressBar(tk.Canvas):
         width = max(1, self.winfo_width())
         height = self.winfo_height()
 
-        bar_y1, bar_y2 = 10, 25
+        bar_y1, bar_y2 = 5, 11
 
-        self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444", outline="")
+        self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444444", outline="")
         
         total_duration = None
         if hasattr(self.parent, "media_player") and self.parent.media_player:
@@ -58,41 +59,52 @@ class VideoProgressBar(tk.Canvas):
             for start, end in self.trimmed_segments:
                 x1 = int((start / total_duration) * width)
                 x2 = int((end / total_duration) * width)
-                self.create_rectangle(x1, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, stipple="gray25", outline="")
+                self.create_rectangle(x1, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, stipple="gray50", outline="")
                 self.create_line(x1, bar_y1, x1, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
                 self.create_line(x2, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
 
         if total_duration:
             handle_x = int((self.current_time / total_duration) * width)
             self.handle = self.create_line(
-                handle_x, bar_y1, handle_x, bar_y2, 
-                fill="red", width=3
+                handle_x, bar_y1 - 3, handle_x, bar_y2 + 3, 
+                fill=Colors.PLAIN_RED, width=3
             )
             # self.draw_last_position(total_duration, width, bar_y1, bar_y2)
             
     def draw_last_position(self, total_duration, width, bar_y1, bar_y2):
-        if not hasattr(self, "last_pos_str"):
+        if hasattr(self, "_last_seconds") and self._last_seconds and total_duration:
+            if 0 < self._last_seconds < total_duration:
+                last_x = int((self._last_seconds / total_duration) * width)
+                self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
+            return
+
+        if not self.last_pos_str or (self._file != self.parent.current_file):
             if hasattr(self.parent, "watch_history_logger") and hasattr(self.parent, "current_file"):
                 self.last_pos_str = self.parent.watch_history_logger.get_last_position(self.parent.current_file)
-                if self.last_pos_str:
-                    try:
-                        parts = [int(float(x)) for x in self.last_pos_str.split(":")]
+                self._file = self.parent.current_file
 
-                        if len(parts) == 2:
-                            h, m, s = 0, parts[0], parts[1]
-                        elif len(parts) == 3:
-                            h, m, s = parts
-                        else:
-                            raise ValueError(f"Unexpected time format: {self.last_pos_str}")
+        if self.last_pos_str:
+            try:
+                parts = [int(float(x)) for x in self.last_pos_str.split(":")]
 
-                        last_pos_seconds = h * 3600 + m * 60 + s
+                if len(parts) == 2:
+                    h, m, s = 0, parts[0], parts[1]
+                elif len(parts) == 3:
+                    h, m, s = parts
+                else:
+                    raise ValueError(f"Unexpected time format: {self.last_pos_str}")
 
-                        if 0 < last_pos_seconds < total_duration:
-                            last_x = int((last_pos_seconds / total_duration) * width)
-                            self.create_line(last_x, bar_y1, last_x, bar_y2, fill="black", width=2)
+                self._last_seconds = h * 3600 + m * 60 + s
 
-                    except Exception as e:
-                        print(f"Error parsing last position '{self.last_pos_str}': {e}")
+                if 0 < self._last_seconds < total_duration:
+                    last_x = int((self._last_seconds / total_duration) * width)
+                    self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
+
+                print(self.last_pos_str)
+
+            except Exception as e:
+                print(f"Error parsing last position '{self.last_pos_str}': {e}")
+                self._last_seconds = None
 
 
             
@@ -118,7 +130,7 @@ class VideoProgressBar(tk.Canvas):
                 hours, remainder = divmod(int(hovered_time), 3600)
                 mins, secs = divmod(remainder, 60)
                 time_str = f"{hours:02}:{mins:02}:{secs:02}"
-                self.tooltip.show_tooltip(event.x_root + 20, event.y_root + 10, time_str)
+                self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, time_str)
             else:
                 self.tooltip.hide_tooltip()
         else:

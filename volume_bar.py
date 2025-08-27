@@ -1,76 +1,81 @@
 import tkinter as tk
+from player_constants import Colors
+from tooltips import ToolTip
 
-class VolumeBar(tk.Scale):
-    """
-    VolumeBar class represents a volume control widget for a media player.
-
-    Inherits from:
-        tk.Scale: tkinter widget for selecting a numerical value within a range.
-
-    Args:
-        master (tk.Tk | tk.Frame): The parent widget or frame to which this VolumeBar belongs.
-        media_player: The media player object whose volume will be controlled by this VolumeBar.
-        **kwargs: Additional keyword arguments to configure the VolumeBar.
-
-    Attributes:
-        media_player: The media player object whose volume is controlled by this VolumeBar.
-
-    Methods:
-        set_volume(self, volume): Sets the volume of the associated media player.
-
-    Example:
-        # Create a Tkinter window
-        root = tk.Tk()
-
-        # Create a media player instance (replace ... with your media player object)
-        media_player = ...
-
-        # Create a VolumeBar instance and pack it into the window
-        volume_bar = VolumeBar(root, media_player, bg='white', fg='blue')  # Customize colors here
-        volume_bar.pack()
-
-        # Start the Tkinter event loop
-        root.mainloop()
-    """
-
-    def __init__(self, master, media_player, **kwargs):
-        """
-        Initializes the VolumeBar widget with the specified parameters and default settings.
-
-        Args:
-            master (tk.Tk | tk.Frame): The parent widget or frame to which this VolumeBar belongs.
-            media_player: The media player object whose volume will be controlled by this VolumeBar.
-            **kwargs: Additional keyword arguments to configure the VolumeBar.
-        """
-        kwargs.setdefault("bg", "black")
-        kwargs.setdefault("fg", "#2196F3")
-        kwargs.setdefault("troughcolor", "#222")
-        kwargs.setdefault("highlightthickness", 0)
-        kwargs.setdefault("sliderrelief", tk.FLAT)
-        kwargs.setdefault("activebackground", "#2196F3")
-        kwargs.setdefault("bd", 1)
-        kwargs.setdefault("font", ("Segoe UI", 8, "bold"))
-        super().__init__(
-            master,
-            from_=0,
-            to=200,  # Changed from 100 to 200 to support up to 200% volume
-            orient=tk.HORIZONTAL,
-            length=100,
-            command=self.set_volume,
-            **kwargs,
-        )
-        self.set(50)
+class VolumeBar(tk.Canvas):
+    def __init__(self, parent, media_player, bg="#222", height=20, width=100, highlightthickness=0):
+        super().__init__(parent, bg=bg, highlightthickness=highlightthickness, height=height, width=width, cursor="arrow")
+        self.parent = parent
         self.media_player = media_player
+        self.current_volume = 50
+        self.max_volume = 200
 
-    def set_volume(self, volume):
-        """
-        Sets the volume of the associated media player.
+        self.handle = None
+        self.dragging = False
+        self.tooltip = ToolTip(self, wraplength=100, position="above")
 
-        Args:
-            volume (int | float | str): The volume level to set, ranging from 0 to 200.
-                If a string is passed, it is expected to be a numerical representation of the volume level.
-                Values 0-100 represent normal volume range (0-100%)
-                Values 101-200 represent amplified volume range (101-200%)
-        """
-        self.media_player.audio_set_volume(int(volume))
+        self.bind("<Button-1>", self.on_click)
+        self.bind("<B1-Motion>", self.on_drag)
+        self.bind("<ButtonRelease-1>", self.on_release)
+        self.bind("<Configure>", self._on_resize)
+        self.bind("<Motion>", self.on_motion)
+        self.bind("<Leave>", self.on_leave)
 
+        self.redraw()
+
+    def _on_resize(self, event):
+        self.redraw()
+
+    def redraw(self):
+        """Draw the volume bar based on current volume level"""
+        self.delete("all")
+        width = max(1, self.winfo_width())
+        height = self.winfo_height()
+
+        bar_y1, bar_y2 = 5, height - 6
+
+        self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444444", outline="")
+
+        progress_width = int((self.current_volume / self.max_volume) * width)
+        self.create_rectangle(0, bar_y1, progress_width, bar_y2, fill=Colors.ORANGE, outline="")
+
+        handle_x = progress_width
+        self.handle = self.create_line(
+            handle_x, bar_y1 - 3, handle_x, bar_y2 + 3,
+            fill=Colors.PLAIN_ORANGE, width=3
+        )
+
+    def update_volume(self, volume=None):
+        """Update bar to reflect volume (from player or given value)"""
+        if volume is not None:
+            self.current_volume = max(0, min(self.max_volume, int(volume)))
+        self.media_player.audio_set_volume(self.current_volume)
+        self.redraw()
+
+    def move_handle(self, x):
+        """Move handle and set volume"""
+        width = self.winfo_width()
+        x = max(0, min(x, width))
+        self.current_volume = int((x / width) * self.max_volume)
+        self.media_player.audio_set_volume(self.current_volume)
+        self.redraw()
+
+    def on_click(self, event):
+        self.dragging = True
+        self.move_handle(event.x)
+
+    def on_drag(self, event):
+        if self.dragging:
+            self.move_handle(event.x)
+
+    def on_release(self, event):
+        self.dragging = False
+
+    def on_motion(self, event):
+        """Show tooltip with volume at hovered position."""
+        width = self.winfo_width()
+        hovered_volume = int((event.x / width) * self.max_volume)
+        self.tooltip.show_tooltip(event.x_root - 20, event.y_root - 20, f"{hovered_volume}%")
+
+    def on_leave(self, event):
+        self.tooltip.hide_tooltip()
