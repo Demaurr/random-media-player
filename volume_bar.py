@@ -32,7 +32,7 @@ class VolumeBar(tk.Canvas):
         width = max(1, self.winfo_width())
         height = self.winfo_height()
 
-        bar_y1, bar_y2 = 5, height - 6
+        bar_y1, bar_y2 = 5, height - 5
 
         self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444444", outline="")
 
@@ -44,6 +44,13 @@ class VolumeBar(tk.Canvas):
             handle_x, bar_y1 - 3, handle_x, bar_y2 + 3,
             fill=Colors.PLAIN_ORANGE, width=3
         )
+
+        self.create_text(
+            width // 2, (bar_y1 + bar_y2) // 2,
+            text=f"{self.current_volume}%",
+            fill=Colors.PLAIN_WHITE if self.current_volume < 95 else Colors.BLACK, font=("Segoe UI", 9, "bold")
+        )
+
 
     def update_volume(self, volume=None):
         """Update bar to reflect volume (from player or given value)"""
@@ -75,7 +82,7 @@ class VolumeBar(tk.Canvas):
         """Show tooltip with volume at hovered position."""
         width = self.winfo_width()
         hovered_volume = int((event.x / width) * self.max_volume)
-        self.tooltip.show_tooltip(event.x_root - 20, event.y_root - 20, f"{hovered_volume}%")
+        self.tooltip.show_tooltip(event.x_root, event.y_root - 25, f"{hovered_volume}%")
 
     def on_leave(self, event):
         self.tooltip.hide_tooltip()
