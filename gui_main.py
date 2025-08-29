@@ -1858,7 +1858,7 @@ class FileExplorerApp:
         """
         file_paths = []
         for item in self.file_table.get_children():
-            file_path = self.file_table.item(item, "values")[2] if not self.categories else self.file_table.item(item, "values")[1]
+            file_path = self.file_table.item(item, "values")[2] if self.entry.get() != "show categories" else self.file_table.item(item, "values")[1]
             file_paths.append(file_path)
         return file_paths
     

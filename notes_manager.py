@@ -78,7 +78,6 @@ class NotesManager:
             if history.get(k):
                 related_paths.add(history[k])
 
-        # Combine with notes from other paths with the same file name
         file_name = os.path.basename(file_key)
         for key in self.notes.keys():
             if os.path.basename(key) == file_name:
@@ -164,7 +163,7 @@ class NotesManager:
 
     def list_notes(self):
         """Return all notes as a list of (file_key, note_data) tuples."""
-        return list(self.notes.items())
+        return list(sorted(self.notes.items(), key=lambda x: x[1].get("timestamp", ""), reverse=True))
 
     def search_notes(self, query):
         """Search notes by text, tags, or mood/context."""
@@ -179,9 +178,9 @@ class NotesManager:
                 or query in key.lower()
             ):
                 results.append((key, data))
-        return results
+        return sorted(results, key=lambda x: x[1].get("timestamp", ""), reverse=True)
 
-    def search_notes_by_keys(self, query, allowed_keys, match_threshold=0.6):
+    def search_notes_by_keys(self, query, allowed_keys, match_threshold=0.7):
         """
         Search for a query inside notes, tags, mood, context, or key,
         but only within the given list of allowed file keys.

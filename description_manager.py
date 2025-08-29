@@ -12,7 +12,7 @@ logger = LogManager(DESCRIPTION_LOG_PATH)
 class DescriptionManager:
     def __init__(self, csv_path=DESCRIPTION_CSV):
         self.csv_path = csv_path
-        self.descriptions = {}  # in-memory cache
+        self.descriptions = {}
         create_csv_file(headers=["video_path", "size", "description", "timestamp"], filename=csv_path)
         self._load_descriptions()
         self.graph = self.build_graph()
@@ -80,7 +80,7 @@ class DescriptionManager:
         Return all descriptions for paths related to the given file.
         Uses the transfer log graph to collect connected paths.
         """
-        related_paths = self.get_related_paths(target_path)  # ✅ use class method
+        related_paths = self.get_related_paths(target_path)
         descs = {}
         for path in related_paths:
             descs[path] = self.get_description(path)
@@ -127,3 +127,26 @@ class DescriptionManager:
                     results.update(self.get_related_paths(p))
 
         return list(results)
+
+    def update_video_path(self, old_path, new_path):
+        """
+        Update the video_path key in the descriptions dictionary 
+        and persist changes to the CSV.
+        """
+        if old_path not in self.descriptions:
+            print("[NO DESCRIPTION]", f"Old path not found: {old_path}")
+            return False
+
+        if new_path in self.descriptions:
+            print("[DESCRIPTION UPDATE FAILED]", f"New path already exists: {new_path}")
+            logger.error_logs(f"New path already exists in descriptions: {new_path}")
+            return False
+
+        self.descriptions[new_path] = self.descriptions[old_path].copy()
+
+        self.descriptions[new_path]["timestamp"] = datetime.datetime.now().isoformat()
+
+        self._save_descriptions()
+
+        logger.update_logs("[DESCRIPTION UPDATED]", f"Path Changed from {old_path} → {new_path}")
+        return True

@@ -2,6 +2,7 @@ import os
 import shutil
 import csv
 from datetime import datetime
+from description_manager import DescriptionManager
 from player_constants import FILE_TRANSFER_LOG, LOG_PATH
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
@@ -16,7 +17,7 @@ import threading
 
 class FileManager:
     def __init__(self, parent_window=None, favorites_manager=None, deletion_manager=None,
-            category_manager=None, video_stats_manager=None, notes_manager=None):
+            category_manager=None, video_stats_manager=None, notes_manager=None, description_manager=None):
         self.log_file = FILE_TRANSFER_LOG
         self.favorites = favorites_manager or FavoritesManager()
         self.deletes = deletion_manager or DeletionManager()
@@ -24,6 +25,7 @@ class FileManager:
         self.video_stats_manager = video_stats_manager or VideoStatsManager()
         self.file_loader = VideoFileLoader()
         self.notes_manager = notes_manager or NotesManager()
+        self.description_manager = description_manager or DescriptionManager()
         if parent_window:
             self.deletes.set_parent_window(parent_window)
         self.logger = LogManager(LOG_PATH)
@@ -93,6 +95,7 @@ class FileManager:
             self._update_categories,
             self._update_stats,
             self._update_notes_key,
+            self._update_description
             # self._reload_folder_async,
         ]:
             try:
@@ -122,8 +125,13 @@ class FileManager:
 
     def _update_stats(self, old_src, new_src):
         old_size = os.path.getsize(new_src)
-        self.video_stats_manager.delete_stat(old_src, old_size)
         self.video_stats_manager.add_stats(new_src)
+        # self.video_stats_manager.delete_stat(old_src, old_size)
+        pass
+    
+    def _update_description(self, old_src, new_src):
+        if self.description_manager:
+            self.description_manager.update_video_path(old_src, new_src)
 
     def _update_notes_key(self, old_src, new_src):
         if self.notes_manager:

@@ -29,7 +29,6 @@ class DeletionManager:
                 reader = csv.reader(file)
                 next(reader)
                 for row in reader:
-                    # Make sure to check if the row is not empty and has enough columns
                     if row and len(row) >= 4:
                         file_path = normalise_path(row[0])
                         status = row[1]
@@ -52,6 +51,13 @@ class DeletionManager:
                 except Exception as e:
                     self.logger.error_logs(f"{e} occurred while moving {file_path} with data: {metadata}")
                     continue
+
+    def get_deleted_file_size(self, file_path):
+        files_dict = self.read_csv_file()
+        """Returns the size of a file marked for deletion.""" 
+        file_path = normalise_path(file_path)
+        return files_dict.get(file_path, {}).get('size', '0')
+
 
     def mark_for_deletion(self, video_file, status="ToDelete"):
         """Marks a video file for deletion by adding it to the CSV with size and datetime."""
@@ -149,7 +155,7 @@ class DeletionManager:
             print("No updates required; all deleted files are missing.")
             showinfo(self.parent_window, "No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
 
-    def handle_favorites(self, file_path, file_status_dict):
+    def handle_favorites_move(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
         if not self.fav_manager.check_favorites(file_path):
             return True
@@ -177,6 +183,23 @@ class DeletionManager:
             # If the user does not want to move the file, remove it from favorites and mark for deletion
             self.remove_from_favorites_and_delete(file_path, file_status_dict)
             return True 
+
+    def handle_favorites(self, file_path, file_status_dict):
+        """Handles favorite files by asking whether to skip downloading them."""
+        if not self.fav_manager.check_favorites(file_path):
+            return True
+        
+        skip_download = askyesno(
+            self.parent_window,
+            "File in Favorites",
+            f"{file_path} is in your favorites.\nDo you want to skip deletion this file?"
+        )
+
+        if skip_download:
+            print(f"[FILE SKIPPED] {file_path}")
+            return False 
+        else:
+            return True
 
     def move_file_to_folder(self, file_path, folder, file_status_dict):
         """Moves a file to the specified folder."""
