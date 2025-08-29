@@ -3,16 +3,18 @@ import csv
 import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
+from custom_messagebox import showerror
+from deletion_manager import DeletionManager
 from player_constants import (
     SNIPPETS_HISTORY_CSV, 
-    VIDEO_STATS_CSV, 
-    VIDEO_SNIPPETS_FOLDER, 
+    VIDEO_STATS_CSV,
     Colors
 )
 from static_methods import (
     convert_bytes, 
     get_file_transfer_history, 
-    get_screenshots_for_file, 
+    get_screenshots_for_file,
+    natural_sort_iterables,
     normalise_path, 
     seconds_to_hhmmss,
     get_watch_stats_for_filenames,
@@ -25,9 +27,12 @@ from favorites_manager import FavoritesManager
 from category_manager import CategoryManager
 from notes_manager import NotesManager
 from description_manager import DescriptionManager
+from stats_manager import VideoStatsManager
+from snippets_manager import SnippetsManager
 
 class PropertiesWindow(tk.Toplevel):
-    def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, description_manager=None):
+    def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, 
+                 description_manager=None, deletion_manager=None, snippets_manager=None,stats_manager=None, trimmed_segments=None):
         super().__init__(parent)
         self.parent = parent
         self.file_path = file_path
@@ -35,7 +40,13 @@ class PropertiesWindow(tk.Toplevel):
         self.favorites_manager = favorites_manager or FavoritesManager()
         self.notes_manager = notes_manager or NotesManager()
         self.description_manager = description_manager or DescriptionManager()
+        self.deletion_manager = deletion_manager or DeletionManager()
+        self.stats_manager = stats_manager or VideoStatsManager()
+        self.snippets_manager = snippets_manager or SnippetsManager()
+
+        self.trimmed_segments = trimmed_segments or {}
         self._setup_styles()
+        self.title(f"Properties - {os.path.basename(self.file_path)}")
         self.geometry("1000x600")
         self.minsize(600, 400)
         self.maxsize(1000, 600)
@@ -63,32 +74,29 @@ class PropertiesWindow(tk.Toplevel):
         }
 
     def _show_properties_window(self):
-        if os.path.isdir(self.file_path):
-            messagebox.showinfo("Folder Selected", "The selected item is a folder. Please select a file.")
-            return
+        # if os.path.isdir(self.file_path):
+        #     messagebox.showinfo("Folder Selected", "The selected item is a folder. Please select a file.")
+        #     return
 
         file_exists = os.path.isfile(self.file_path)
         if not file_exists:
             deleted_notice = True
+            file_size = self.deletion_manager.get_deleted_file_size(self.file_path)
         else:
             deleted_notice = False
+            file_size = os.path.getsize(self.file_path)
 
-        
+        self.file_key = (os.path.basename(self.file_path), str(file_size))
         related_paths = get_all_related_paths(self.file_path)
         stats = self._get_video_stats()
-        # screenshots = sorted(get_screenshots_for_file(os.path.basename(self.file_path)))
         screenshots = self._get_screenshots(related_paths)
-        snippets = self._get_video_snippets()
-
-        # win = tk.Toplevel(self.parent)
-        # win.title(f"Properties - {os.path.basename(self.file_path)}")
-        # win.geometry("1000x600")
-        # win.minsize(600, 400)
-        # win.maxsize(1000, 600)
-        # win.configure(bg=self.colors['bg_primary'])
-        # win.transient(self.parent)
-        # win.grab_set()
-        # self._center_window(win, 1000, 600)
+        snippets = self._get_video_snippets(related_paths)
+        categories = self.category_manager.get_file_categories(self.file_path)
+        is_favorite = self.favorites_manager.check_favorites(self.file_path)
+        watch_stats = get_watch_stats_for_filenames(related_paths)
+        note_data = self.notes_manager.get_note(self.file_path)
+        related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
+        current_desc = self.description_manager.get_description(self.file_path)
 
         main_container = tk.Frame(self, bg=self.colors['bg_primary'])
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
@@ -105,19 +113,18 @@ class PropertiesWindow(tk.Toplevel):
             )
             warning_label.pack(fill="x", pady=(0, 10), padx=10)
 
-        self._create_scrollable_content(main_container, stats, screenshots, snippets)
+        self._create_scrollable_content(main_container, stats, screenshots, snippets, categories,
+                                         is_favorite, related_paths, watch_stats, note_data, related_descs, current_desc)
         self._bind_window_events()
-        # win.bind('<Escape>', lambda e: self.destroy())
-        # print(self.file_path)
-        # print(get_file_transfer_history(self.file_path).values())
-        # print(normalise_path(self.file_path) in get_file_transfer_history(self.file_path).values())
 
     def _get_screenshots(self, file_paths):
+        "Uses Natural Sort i.e. numbers in the string won't affect the sorting"
         file_names = set(os.path.basename(path) for path in file_paths)
         screenshots = []
         for file_name in file_names:
             screenshots += get_screenshots_for_file(file_name)
-        return sorted(screenshots)
+        return natural_sort_iterables(screenshots)
+
 
     def _create_header(self, parent, stats, screenshots):
         header_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief="flat", bd=0)
@@ -156,7 +163,7 @@ class PropertiesWindow(tk.Toplevel):
             text="⏱",
             font=("Segoe UI", 15),
             bg=self.colors['bg_card'],
-            fg=self.colors['accent']
+            fg=self.colors['accent'],
         ).pack(side="left", padx=(0, 8))
         
         tk.Label(
@@ -173,7 +180,7 @@ class PropertiesWindow(tk.Toplevel):
             font=("Segoe UI", 10),
             bg=self.colors['bg_card'],
             fg=self.colors['text_muted'],
-            wraplength=500,
+            wraplength=750,
             justify="left",
             anchor="w"
         )
@@ -190,7 +197,7 @@ class PropertiesWindow(tk.Toplevel):
             try:
                 img_path = screenshots[0]
                 img = Image.open(img_path)
-                img.thumbnail((150, 150))
+                img.thumbnail((200, 200))
                 thumb_img = ImageTk.PhotoImage(img)
                 thumb_label = tk.Label(
                     padding_frame, 
@@ -207,7 +214,7 @@ class PropertiesWindow(tk.Toplevel):
             self._create_placeholder_thumbnail(padding_frame)
 
     def _create_placeholder_thumbnail(self, parent):
-        placeholder = tk.Frame(parent, bg=self.colors['bg_hover'], width=150, height=150)
+        placeholder = tk.Frame(parent, bg=self.colors['bg_hover'], width=200, height=200)
         placeholder.pack_propagate(True)
         placeholder.pack()
         
@@ -219,7 +226,7 @@ class PropertiesWindow(tk.Toplevel):
             fg=self.colors['text_muted']
         ).pack(expand=True)
 
-    def _create_scrollable_content(self, parent, stats, screenshots, snippets):
+    def _create_scrollable_content(self, parent, stats, screenshots, snippets, categories, is_favorite, related_paths, watch_stats, note_data, related_descs, current_desc):
         canvas_frame = tk.Frame(parent, bg=self.colors['bg_primary'])
         canvas_frame.pack(fill="both", expand=True, pady=(0, 20))
 
@@ -254,11 +261,11 @@ class PropertiesWindow(tk.Toplevel):
         right_frame = tk.Frame(content_container, bg=self.colors['bg_primary'], width=450)
         right_frame.pack(side="right", fill="both", expand=False, padx=(10, 0))
 
-        self._create_categories_section(left_frame)
-        self._create_watch_stats_section(left_frame)
+        self._create_categories_section(left_frame, categories, is_favorite)
+        self._create_watch_stats_section(left_frame, related_paths, watch_stats)
         self._create_stats_section(left_frame, stats)
-        self._create_description_section(right_frame, stats.get("File Size", 0))
-        self._create_notes_section(right_frame)
+        self._create_description_section(right_frame, related_descs, current_desc, stats.get("File Size", 0))
+        self._create_notes_section(right_frame, note_data)
         self._create_screenshots_section(right_frame, screenshots)
         self._create_snippets_section(right_frame, snippets)
 
@@ -268,23 +275,25 @@ class PropertiesWindow(tk.Toplevel):
         canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
-    def _create_description_section(self, parent, size=None):
+    def _create_description_section(self, parent, related_descs, current_desc, size=None):
         content_frame = self._create_section_card(parent, "Description", "ℹ️", self.colors['bg_primary'])
         
         desc_container = tk.Frame(
             content_frame, 
             width=450, 
             bg=self.colors["bg_primary"]
-            )
+        )
         desc_container.pack(anchor="w", fill="x", pady=(2, 6), padx=10)
 
-        description = self.description_manager.get_description(self.file_path)
+        # related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
         self.file_size = size
-        self._desc_var = tk.StringVar(value=description)
+
+        # current_desc = self.description_manager.get_description(self.file_path)
+        self._desc_var = tk.StringVar(value=current_desc)
 
         self._desc_label = tk.Label(
             desc_container,
-            text=description if description else "Double-click to add a description.",
+            text=current_desc if current_desc else "Double-click to add a description.",
             font=("Segoe UI", 11, "italic"),
             bg=self.colors['bg_primary'],
             fg=self.colors['text_primary'],
@@ -292,16 +301,17 @@ class PropertiesWindow(tk.Toplevel):
             justify="left",
             anchor="w"
         )
-        self._desc_label.pack(anchor="w", pady=(2, 6), fill="x")
+        self._desc_label.pack(anchor="w", pady=(6, 6), fill="x")
 
         self._desc_entry = tk.Text(
             desc_container,
-            height=6,
+            height=7,
             font=("Segoe UI", 11),
             wrap="word",
             width=70,
             bg=self.colors['bg_primary'],
-            fg=self.colors['text_primary']
+            fg=self.colors['text_primary'],
+            insertbackground=self.colors['text_primary']
         )
 
         def switch_to_entry(event=None):
@@ -320,17 +330,29 @@ class PropertiesWindow(tk.Toplevel):
                 text=new_desc if new_desc else "Double-click to add a description."
             )
             self._desc_entry.pack_forget()
-            self._desc_label.pack(anchor="w", pady=(2, 6), fill="x")
+            self._desc_label.pack(anchor="w", pady=(6, 6), fill="x")
 
         self._desc_label.bind("<Double-Button-1>", switch_to_entry)
         self._desc_entry.bind("<FocusOut>", save_description)
         self._desc_entry.bind("<Control-Return>", save_description)
 
+        for path, desc in related_descs.items():
+            if path != self.file_path:
+                tk.Label(
+                    desc_container,
+                    text=f"{os.path.dirname(path)}: {desc if desc else '(No description)'}",
+                    font=("Segoe UI", 10, "italic"),
+                    bg=self.colors['bg_primary'],
+                    fg=self.colors['text_secondary'],
+                    wraplength=480,
+                    justify="left",
+                    anchor="w"
+                ).pack(anchor="w", pady=(2, 2), fill="x")
 
 
-    def _create_notes_section(self, parent):
+    def _create_notes_section(self, parent, note_data):
         content_frame = self._create_section_card(parent, "Notes", "📝")
-        note_data = self.notes_manager.get_note(self.file_path)
+        # note_data = self.notes_manager.get_note(self.file_path)
         if note_data:
             note_card = tk.Frame(
                 content_frame,
@@ -686,7 +708,8 @@ class PropertiesWindow(tk.Toplevel):
                     else:
                         load_more_btn.pack(pady=10)
 
-                thumbnails_frame.after(100, update_ui)
+                if thumbnails_frame.winfo_exists():
+                    thumbnails_frame.after(100, update_ui)
 
             threading.Thread(target=worker, daemon=True).start()
 
@@ -712,7 +735,7 @@ class PropertiesWindow(tk.Toplevel):
         if snippets:
             snippet_files = [snip.get("Output File", "") for snip in snippets if snip.get("Output File", "")]
             video_files = snippet_files
-            all_files = list(dict.fromkeys(snippet_files + video_files))
+            # all_files = list(dict.fromkeys(snippet_files + video_files))
 
             for i, snip in enumerate(snippets):
                 snippet_card = tk.Frame(content_frame, bg=self.colors['bg_hover'])
@@ -746,7 +769,7 @@ class PropertiesWindow(tk.Toplevel):
 
                 def open_snippet(event=None, output_file=snip.get("Output File", "")):
                     if not output_file or not os.path.exists(output_file):
-                        messagebox.showerror("File Not Found", "Snippet output file does not exist.")
+                        showerror(parent, "File Not Found", "Snippet output file does not exist.")
                         return
                     try:
                         idx = video_files.index(output_file)
@@ -762,6 +785,7 @@ class PropertiesWindow(tk.Toplevel):
                             favorites_manager = self.favorites_manager,
                             category_manager=self.category_manager,
                             notes_manager=self.notes_manager,
+                            trimmed_segments=self.trimmed_segments
                         )
                         app.update_video_progress()
                         app.lift()
@@ -798,10 +822,10 @@ class PropertiesWindow(tk.Toplevel):
                 fg=self.colors['text_muted']
             ).pack(anchor="w")
 
-    def _create_categories_section(self, parent):
+    def _create_categories_section(self, parent, categories, is_favorite):
         content_frame = self._create_section_card(parent, "Categories", "🏷️")
-        categories = self.category_manager.get_file_categories(self.file_path)
-        is_favorite = self.favorites_manager.check_favorites(self.file_path)
+        # categories = self.category_manager.get_file_categories(self.file_path)
+        # is_favorite = self.favorites_manager.check_favorites(self.file_path)
         if categories or is_favorite:
             if is_favorite:
                 fav_label = tk.Label(
@@ -839,7 +863,7 @@ class PropertiesWindow(tk.Toplevel):
                 fg=self.colors['text_muted']
             ).pack(anchor="w")
 
-    def _create_watch_stats_section(self, parent):
+    def _create_watch_stats_section(self, parent, related_paths, stats):
         content_frame = self._create_section_card(parent, "Watch Stats", "👁️")
         loading_label = tk.Label(
             content_frame,
@@ -851,8 +875,8 @@ class PropertiesWindow(tk.Toplevel):
         loading_label.pack(anchor="w")
 
         def update_stats():
-            related_paths = get_all_related_paths(self.file_path)
-            stats = get_watch_stats_for_filenames(related_paths)
+            # related_paths = get_all_related_paths(self.file_path)
+            # stats = get_watch_stats_for_filenames(related_paths)
             def update_ui():
                 if not content_frame.winfo_exists():
                     return
@@ -913,33 +937,32 @@ class PropertiesWindow(tk.Toplevel):
 
     def _get_video_stats(self):
         try:
-            with open(VIDEO_STATS_CSV, newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if normalise_path(row.get("File Path", "")) == normalise_path(self.file_path):
-                        return row
-        except Exception:
+            stats = self.stats_manager.get_stat(self.file_key[0], self.file_key[1])
+            if stats:
+                return stats
+            else:
+                return {}
+        except Exception as e:
+            print(f"Error getting video stats: {e}")
             return {}
-        return {}
 
-    def _get_video_snippets(self):
+    def _get_video_snippets(self, related_paths):
         snippets = []
         try:
             file_paths = set(
                 filter(
                     None,
-                    [normalise_path(p) for p in get_file_transfer_history(self.file_path).values() if p is not None]
+                    related_paths
                 )
             )
-            with open(SNIPPETS_HISTORY_CSV, newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    original_file = normalise_path(row.get("Original File", ""))
-                    if original_file in file_paths:
-                        snippets.append(row)
+
+            for original_file in file_paths:
+                snippets.extend(self.snippets_manager.get_snippets_by_original_file(original_file))
+
         except Exception as e:
             print(f"Error getting video snippets: {e}")
             pass
+
         return snippets
 
     def _center_window(self, window, width, height):
@@ -948,28 +971,19 @@ class PropertiesWindow(tk.Toplevel):
         x_coordinate = (screen_width - width) // 2
         y_coordinate = (screen_height - height) // 2
         window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
-
-    # def _close_window(self, window):
-    #     def do_close():
-    #         if hasattr(self, '_desc_entry') and self._desc_entry is not None:
-    #             try:
-    #                 new_desc = self._desc_entry.get("1.0", "end").strip()
-    #                 self.description_manager.set_description(self.file_path, self.file_size, new_desc)
-    #             except Exception:
-    #                 pass
-    #         window.unbind_all("<MouseWheel>")
-    #         window.destroy()
-    #     window.after(0, do_close)
+        
     def _close_window(self):
         def do_close():
             if hasattr(self, '_desc_entry') and self._desc_entry is not None:
                 try:
                     new_desc = self._desc_entry.get("1.0", "end").strip()
-                    self.description_manager.set_description(self.file_path, self.file_size, new_desc)
+                    # print(new_desc)
+                    # self.description_manager.set_description(self.file_path, self.file_size, new_desc)
                 except Exception:
                     pass
             self.unbind_all("<MouseWheel>")
             self.destroy()
-
-        # Always schedule cleanup in the main loop
         self.after(0, do_close)
+
+if __name__ == "__main__":
+    print(dir(PropertiesWindow))
