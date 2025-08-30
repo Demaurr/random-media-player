@@ -26,12 +26,12 @@ class VideoStatsManager:
         with open(self.stats_csv, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                key = (normalise_path(row["File Path"]), row["File Size"])
+                key = (os.path.basename(row["File Path"]), row["File Size"])
                 stats[key] = row
         return stats
 
     def create_stats(self):
-        all_media_csv = gather_all_media()
+        all_media_csv = gather_all_media(refresh=True)
         if not all_media_csv or not os.path.exists(all_media_csv):
             logger.error_logs("All media CSV not found or failed to generate.")
             return
@@ -44,7 +44,7 @@ class VideoStatsManager:
                 if not os.path.exists(file_path):
                     continue
                 file_size = str(os.path.getsize(file_path))
-                key = (file_path, file_size)
+                key = (os.path.basename(file_path), file_size)
                 if key not in self.stats:
                     files_to_process.append(file_path)
 
@@ -68,7 +68,7 @@ class VideoStatsManager:
                 writer.writeheader()
             for row in new_stats:
                 writer.writerow(row)
-                key = (normalise_path(row["File Path"]), row["File Size"])
+                key = (os.path.basename(row["File Path"]), row["File Size"])
                 self.stats[key] = row
 
     def read_stats(self, filters=None):
@@ -95,7 +95,7 @@ class VideoStatsManager:
             writer.writeheader()
             writer.writerows(rows)
         if updated:
-            self.stats[(normalise_path(file_path), str(file_size))] = updates
+            self.stats[(os.path.basename(file_path), str(file_size))] = updates
         return updated
 
     def delete_stat(self, file_path, file_size):
@@ -114,23 +114,35 @@ class VideoStatsManager:
             writer.writerows(rows)
         if deleted:
             logger.update_logs("[STATS DELETED]", file_path)
-            self.stats.pop((normalise_path(file_path), str(file_size)), None)
+            self.stats.pop((os.path.basename(file_path), str(file_size)), None)
         return deleted
 
-    def get_vertical_videos(self):
-        """Return list of vertical video file paths from stats."""
+    def get_vertical_videos(self, file_paths=None):
+        """
+        Return list of vertical video file paths from stats.
+        If file_paths is provided, only return verticals among them.
+        """
         vertical = []
+        check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+
         for row in self.stats.values():
             if row.get("Orientation") == "Vertical":
-                vertical.append(row["File Path"])
+                if check_set is None or normalise_path(row["File Path"]) in check_set:
+                    vertical.append(row["File Path"])
         return vertical
 
-    def get_horizontal_videos(self):
-        """Return list of horizontal video file paths from stats."""
+    def get_horizontal_videos(self, file_paths=None):
+        """
+        Return list of horizontal video file paths from stats.
+        If file_paths is provided, only return horizontals among them.
+        """
         horizontal = []
+        check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+
         for row in self.stats.values():
             if row.get("Orientation") == "Horizontal":
-                horizontal.append(row["File Path"])
+                if check_set is None or normalise_path(row["File Path"]) in check_set:
+                    horizontal.append(row["File Path"])
         return horizontal
 
     def refresh_stats(self, file_path, file_size=None):
@@ -165,7 +177,7 @@ class VideoStatsManager:
             file_size = str(os.path.getsize(file_path))
         else:
             file_size = str(file_size)
-        key = (file_path, file_size)
+        key = (os.path.basename(file_path), file_size)
         if key in self.stats:
             print(f"Stats already exist for this file: {file_path}")
             return False
@@ -184,6 +196,32 @@ class VideoStatsManager:
         logger.update_logs("[STATS ADDED]",file_path)
         print(f"[Processed Stats] {file_path}")
         return True
+    
+    def get_stat(self, file_identifier, file_size):
+        """
+        Retrieve stats either by full file path + size OR file name + size.
+        
+        Args:
+            file_identifier (str): either full file path or just file name
+            file_size (str|int): file size in bytes (as string or int)
+
+        Returns:
+            dict | None: the stats row if found, else None
+        """
+        file_size = str(file_size)
+        file_identifier = normalise_path(file_identifier)
+
+        file_name = os.path.basename(file_identifier)
+
+        key = (file_name, file_size)
+        if key in self.stats:
+            return self.stats[key]
+        
+        for row in self.stats.values():
+            if (normalise_path(row["File Path"]), row["File Size"]) == (file_identifier, file_size):
+                return row
+
+        return None
 
 if __name__ == "__main__":
     manager = VideoStatsManager()
