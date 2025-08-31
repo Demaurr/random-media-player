@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
+from player_constants import Colors
 from summary_generator import HTMLSummaryReport
 from static_methods import open_in_default_app
 
@@ -54,7 +55,7 @@ class VideoStatsApp:
         root.mainloop()
     """
 
-    def __init__(self, master, report_folder, video_data, session_time=0, fg="black", bg="white", for_current=False):
+    def __init__(self, master, report_folder, video_data, session_time=0, fg=Colors.PLAIN_BLACK, bg=Colors.PLAIN_WHITE, for_current=False):
         """
         Initializes the VideoStatsApp with the specified parameters and default settings.
         Args:
@@ -81,7 +82,7 @@ class VideoStatsApp:
         self.heading_label = tk.Label(
             self.heading_frame,
             text="Statistics For The Session",
-            font=("Segoe UI", 24, "bold"),
+            font=("Segoe UI", 22, "bold"),
             fg=fg,
             bg=bg,
             pady=8
@@ -92,10 +93,10 @@ class VideoStatsApp:
             self.heading_frame,
             text="Generate Summary Report",
             font=("Segoe UI", 12, "bold"),
-            bg="green",
-            fg="white",
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.GREEN,
             activebackground="#006400",
-            activeforeground="white",
+            activeforeground=Colors.PLAIN_WHITE,
             relief=tk.FLAT,
             bd=0,
             padx=12,
@@ -105,15 +106,15 @@ class VideoStatsApp:
         )
         self.generate_report_button.pack(side="right", padx=10)
 
-        def on_enter(e): e.widget.config(bg="#228B22")
-        def on_leave(e): e.widget.config(bg="green")
+        def on_enter(e): e.widget.config(fg="#228B22")
+        def on_leave(e): e.widget.config(fg=Colors.GREEN, bg=Colors.PLAIN_BLACK)
         self.generate_report_button.bind("<Enter>", on_enter)
         self.generate_report_button.bind("<Leave>", on_leave)
 
         self.session_time_label = tk.Label(
             master,
             text=f"Session Time: {self.format_session_time(self.session_time)}",
-            font=("Segoe UI", 14, "bold"),
+            font=("Segoe UI", 12, "bold"),
             fg=fg,
             bg=bg,
             pady=4
@@ -141,17 +142,17 @@ class VideoStatsApp:
         style.theme_use("clam")
         style.configure(
             "Stats.Treeview.Heading",
-            font=("Segoe UI", 15, "bold"),
-            background="black",
-            foreground="white"
+            font=("Segoe UI", 13, "bold"),
+            background=Colors.PLAIN_BLACK,
+            foreground=Colors.PLAIN_WHITE
         )
         style.configure(
             "Stats.Treeview",
-            font=("Segoe UI", 12),
-            rowheight=32,
-            background="black",
-            fieldbackground="black",
-            foreground="white"
+            font=("Segoe UI", 11),
+            rowheight=28,
+            background=Colors.PLAIN_BLACK,
+            fieldbackground=Colors.PLAIN_BLACK,
+            foreground=Colors.PLAIN_WHITE
         )
         style.map("Stats.Treeview", background=[("selected", "#222")])
 
@@ -163,15 +164,14 @@ class VideoStatsApp:
             style="Stats.Treeview"
         )
 
-        # Set heading style explicitly
         for col in columns:
-            self.tree.heading(col, text=col, anchor="center", command=lambda _col=col: None)
-        self.tree.tag_configure('oddrow', background="#222", foreground="white")
-        self.tree.tag_configure('evenrow', background="#333", foreground="white")
+            self.tree.heading(col, text=col, anchor=tk.CENTER, command=lambda _col=col: None)
+        self.tree.tag_configure('oddrow', background="#222", foreground=Colors.PLAIN_WHITE)
+        self.tree.tag_configure('evenrow', background="#333", foreground=Colors.PLAIN_WHITE)
 
         self.tree.column("Title", width=200, anchor="w")
-        self.tree.column("Times", width=70, minwidth=40, anchor="center", stretch=False)
-        self.tree.column("Watchtime", width=120, anchor="center")
+        self.tree.column("Times", width=70, minwidth=40, anchor=tk.CENTER, stretch=False)
+        self.tree.column("Watchtime", width=120, anchor=tk.CENTER)
         self.tree.column("Folder", width=300, anchor="w")
 
         for idx, video in enumerate(self.video_data):

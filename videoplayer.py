@@ -38,13 +38,13 @@ from custom_messagebox import askopenfilename, showinfo, showwarning, showerror,
 
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
-                  parent=None, category_manager=None, favorites_manager=None, deletion_manaager=None,
+                  parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None):
         super().__init__(parent)
         self._get_history_csvfile(watch_history_csv)
         self.favorites_manager = favorites_manager or FavoritesManager()
         self.logger = LogManager(LOG_PATH)
-        self.deleter = deletion_manaager or DeletionManager(self.favorites_manager)
+        self.deleter = deletion_manager or DeletionManager(self.favorites_manager)
         self.deleter.set_parent_window(self)
         self.category_manager = category_manager or CategoryManager()
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
@@ -74,6 +74,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.autoplay = True
         self.trim_start = None
         self.loop_video = False
+        self._play_start_time = None
+        self._total_play_time = 0
         # self.input_path = None
 
         self.random_select = random_select
@@ -122,7 +124,7 @@ class MediaPlayerApp(tk.Toplevel):
           
 
     def initialize_player(self, video_files, folder_path, cur_file=None):
-        self.instance = vlc.Instance("--aout=directsound")
+        self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=3000')
         self._create_new_player()
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
@@ -376,9 +378,9 @@ class MediaPlayerApp(tk.Toplevel):
         # self.drag_label.pack(side=tk.LEFT, padx=0, pady=0)
         # self.drag_bar.config(height=5 if not is_on_top else 0)
         if not self.is_on_top:
-            self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED)
+            self.drag_bar.config(height=5, bg=Colors.HEADER_COLOR_RED) if not self.video_paused else self.drag_bar.config(height=5, bg=Colors.ORANGE)
         else:
-            self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK)
+            self.drag_bar.config(height=0, bg=Colors.PLAIN_BLACK) if not self.video_paused else self.drag_bar.config(height=0, bg=Colors.ORANGE)
         
         self.toggle_shorten_window(event=event)
         self.show_marquee("Always on top: " + ("ON" if not self.is_on_top else "OFF"))
@@ -508,6 +510,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind('<KeyPress-.>', self.increase_sub_delay)
         self.bind('<Control-b>', self.next_subtitle_track)
         self.bind('<Control-B>', self.next_subtitle_track)
+        self.bind("<Control-V>", self.next_audio_track)
+        self.bind("<Control-v>", self.next_audio_track)
         self.bind('<KeyPress-l>', self.toggle_loop)
         self.bind('<KeyPress-L>', self.toggle_loop)
         self.bind('<Shift-KeyPress-n>', self.show_notes)
@@ -629,7 +633,7 @@ class MediaPlayerApp(tk.Toplevel):
 
     def set_playback_speed(self, speed):
         if self.playing_video:
-            self.record_segment()
+            # self.record_segment()
             self.segment_speed = speed
             self.media_player.set_rate(speed)
             self.show_marquee(f"Speed: {speed}x")
@@ -929,6 +933,7 @@ class MediaPlayerApp(tk.Toplevel):
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
+                    self._play_start_time = timeit.default_timer()
                     # media.parse_async()
                     self.media_player.set_media(media)
                     self.total_duration = int(self.media_player.get_length()) or 0
@@ -986,7 +991,7 @@ class MediaPlayerApp(tk.Toplevel):
                 try:
                     self.media_player = None
                     self.current_media = None
-                    self.instance = vlc.Instance("--aout=directsound")
+                    self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=3000')
                     self._create_new_player()
                     print("Created a fresh VLC instance after timeout.")
                 except Exception as e:
@@ -1037,15 +1042,21 @@ class MediaPlayerApp(tk.Toplevel):
         """
         if self.playing_video:
             if self.video_paused:
-                self.record_segment()
+                # self.record_segment()
+                self._play_start_time = timeit.default_timer()
                 self.media_player.play()
                 self.video_paused = False
                 self.pause_button.config(text="⏸️ Pause")
+                self.drag_bar.config(bg=Colors.PLAIN_BLACK) if not self.minimized else self.drag_bar.config(bg=Colors.HEADER_COLOR_RED)
             else:
-                self.record_segment()
+                # self.record_segment()
+                if self._play_start_time is not None:
+                    self._total_play_time += timeit.default_timer() - self._play_start_time
+                    self._play_start_time = None
                 self.media_player.pause()
                 self.video_paused = True
                 self.pause_button.config(text="⏯️ Resume")
+                self.drag_bar.config(bg=Colors.ORANGE)
 
     def stop(self, event=None):
         """
@@ -1053,16 +1064,17 @@ class MediaPlayerApp(tk.Toplevel):
         Logs the watch history before stopping, using real elapsed time.
         """
         if self.playing_video:
-            self.record_segment()
+            # self.record_segment()
+            if self._play_start_time is not None:
+                self._total_play_time += timeit.default_timer() - self._play_start_time
+                self._play_start_time = None
             total_watched = self.calculate_total_watched()
             duration_watched = self.get_time_str(total_watched)
             total_duration = self.get_duration_str()
             last_position = self.get_time_str(self.media_player.get_time())
             # print(f"Real Elapsed Time: {duration_watched}")
             self._release_current_media()
-
-            skipped_time = (self.prev_counts * 4990) - (self.forward_counts * 9990)
-            print(f"Prev Counts: {self.prev_counts}, Forward Counts: {self.forward_counts}")
+            self._total_play_time = 0
             
             self.watch_history_logger.log_watch_history(
                 self.current_file, total_duration, duration_watched, last_position
@@ -1072,15 +1084,21 @@ class MediaPlayerApp(tk.Toplevel):
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
 
+    # def calculate_total_watched(self):
+    #     """
+    #     Calculate the total watched time (miliseconds) based on playback segments.
+    #     """
+    #     total = 0
+    #     for seg in self.playback_segments:
+    #         watched = (seg["end"] - seg["start"] + seg["prev_counts"] * 4990 - seg["forward_counts"] * 9990) / seg["speed"]
+    #         total += watched
+    #     return int(total)  # in ms
+
     def calculate_total_watched(self):
         """
-        Calculate the total watched time (miliseconds) based on playback segments.
+        Calculate the total watched time (milliseconds) based on play time only.
         """
-        total = 0
-        for seg in self.playback_segments:
-            watched = (seg["end"] - seg["start"] + seg["prev_counts"] * 4990 - seg["forward_counts"] * 9990) / seg["speed"]
-            total += watched
-        return int(total)  # in ms
+        return int(self._total_play_time * 1000)
 
     def set_video_position_percentage(self, value):
         """
@@ -1430,6 +1448,68 @@ class MediaPlayerApp(tk.Toplevel):
         self.media_player.video_set_spu(ids[next_index])
         print(f"Switched to subtitle: {tracks[next_index][1]}")
         self.show_marquee(f"Subtitle: {tracks[next_index][1]}")
+
+    def next_audio_track(self, event=None):
+        """Cycle through available audio tracks if multiple exist."""
+        tracks = self.media_player.audio_get_track_description()
+        if not tracks:
+            print("No audio tracks available.")
+            self.show_marquee("No audio tracks.")
+            return
+
+        current = self.media_player.audio_get_track()
+        ids = [id for id, name in tracks if id != -1]
+        print(len(ids))
+
+        if not ids:
+            print("No valid audio tracks found.")
+            self.show_marquee("No valid audio tracks.")
+            return
+
+        if current in ids:
+            current_index = ids.index(current)
+            next_index = (current_index + 1) % len(ids)
+        else:
+            next_index = 0
+
+        self.media_player.audio_set_track(ids[next_index])
+        chosen_name = [name for id, name in tracks if id == ids[next_index]][0]
+        print(f"Switched to audio: {chosen_name}")
+        self.show_marquee(f"Audio: {chosen_name}")
+
+
+    def toggle_audio(self, event=None):
+        """Toggle between original and last audio track."""
+        if not hasattr(self, "last_audio_id"):
+            self.last_audio_id = None
+
+        current = self.media_player.audio_get_track()
+        tracks = self.media_player.audio_get_track_description()
+
+        if not tracks:
+            print("No audio tracks available to toggle.")
+            self.show_marquee("No audio tracks.")
+            return
+
+        ids = [id for id, name in tracks if id != -1]
+
+        if current != -1:
+            self.last_audio_id = current
+            self.media_player.audio_set_track(-1)
+            print("Audio muted/disabled")
+            self.show_marquee("Audio disabled")
+        else:
+            if self.last_audio_id and self.last_audio_id in ids:
+                self.media_player.audio_set_track(self.last_audio_id)
+                chosen = [name for (id, name) in tracks if id == self.last_audio_id][0]
+                print(f"Audio restored: {chosen}")
+                self.show_marquee(f"Audio restored: {chosen}")
+            elif ids:
+                self.media_player.audio_set_track(ids[0])
+                chosen = [name for (id, name) in tracks if id == ids[0]][0]
+                print(f"Audio restored: {chosen}")
+                self.show_marquee(f"Audio: {chosen}")
+
     
 
 if __name__ == "__main__":
