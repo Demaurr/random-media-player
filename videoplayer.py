@@ -41,6 +41,7 @@ class MediaPlayerApp(tk.Toplevel):
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None):
         super().__init__(parent)
+        self.master = parent
         self._get_history_csvfile(watch_history_csv)
         self.favorites_manager = favorites_manager or FavoritesManager()
         self.logger = LogManager(LOG_PATH)
@@ -108,6 +109,7 @@ class MediaPlayerApp(tk.Toplevel):
             self.media_player.release()
         if hasattr(self, 'instance'):
             self.instance.release()
+        # self.deleter.set_parent_window(self.master)
         # self.destroy()
         # print("Closing window...")
         # self.withdraw()
@@ -124,7 +126,7 @@ class MediaPlayerApp(tk.Toplevel):
           
 
     def initialize_player(self, video_files, folder_path, cur_file=None):
-        self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=3000')
+        self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=4000')
         self._create_new_player()
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
@@ -487,6 +489,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind("<Control-D>", self.remove_from_favorites)
         self.bind("<KeyPress-x>", self.cycle_playback_speed)
         self.bind("<KeyPress-X>", self.cycle_playback_speed)
+        self.bind("<Shift-KeyPress-X>", self.slow_playback_speed)
+        self.bind("<Shift-KeyPress-x>", self.slow_playback_speed)
         self.bind("<Control-Right>", self.play_im_next)
         self.bind("<Control-Left>", self.play_im_previous)
         self.bind("<Delete>", self.delete_video)
@@ -615,6 +619,20 @@ class MediaPlayerApp(tk.Toplevel):
         self.segment_prev = 0
         self.prev_counts = 0
         self.forward_counts = 0
+
+    def slow_playback_speed(self, event=None):
+        """Slows down playback to the next lower speed."""
+        if self.playing_video:
+            speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]  # full range
+            current_speed = self.media_player.get_rate()
+            # Find the largest speed in the list that is less than the current speed
+            lower_speeds = [s for s in speeds if s < current_speed]
+            if lower_speeds:
+                new_speed = lower_speeds[-1]  # closest lower speed
+            else:
+                new_speed = speeds[0]  # already at minimum
+            self.set_playback_speed(new_speed)
+            print(f"Playback Slowed to: {new_speed}x")
 
     def cycle_playback_speed(self, event=None):
         """Cycles playback speed between 1x, 1.25x, 1.5x, 1.75x, and 2x."""
@@ -929,7 +947,7 @@ class MediaPlayerApp(tk.Toplevel):
                     time.sleep(0.15)
                     
                 if os.path.exists(self.current_file):
-                    title = f"[{self.video_files.index(self.current_file)} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
+                    title = f"[{self.video_files.index(self.current_file) + 1} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
@@ -960,7 +978,6 @@ class MediaPlayerApp(tk.Toplevel):
         
     def redraw_progress_bar(self, total_duration=None):
         if self.current_file in self.trimmed_segments:
-            # print(f"Redrawing progress bar with trimmed segments for {self.current_file}")
             self.progress_bar.set_trimmed_segments(self._get_trimmed_segments(), total_duration)
 
 
@@ -991,7 +1008,7 @@ class MediaPlayerApp(tk.Toplevel):
                 try:
                     self.media_player = None
                     self.current_media = None
-                    self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=3000')
+                    self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=4000')
                     self._create_new_player()
                     print("Created a fresh VLC instance after timeout.")
                 except Exception as e:
@@ -1022,6 +1039,7 @@ class MediaPlayerApp(tk.Toplevel):
             is_muted = self.media_player.audio_get_mute()
             self.media_player.audio_toggle_mute()
             self.show_marquee("🔇Muted" if not is_muted else "🔊 Unmuted")
+            self.volume_bar.toggle_mute()
 
     def rewind(self, event=None):
         """
@@ -1042,14 +1060,12 @@ class MediaPlayerApp(tk.Toplevel):
         """
         if self.playing_video:
             if self.video_paused:
-                # self.record_segment()
                 self._play_start_time = timeit.default_timer()
                 self.media_player.play()
                 self.video_paused = False
                 self.pause_button.config(text="⏸️ Pause")
                 self.drag_bar.config(bg=Colors.PLAIN_BLACK) if not self.minimized else self.drag_bar.config(bg=Colors.HEADER_COLOR_RED)
             else:
-                # self.record_segment()
                 if self._play_start_time is not None:
                     self._total_play_time += timeit.default_timer() - self._play_start_time
                     self._play_start_time = None
@@ -1083,16 +1099,6 @@ class MediaPlayerApp(tk.Toplevel):
             self.media_player.stop()
             self.playing_video = False
         self.time_label.config(text="00:00:00 / " + self.get_duration_str())
-
-    # def calculate_total_watched(self):
-    #     """
-    #     Calculate the total watched time (miliseconds) based on playback segments.
-    #     """
-    #     total = 0
-    #     for seg in self.playback_segments:
-    #         watched = (seg["end"] - seg["start"] + seg["prev_counts"] * 4990 - seg["forward_counts"] * 9990) / seg["speed"]
-    #         total += watched
-    #     return int(total)  # in ms
 
     def calculate_total_watched(self):
         """

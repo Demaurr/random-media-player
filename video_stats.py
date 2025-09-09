@@ -71,6 +71,8 @@ class VideoStatsApp:
 
         self.master.configure(bg=bg)
         self.master.geometry("800x500")
+        self.master.lift()
+        self.master.focus_force()
         if not for_current:
             self.master.protocol("WM_DELETE_WINDOW", self.on_closing)  # Set initial window size
         self.center_window()  # Center the window on the screen
@@ -122,8 +124,12 @@ class VideoStatsApp:
         self.session_time_label.pack(pady=(0, 10))
 
         self.create_table()
+        self._keybindings()
 
-    def on_closing(self):
+    def _keybindings(self):
+        self.master.bind("<Escape>", self.on_closing)
+
+    def on_closing(self, event=None):
         self.master.destroy()
         # self.master.withdraw()
         # self.master.withdraw()

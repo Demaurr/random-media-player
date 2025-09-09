@@ -9,6 +9,7 @@ class VolumeBar(tk.Canvas):
         self.media_player = media_player
         self.current_volume = 50
         self.max_volume = 200
+        self.is_muted = False
 
         self.handle = None
         self.dragging = False
@@ -27,17 +28,18 @@ class VolumeBar(tk.Canvas):
         self.redraw()
 
     def redraw(self):
-        """Draw the volume bar based on current volume level"""
+        """Draw the volume bar based on current volume level and mute state"""
         self.delete("all")
         width = max(1, self.winfo_width())
         height = self.winfo_height()
-
         bar_y1, bar_y2 = 5, height - 5
 
         self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444444", outline="")
 
         progress_width = int((self.current_volume / self.max_volume) * width)
-        self.create_rectangle(0, bar_y1, progress_width, bar_y2, fill=Colors.ORANGE, outline="")
+        bar_color = "red" if self.is_muted else Colors.ORANGE
+
+        self.create_rectangle(0, bar_y1, progress_width, bar_y2, fill=bar_color, outline="")
 
         handle_x = progress_width
         self.handle = self.create_line(
@@ -50,6 +52,11 @@ class VolumeBar(tk.Canvas):
             text=f"{self.current_volume}%",
             fill=Colors.PLAIN_WHITE if self.current_volume < 95 else Colors.BLACK, font=("Segoe UI", 9, "bold")
         )
+
+    def toggle_mute(self):
+        """Toggle mute state for UI (called from MediaPlayer.toggle_mute)"""
+        self.is_muted = not self.is_muted
+        self.redraw()
 
 
     def update_volume(self, volume=None):
