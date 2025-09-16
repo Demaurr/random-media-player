@@ -23,6 +23,7 @@ from image_player import ImageViewer
 from logs_writer import LogManager
 from tooltips import ToolTip
 from player_constants import (
+    SHOW_SNIPPETS,
     VIDEO_STATS_CSV,
     Colors,
     DELETE_FILES_CSV,
@@ -40,10 +41,13 @@ from static_methods import (
     create_csv_file, 
     ensure_folder_exists, 
     gather_all_media,
-    get_all_media_files, 
+    get_all_media_files,
+    get_all_related_paths, 
     get_file_size,
     get_file_transfer_history, 
     get_screenshots_for_file,
+    get_video_snippets_for_file,
+    natural_sort_iterables,
     natural_sort_key, 
     normalise_path, 
     get_split_stats_by_folder, 
@@ -276,7 +280,7 @@ class FileExplorerApp:
             return
         
         for item in selected_items:
-            file_path = normalise_path(self.file_table.item(item, "values")[2])
+            file_path = normalise_path(self.file_table.item(item, "values")[2]) if self.entry.get().strip() != "show categories" else self.file_table.item(item, "values")[1]
             try:
                 if not self.fav_manager.check_favorites(file_path):
                     self.fav_manager.add_to_favorites(file_path)
@@ -306,7 +310,7 @@ class FileExplorerApp:
             showinfo(self.root, "No Selection", "Please select a file to view properties.")
             return
         item = selected_items[0]
-        file_path = self.file_table.item(item, "values")[2]
+        file_path = self.file_table.item(item, "values")[2] if self.entry.get() != "show categories" else self.file_table.item(item, "values")[1]
 
         loading_win = self.show_loading_screen(message="Loading properties...")
 
@@ -443,40 +447,64 @@ class FileExplorerApp:
         if not shown_any:
             showinfo(self.root, "No Screenshots", "No screenshots found for any of the selected files.")
 
+    def get_video_snippets_for_selected(self, files=None, all_files=True, check_deleted=False, on_complete=None):
+        """Fetch video snippets for selected files with a loading screen, then run on_complete(snippets)."""
+        if not files:
+            selected_items = self.file_table.selection()
+            if not selected_items:
+                showinfo(self.root, "No Selection", "Please select file(s) to view video snippets.")
+                return
+        else:
+            selected_items = files if all_files else files[:1]
+
+        loading = self.show_loading_screen("Fetching video snippets...")
+
+        def worker():
+            all_snippets = []
+            try:
+                for item in selected_items:
+                    file_path = self.file_table.item(item, "values")[2] if not files else item
+                    if check_deleted and os.path.exists(file_path):
+                        all_snippets.append(file_path)
+                        continue
+
+                    # related_paths = get_all_related_paths(file_path)
+                    # for related in related_paths:
+                    #     snippets = get_video_snippets_for_file(related)
+                    #     all_snippets.extend(snippets)
+                    all_snippets.extend(natural_sort_iterables(self.get_snippets([file_path])))
+
+                self.root.after(100, lambda: (
+                    loading.destroy(),
+                    on_complete and on_complete(all_snippets)
+                ))
+
+            except Exception as e:
+                self.root.after(100, lambda: (
+                    loading.destroy(),
+                    showerror(self.root, "Error", f"Failed to fetch snippets: {e}")
+                ))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+
     def show_video_snippets_for_selected(self, event=None):
         import random
-        from static_methods import get_all_related_paths, get_video_snippets_for_file
 
         selected_items = self.file_table.selection()
         if not selected_items:
             showinfo(self.root, "No Selection", "Please select file(s) to view video snippets.")
             return
 
-        all_snippets = []
-        for item in selected_items:
-            file_path = self.file_table.item(item, "values")[2]
-            related_paths = get_all_related_paths(file_path)
-            for related in related_paths:
-                # filename = os.path.basename(related)
-                snippets = get_video_snippets_for_file(related)
-                all_snippets.extend(snippets)
+        def after_snippets(all_snippets):
+            if all_snippets:
+                random_index = random.randint(0, len(all_snippets) - 1)
+                file_path = all_snippets[random_index]
+                self.play_media(all_snippets, file_path)
+            else:
+                showinfo(self.root, "No Snippets", "No video snippets found for the selected files.")
 
-        if all_snippets:
-            random_index = random.randint(0, len(all_snippets) - 1)
-            app = MediaPlayerApp(
-                all_snippets,
-                current_file=all_snippets[random_index],
-                random_select=True,
-                parent=self.root,
-                category_manager=self.category_manager,
-                favorites_manager=self.fav_manager,
-                notes_manager=self.notes_manager,
-                snippets_manager=self.snippets_manager,
-                trimmed_segments=self.trimmed_segments
-            )
-            app.update_video_progress()
-        else:
-            showinfo(self.root, "No Snippets", "No video snippets found for the selected files.")
+        self.get_video_snippets_for_selected(on_complete=after_snippets)
 
     def move_selected_files(self, event=None):
         selected_items = self.file_table.selection()
@@ -489,8 +517,14 @@ class FileExplorerApp:
             return
         
         src_files = [self.file_table.item(item, "values")[2] for item in selected_items]
-        file_manager = FileManager(parent_window=self.root, favorites_manager=self.fav_manager, deletion_manager=self.deletion_manager,
-                                    video_stats_manager=self.video_stats_manager, category_manager=self.category_manager, notes_manager=self.notes_manager)
+        file_manager = FileManager(
+            parent_window=self.root, 
+            favorites_manager=self.fav_manager, 
+            deletion_manager=self.deletion_manager,
+            video_stats_manager=self.video_stats_manager, 
+            category_manager=self.category_manager, 
+            notes_manager=self.notes_manager,
+            description_manager=self.description_manager)
 
         file_manager.move_files(src_files, dest_folder)
 
@@ -612,7 +646,7 @@ class FileExplorerApp:
         )
         style.map(
             "NewStyle.TCheckbutton",
-            background=[("active", "#222"), ("selected", "#444")],
+            background=[("active", "#222222"), ("selected", "#444444")],
             foreground=[("active", Colors.INFO_BLUE), ("selected", Colors.INFO_BLUE)],
         )
         style.configure("Thick.Horizontal.TProgressbar", thickness=20)
@@ -634,61 +668,73 @@ class FileExplorerApp:
         self.input_frame.pack(side="top", fill="x", padx=20, pady=(10, 5))
 
         self.entry = tk.Entry(
-            self.input_frame, bg="#181818", fg=Colors.PLAIN_WHITE, width=50, bd=2, relief=tk.FLAT,
+            self.input_frame, bg=Colors.BLACK_ENTRYBOX, fg=Colors.PLAIN_WHITE, width=50, bd=2, relief=tk.FLAT,
             font=("Segoe UI", 13)
         )
         self.entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=5, ipady=4)
 
         self.enter_button = tk.Button(
             self.input_frame, text="Get", command=self.on_enter_pressed,
-            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 13, "bold"),
-            width=10, bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_RED,
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_RED,
+            font=("Segoe UI", 13, "bold"),
+            width=8, bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_RED,
             cursor="hand2"
         )
-        self.enter_button.pack(side="left", padx=(0, 0), pady=5)
+        self.enter_button.pack(side="left", padx=0, pady=5)
 
         self.browse_button = tk.Button(
             self.input_frame, text="📁", command=self.browse_folder,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLACK, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_WHITE,
+            font=("Segoe UI", 13, "bold"),
             width=3, bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.browse_button.pack(side="left", padx=(5, 0), pady=5)
+        self.browse_button.pack(side="left", padx=0, pady=5)
 
         self.search_frame = tk.Frame(self.root, bg=Colors.PLAIN_BLACK)
         self.search_frame.pack(side="top", fill="x", padx=20, pady=(0, 10))
         
         self.filter_favs = tk.Button(
             self.search_frame, text="★", command=self.check_update_favs,
-            bg=Colors.PLAIN_GREEN, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_GREEN,
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#006400",
             cursor="hand2"
         )
-        self.filter_favs.pack(side="left", padx=(0, 5), pady=0)
+        self.filter_favs.pack(side="left", padx=0, pady=0)
 
         self.show_caps = tk.Button(
             self.search_frame, text="Snaps", command=self.display_caps,
-            bg=Colors.PLAIN_GREEN, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_GREEN,
+            font=("Segoe UI", 12, "bold"),
             width=8, bd=0, relief=tk.RAISED, activebackground="#006400",
             cursor="hand2"
         )
-        self.show_caps.pack(side="left", padx=(0, 5), pady=0)
+        self.show_caps.pack(side="left", padx=0, pady=0)
 
         self.show_verticals = tk.Button(
             self.search_frame, text="V", command=self.get_verticals,
-            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_WHITE, 
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.show_verticals.pack(side="left", padx=(0,5), pady=0, ipadx=3)
+        self.show_verticals.pack(side="left", padx=0, pady=0, ipadx=3)
 
         self.show_horizontals = tk.Button(
             self.search_frame, text="L", command=self.get_horizontals,
-            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_WHITE, 
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.show_horizontals.pack(side="left", padx=(0, 5), pady=0, ipadx=3)
+        self.show_horizontals.pack(side="left", padx=0, pady=0, ipadx=3)
 
         self.allow_deleted_on = False
 
@@ -701,17 +747,22 @@ class FileExplorerApp:
 
         self.allow_deleted_button = tk.Button(
             self.search_frame, text="🚫", command=toggle_allow_deleted,
-            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_WHITE, 
+            font=("Segoe UI", 13, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.allow_deleted_button.pack(side="left", padx=(0, 5), pady=5)
+        self.allow_deleted_button.pack(side="left", padx=0, pady=0)
         
         self.search_entry = tk.Entry(
-            self.search_frame, bg="#181818", fg=Colors.PLAIN_WHITE, width=30, bd=2, relief=tk.FLAT,
+            self.search_frame, 
+            bg=Colors.BLACK_ENTRYBOX, 
+            fg=Colors.PLAIN_WHITE, 
+            width=30, bd=2, relief=tk.FLAT,
             font=("Segoe UI", 12)
         )
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=0, ipady=2)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=0, pady=0, ipady=2)
 
         self.top_level_only_on = False
 
@@ -724,55 +775,69 @@ class FileExplorerApp:
 
         self.top_level_only_button = tk.Button(
             self.search_frame, text="🔼", command=toggle_top_level,
-            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_WHITE, 
+            font=("Segoe UI", 13, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.top_level_only_button.pack(side="left", padx=(0, 5), pady=5)
+        self.top_level_only_button.pack(side="left", padx=0, pady=0)
 
         self.search_button = tk.Button(
             self.search_frame, text="Search", command=self.on_search_pressed,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLACK, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_WHITE,
+            font=("Segoe UI", 12, "bold"),
             width=10, bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
-        self.search_button.pack(side="left", padx=(0, 5), pady=0)
+        self.search_button.pack(side="left", padx=0, pady=0)
 
         self.delete_button = tk.Button(
             self.search_frame, text="🗑", command=self.on_delete_all_pressed,
-            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 12, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_RED,
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_RED,
             anchor="center", cursor="hand2"
         )
-        self.delete_button.pack(side="left", padx=(0,5), pady=5)
+        self.delete_button.pack(side="left", padx=0, pady=0)
 
         self.refresh_button = tk.Button(
             self.search_frame, text="♻️", command=self.on_refresh_pressed,
-            bg=Colors.PLAIN_RED, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 12, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_RED,
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground=Colors.ACTIVE_RED,
             cursor="hand2"
         )
-        self.refresh_button.pack(side="left", padx=(0, 5), pady=5)
+        self.refresh_button.pack(side="left", padx=0, pady=0)
         
         self.all_media_button = tk.Button(
             self.search_frame, text="All Media", command=lambda: self.root.after(50, self.show_all_media),
-            bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK, 
+            fg=Colors.PLAIN_WHITE, 
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#003366",
             cursor="hand2"
         )
-        self.all_media_button.pack(side="left", padx=(0, 5), pady=0)
+        self.all_media_button.pack(side="left", padx=0, pady=0)
 
         self.categories_button = tk.Button(
             self.search_frame, text="☰", command=self.show_categories,
-            bg=Colors.PLAIN_PURPLE, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_PURPLE,
+            font=("Segoe UI", 12, "bold"),
             bd=0, relief=tk.RAISED, activebackground="#4B0082",
             cursor="hand2"
         )
-        self.categories_button.pack(side="left", padx=(0, 5), pady=0)
+        self.categories_button.pack(side="left", padx=0, pady=0)
 
         self.settings_button = tk.Button(
             self.root, text="⚙️", command=self.open_settings,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_GRAY, bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_GRAY, 
+            bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
@@ -780,7 +845,9 @@ class FileExplorerApp:
 
         self.stats_button = tk.Button(
             self.root, text="📊", command=self.open_media_stats,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLUE, bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.ORANGE, 
+            bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
@@ -788,7 +855,9 @@ class FileExplorerApp:
 
         self.folder_stats_button = tk.Button(
             self.root, text="▦", command=self.show_folder_stats,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_BLUE, bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.ORANGE,
+            bd=0, font=("Segoe UI", 14, "bold"),
             relief=tk.FLAT, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
@@ -796,28 +865,30 @@ class FileExplorerApp:
 
         self.info_button = tk.Button(
             self.root, text="ℹ️", command=self.show_info,
-            bg=Colors.PLAIN_WHITE, fg=Colors.PLAIN_RED, bd=0, font=("Segoe UI", 13, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_RED, 
+            bd=0, font=("Segoe UI", 13, "bold"),
             relief=tk.FLAT, activebackground=Colors.ACTIVE_WHITE,
             cursor="hand2"
         )
         self.info_button.place(relx=0.0, x=10, y=10, anchor="nw", width=40, height=30)
 
-        def on_enter(e): e.widget.config(bg="#444")
+        def on_enter(e): e.widget.config(fg="#444")
         def on_leave(e):
             if e.widget == self.enter_button:
-                e.widget.config(bg=Colors.PLAIN_RED)
+                e.widget.config(fg=Colors.PLAIN_RED)
             elif e.widget == self.delete_button or e.widget["text"] == "🗑":
-                e.widget.config(bg=Colors.PLAIN_RED)
+                e.widget.config(fg=Colors.PLAIN_RED)
             elif e.widget == self.refresh_button or e.widget["text"] == "♻️":
-                e.widget.config(bg=Colors.PLAIN_RED)
+                e.widget.config(fg=Colors.PLAIN_RED)
             elif "★" in e.widget["text"] or "Snaps" in e.widget["text"]:
-                e.widget.config(bg=Colors.PLAIN_GREEN)
+                e.widget.config(fg=Colors.PLAIN_GREEN)
             elif "V" in e.widget["text"] or "L" in e.widget["text"] or e.widget in [self.all_media_button]:
-                e.widget.config(bg=Colors.PLAIN_BLACK)
+                e.widget.config(fg=Colors.PLAIN_WHITE)
             elif e.widget == self.categories_button:
-                e.widget.config(bg=Colors.PLAIN_PURPLE)
+                e.widget.config(fg=Colors.PLAIN_PURPLE)
             else:
-                e.widget.config(bg=Colors.PLAIN_WHITE)
+                e.widget.config(fg=Colors.PLAIN_WHITE)
 
         for btn in [self.enter_button, self.delete_button, self.refresh_button,
                      self.filter_favs, self.show_caps, self.show_verticals, self.show_horizontals,
@@ -918,10 +989,10 @@ class FileExplorerApp:
         self.scrollbar.pack(side="right", fill="y")
         self.file_table.configure(yscrollcommand=self.scrollbar.set)
 
-        self._tooltip = ToolTip(self.file_table, "", wraplength=400)
+        self._tooltip = ToolTip(self.file_table, "", wraplength=450)
 
         def on_motion(event):
-            self._generate_table_tooltip(event=event, display_index=2)
+            self._generate_table_tooltip(event=event, display_index=2 if self.entry.get() != "show categories" else 1)
 
         self.file_table.bind("<Motion>", on_motion)
         self.file_table.bind("<Leave>", lambda e: self._tooltip.hide_tooltip())
@@ -929,18 +1000,36 @@ class FileExplorerApp:
     def _generate_table_tooltip(self, event=None, display_index=2, column="#2"):
         region = self.file_table.identify("region", event.x, event.y)
         if region == "cell":
-                row_id = self.file_table.identify_row(event.y)
-                col_id = self.file_table.identify_column(event.x)
+            row_id = self.file_table.identify_row(event.y)
+            col_id = self.file_table.identify_column(event.x)
 
-                if row_id and col_id == column:
-                    values = self.file_table.item(row_id, "values")
-                    if values and len(values) >= 3:
-                        text_display = values[display_index]
-                        x = event.x_root + 20
-                        y = event.y_root + 10
-                        self._tooltip.hide_tooltip()
-                        self._tooltip.show_tooltip(x, y, text_display)
-                        return
+            if row_id and col_id == column:
+                values = self.file_table.item(row_id, "values")
+                if values and len(values) >= 3:
+                    file_path = values[display_index]
+                    
+                    parts = [(file_path + "\n", {"foreground": Colors.PLAIN_WHITE})]
+
+                    # if self.entry.get() != "show categories":
+                    #     size_text = f"Size: {convert_bytes(get_file_size(file_path))}"
+                    #     parts.append((size_text, {"foreground": "cyan"}))
+                    text_display = file_path
+                    text_display += f"\nSize - {convert_bytes(get_file_size(file_path))}" if self.entry.get() != "show categories" else ""
+                    descs = self.description_manager.get_all_related_descriptions(file_path)
+                    all_desc = " ".join([d for d in descs.values() if d])
+                    if all_desc:
+                        sentence = all_desc.split("\n")
+                        short_desc = "\n".join(sentence[:10]) + ("..." if len(sentence) > 10 else "")
+                        text_display += f"\n\nDescription:\n{short_desc}"
+                        # parts.append(("\nDescription:\n", {"foreground": "orange", "font": ("Segoe UI", 9, "bold")}))
+                        # parts.append((short_desc, {"foreground": "lightgray"}))
+                        
+                    x = event.x_root + 20
+                    y = event.y_root + 10
+                    self._tooltip.hide_tooltip()
+                    # self._tooltip.show_tooltip(x, y, parts)
+                    self._tooltip.show_tooltip(x, y, text_display)
+                    return
         self._tooltip.hide_tooltip()
 
     def update_selected_files_label(self, event=None):
@@ -1102,11 +1191,11 @@ class FileExplorerApp:
             if not self.allow_deleted_on:
                 files = [f for f in files if os.path.exists(f)]
 
-            self.insert_to_table(sorted(self.file_path_tuple(files)))
             self.total_files = len(files)
             self.search_size = self.convert_bytes(sum(get_file_size(f) for f in files))
             self.total_search_results = len(files)
             self.update_stats()
+            self.insert_to_table(sorted(self.file_path_tuple(files)))
 
             print(f"Loaded {len(files)} files from {folder}")
 
@@ -1148,6 +1237,7 @@ class FileExplorerApp:
             loading_win.destroy()
         self.show_paths()
         showinfo(self.root, "Refreshed", message)
+        self.update_stats_async()
 
 
     def on_refresh_pressed(self):
@@ -1218,11 +1308,11 @@ class FileExplorerApp:
     def _on_all_media_loaded(self, file_list, total_size_bytes):
         self.reset_search_option()
         self.video_files = list(file_list)
-        self.root.after(0, self.insert_to_table(self.file_path_tuple(file_list)))
         self.total_files = len(file_list)
         self.total_size = self.convert_bytes(total_size_bytes)
         self.update_stats()
         self.update_entry_text("All Media Files")
+        self.root.after(0, self.insert_to_table(self.file_path_tuple(file_list)))
         showinfo(self.root, "All Media", f"Total media files found: {len(file_list)}")
         self.display_memory_usage()
 
@@ -1537,8 +1627,8 @@ class FileExplorerApp:
             files = [normalise_path(file) for file in files if favs.check_favorites(file)]
             self.total_search_results = len(files)
             self.update_search_size(files)
-            self.insert_to_table(self.file_path_tuple(files))
             self.update_stats()
+            self.insert_to_table(self.file_path_tuple(files))
 
     def check_update_favs(self, event=None):
         files = self.file_path_tuple(self.get_files_from_table())
@@ -1553,8 +1643,8 @@ class FileExplorerApp:
                     fav_files.append(file)
             self.total_search_results = len(fav_files)
             self.update_search_size([file[1] for file in fav_files])
-            self.insert_to_table(fav_files)
             self.update_stats()
+            self.insert_to_table(fav_files)
 
     def reset_search_option(self, folder=False, images=False, category=False):
         self.play_folder = folder
@@ -1580,10 +1670,9 @@ class FileExplorerApp:
 
                 print(f"Total Videos Found in {merged_paths}: {len(self.video_files)}")
                 self.update_entry_text(merged_paths)
-                self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
                 self.reset_search_option()
-                self.update_stats_async()
-
+                self.insert_to_table(sorted(self.file_path_tuple(self.video_files)))
+                # self.update_stats_async()
             
             elif self.play_category:
                 selected_items = self.file_table.selection()
@@ -1615,8 +1704,8 @@ class FileExplorerApp:
                 categories_str = ", ".join(category_names)
                 print(f"Total Videos Found in categories [{categories_str}]: {len(existing_files)}")
                 self.update_entry_text(f"Categories: {categories_str}")
-                self.insert_to_table(sorted(self.file_path_tuple(existing_files)))
                 self.reset_search_option()
+                self.insert_to_table(sorted(self.file_path_tuple(existing_files)))
             
             elif self.play_images:
                 viewer_window = Toplevel(self.root)
@@ -1630,7 +1719,8 @@ class FileExplorerApp:
                             width=self.image_viewer_width, 
                             height=self.image_viewer_height,
                             deletion_manager=self.deletion_manager)
-                # self.reset_search_option()
+                
+                self.deletion_manager.set_parent_window(self.root)
 
             else:
                 if len(self.file_table.selection()) > 1:
@@ -1638,30 +1728,63 @@ class FileExplorerApp:
                     self.files = [self.file_table.item(i, "values")[2] for i in selected_items]
                 else:
                     self.files = sorted(self.get_files_from_table())
-                if not os.path.exists(file_path):
-                        showerror(self.root, "File Not Found", f"The file '{file_path}' does not exist.")
+
+                if not os.path.exists(file_path) and not SHOW_SNIPPETS:
+                        showerror(self.root, "File(s) Not Found", f"The file '{file_path}' does not exist.")
                         return False
-                print(f"Total Videos Found: {len(self.files)}")
-                if self.files:
-                    self.play_images = False
-                    app = MediaPlayerApp(
-                        self.files, 
-                        current_file=file_path, 
-                        random_select=True, 
-                        parent=self.root,
-                        category_manager=self.category_manager,
-                        favorites_manager=self.fav_manager,
-                        notes_manager=self.notes_manager,
-                        snippets_manager=self.snippets_manager,
-                        trimmed_segments=self.trimmed_segments
+                
+                if SHOW_SNIPPETS and not os.path.exists(file_path):
+                    def after_snippets(snippets):
+                        self.files = snippets
+                        file_path = self.files[0] if self.files else None
+
+                        if not file_path or (not os.path.exists(file_path)):
+                            showerror(self.root, "File(s) Not Found", f"The file '{file_path}' does not exist.")
+                            return
+
+                        print(f"Total Videos Found: {len(self.files)}")
+                        self.play_media(self.files, file_path)
+                        # self.deletion_manager.set_parent_window(self.root)
+
+                    self.get_video_snippets_for_selected(
+                        # files=self.files[:150],
+                        check_deleted=True,
+                        # all_files=True,
+                        on_complete=after_snippets
                     )
-                    app.update_video_progress()
-                    print(len(self.trimmed_segments))
+                    
                 else:
-                    print("No video files found in the specified folder path(s).")
+                    if not os.path.exists(file_path):
+                        showerror(self.root, "File(s) Not Found", f"The file '{file_path}' does not exist.")
+                        return False
+                    self.play_media(self.files, file_path)
+                    # self.deletion_manager.set_parent_window(self.root)
+
+                print(f"Total Videos Found: {len(self.files)}")
         
         except IndexError as e:
             showerror(self.root, "Error", f"{e}")
+
+    def play_media(self, files, file_path, random_select=True):
+        if files:
+            self.play_images = False
+            app = MediaPlayerApp(
+                files, 
+                current_file=file_path, 
+                random_select=random_select, 
+                parent=self.root,
+                category_manager=self.category_manager,
+                favorites_manager=self.fav_manager,
+                notes_manager=self.notes_manager,
+                snippets_manager=self.snippets_manager,
+                trimmed_segments=self.trimmed_segments,
+                # deletion_manager=self.deletion_manager
+            )
+            app.update_video_progress()
+            print(len(self.trimmed_segments))
+            # self.deletion_manager.set_parent_window(self.root)
+        else:
+            print("No video files found in the specified folder path(s).")
 
     def update_search_size(self, file_list):
         self.search_size = 0
@@ -1670,6 +1793,14 @@ class FileExplorerApp:
              size += get_file_size(file)
 
         self.search_size = self.convert_bytes(size)
+
+    def get_snippets(self, file_paths: list = None):
+        files = []
+        for file in file_paths:
+            snippets = self.snippets_manager.get_snippets_by_original_file(file, related_paths=True)
+            files += [s["Output File"] for s in snippets if s.get("Output File")]
+        print(len(files))
+        return list(set(files))
 
     def get_verticals(self):
         try:
@@ -1714,10 +1845,12 @@ class FileExplorerApp:
                                  notes_manager=self.notes_manager,
                                  snippets_manager=self.snippets_manager,
                                  parent=self.root,
-                                 trimmed_segments=self.trimmed_segments)
+                                 trimmed_segments=self.trimmed_segments,
+                                 deletion_manager=self.deletion_manager)
             app.update_video_progress()
             # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
             app.mainloop()
+            self.deletion_manager.set_parent_window(self.root)
         else:
             print("No video files found in the specified folder path(s).")
 
@@ -1879,9 +2012,9 @@ class FileExplorerApp:
                     self.total_files = len(self.image_files)
                     self.update_entry_text(SCREENSHOTS_FOLDER)
                     self.update_stats()
-                    self.insert_to_table(self.file_path_tuple(self.image_files))
                     loading_win.destroy()
                     self.display_memory_usage()
+                    self.insert_to_table(self.file_path_tuple(self.image_files))
 
                 self.root.after(0, on_finish)
 
@@ -1948,9 +2081,9 @@ class FileExplorerApp:
                     self.total_size = self.convert_bytes(total_size)
                     self.total_search_results = total_files
                     self.update_stats()
+                    self.update_entry_text("show categories")
 
                     self.insert_to_table(category_files)
-                    self.update_entry_text("show categories")
 
                     loading_win.destroy()
 
