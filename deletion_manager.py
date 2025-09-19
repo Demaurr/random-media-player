@@ -15,6 +15,7 @@ class DeletionManager:
         self.delete_csv = DELETE_FILES_CSV  
         self.fav_manager = fav_manager or FavoritesManager(FAV_FILES) 
         self.logger = LogManager(LOG_PATH)
+        self.deletion_files = self.read_csv_file()
         self.parent_window = None
 
     def set_parent_window(self, parent):
@@ -53,107 +54,163 @@ class DeletionManager:
                     continue
 
     def get_deleted_file_size(self, file_path):
-        files_dict = self.read_csv_file()
-        """Returns the size of a file marked for deletion.""" 
+        """Returns the size of a file marked for deletion."""
         file_path = normalise_path(file_path)
-        return files_dict.get(file_path, {}).get('size', '0')
+        return self.deletion_files.get(file_path, {}).get('size', '0')
 
 
-    def mark_for_deletion(self, video_file, status="ToDelete"):
-        """Marks a video file for deletion by adding it to the CSV with size and datetime."""
+    def mark_for_deletion(self, video_file, status="ToDelete", skip_confirmation=False, commit=True):
         video_file = normalise_path(video_file)
         if not os.path.exists(video_file):
             showerror(self.parent_window, "Error", f"File not found: {video_file}")
             return
-        file_status_dict = self.read_csv_file()
+
         try:
             file_size = os.path.getsize(video_file)
             mod_time = datetime.fromtimestamp(os.path.getmtime(video_file)).strftime('%Y-%m-%d %H:%M:%S')
 
-            if video_file in file_status_dict:
-                existing_status = file_status_dict[video_file]['status']
+            if video_file in self.deletion_files:
+                existing_status = self.deletion_files[video_file]['status']
                 if existing_status == "ToDelete":
-                    confirm_delete = askyesno(self.parent_window, "File Already Marked", 
-                                                        f"{video_file} is already marked for deletion. Do you want to delete it now?")
+                    confirm_delete = askyesno(
+                        self.parent_window,
+                        "File Already Marked",
+                        f"{video_file} is already marked. Delete now?"
+                    ) if not skip_confirmation else True
+
                     if confirm_delete:
-                        if self.delete_file(video_file, file_status_dict):
-                            file_status_dict[video_file]['status'] = "Deleted"
+                        if self.delete_file(video_file, self.deletion_files):
+                            self.deletion_files[video_file]['status'] = "Deleted"
             else:
-                file_status_dict[video_file] = {'status': status, 'size': file_size, 'mod_time': mod_time}
+                self.deletion_files[video_file] = {
+                    'status': status,
+                    'size': file_size,
+                    'mod_time': mod_time
+                }
                 self.logger.update_logs('[MARKED FOR DELETION]', video_file)
+
         except Exception as e:
             self.logger.error_logs(f"Error marking {video_file} for deletion: {e}")
             showerror(self.parent_window, "Error", f"Error marking {video_file} for deletion: {e}")
-        finally:
-            self.write_csv_file(file_status_dict)
+
+        if commit:
+            self.write_csv_file(self.deletion_files)
+
+    def commit_changes(self):
+        """Write in-memory deletion_files dict back to CSV once."""
+        self.write_csv_file(self.deletion_files)
+
+    def reload_deletion_files(self):
+        self.deletion_files = self.read_csv_file()
 
     def remove_from_deletion(self, video_file):
         """Removes a file from the deletion list if it's marked for deletion."""
         video_file = normalise_path(video_file)
-        file_status_dict = self.read_csv_file()
 
-        if video_file in file_status_dict:
-            existing_status = file_status_dict[video_file]['status']
+        if video_file in self.deletion_files:
+            existing_status = self.deletion_files[video_file]['status']
             if existing_status == "ToDelete":
-                del file_status_dict[video_file]
+                del self.deletion_files[video_file]
                 self.logger.update_logs('[REMOVED FROM DELETION]', video_file)
             elif existing_status == "Deleted":
-                showinfo(self.parent_window, "Already Deleted", f"{video_file} is already deleted and cannot be undeleted.")
-        else:
-            # print(f"{video_file} is not in the deletion list.")
-            pass
+                showinfo(self.parent_window, "Already Deleted",
+                        f"{video_file} is already deleted and cannot be undeleted.")
 
-        self.write_csv_file(file_status_dict)
+        self.commit_changes()
 
-    def delete_files_in_csv(self, skip_confirmation=False): 
-        """Deletes or moves files marked for deletion, offering options for files in favorites."""
+    # def delete_files_in_csv(self, skip_confirmation=False): 
+    #     """Deletes files marked for deletion, offering options skipping for files in favorites."""
         
-        # Check if confirmation should be skipped
+    #     # Check if confirmation should be skipped
+    #     if not skip_confirmation:
+    #         confirm_delete = askyesno(self.parent_window, "Confirm Deletion", "Are you sure you want to delete all marked files?")
+    #         if not confirm_delete:
+    #             showinfo(self.parent_window, "Skipped", "Skipping Files marked for deletion.")
+    #             return
+
+    #     file_status_dict = self.read_csv_file()
+
+    #     for file_path, metadata in file_status_dict.items():
+    #         if metadata['status'] == "ToDelete":
+    #             if self.fav_manager.check_favorites(current_file=file_path):
+    #                 self.handle_favorites(file_path, file_status_dict)
+    #             else:
+    #                 self.delete_file(file_path, file_status_dict, handle_favs=False)
+    #                 file_status_dict[file_path]['status'] = "Deleted"
+
+    #     self.write_csv_file(file_status_dict)
+    #     showinfo(self.parent_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
+
+    def delete_files_in_csv(self, skip_confirmation=False):
+        """Deletes files marked for deletion, offering options skipping for files in favorites."""
+
         if not skip_confirmation:
-            confirm_delete = askyesno(self.parent_window, "Confirm Deletion", "Are you sure you want to delete all marked files?")
+            confirm_delete = askyesno(self.parent_window, "Confirm Deletion",
+                                    "Are you sure you want to delete all marked files?")
             if not confirm_delete:
                 showinfo(self.parent_window, "Skipped", "Skipping Files marked for deletion.")
                 return
 
-        file_status_dict = self.read_csv_file()
-
-        for file_path, metadata in file_status_dict.items():
+        for file_path, metadata in list(self.deletion_files.items()):
             if metadata['status'] == "ToDelete":
                 if self.fav_manager.check_favorites(current_file=file_path):
-                    self.handle_favorites(file_path, file_status_dict)
+                    self.handle_favorites(file_path, self.deletion_files)
                 else:
-                    self.delete_file(file_path, file_status_dict, handle_favs=False)
-                    file_status_dict[file_path]['status'] = "Deleted"
+                    if self.delete_file(file_path, self.deletion_files, handle_favs=False):
+                        self.deletion_files[file_path]['status'] = "Deleted"
 
-        self.write_csv_file(file_status_dict)
+        self.commit_changes()
         showinfo(self.parent_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
 
     def check_deleted(self):
-        """
-        Check if files marked as 'Deleted' are still present in the file system. 
-        If found, reset their status to 'ToDelete'.
-        """
-        file_status_dict = self.read_csv_file()
+        """Check if files marked as 'Deleted' are still present in the file system."""
         updated = False
 
-        for file_path, metadata in file_status_dict.items():
+        for file_path, metadata in self.deletion_files.items():
             if metadata['status'] == 'Deleted' and os.path.exists(file_path):
-                # File marked as deleted but still exists, reset status
-                file_status_dict[file_path]['status'] = 'ToDelete'
+                self.deletion_files[file_path]['status'] = 'ToDelete'
                 updated = True
                 print(f"File {file_path} exists. Status reset to 'ToDelete'.")
+
             elif metadata['status'] == 'ToDelete' and not os.path.exists(file_path):
-                file_status_dict[file_path]['status'] = 'Deleted'
+                self.deletion_files[file_path]['status'] = 'Deleted'
                 updated = True
                 print(f"File {file_path} doesn't exist. Status set to 'Deleted'.")
 
         if updated:
-            self.write_csv_file(file_status_dict)
-            print("CSV updated with files reset to 'ToDelete'.")
-            self.logger.update_logs("[DELETED FILES UPDATED]", f"Checked The Deleted Files Still Available.")
+            self.commit_changes()
+            self.logger.update_logs("[DELETED FILES UPDATED]",
+                                    "Checked The Deleted Files Still Available.")
         else:
-            print("No updates required; all deleted files are missing.")
-            showinfo(self.parent_window, "No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
+            showinfo(self.parent_window, "No Updates",
+                    "All files marked as 'Deleted' are no longer present in the file system.")
+
+    # def check_deleted(self):
+    #     """
+    #     Check if files marked as 'Deleted' are still present in the file system. 
+    #     If found, reset their status to 'ToDelete'.
+    #     """
+    #     file_status_dict = self.read_csv_file()
+    #     updated = False
+
+    #     for file_path, metadata in file_status_dict.items():
+    #         if metadata['status'] == 'Deleted' and os.path.exists(file_path):
+    #             # File marked as deleted but still exists, reset status
+    #             file_status_dict[file_path]['status'] = 'ToDelete'
+    #             updated = True
+    #             print(f"File {file_path} exists. Status reset to 'ToDelete'.")
+    #         elif metadata['status'] == 'ToDelete' and not os.path.exists(file_path):
+    #             file_status_dict[file_path]['status'] = 'Deleted'
+    #             updated = True
+    #             print(f"File {file_path} doesn't exist. Status set to 'Deleted'.")
+
+    #     if updated:
+    #         self.write_csv_file(file_status_dict)
+    #         print("CSV updated with files reset to 'ToDelete'.")
+    #         self.logger.update_logs("[DELETED FILES UPDATED]", f"Checked The Deleted Files Still Available.")
+    #     else:
+    #         print("No updates required; all deleted files are missing.")
+    #         showinfo(self.parent_window, "No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
 
     def handle_favorites_move(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
@@ -171,7 +228,6 @@ class DeletionManager:
                 self.move_file_to_folder(file_path, default_favorites_folder, file_status_dict)
                 return False 
             else:
-                # Ask the user for a new folder if they don't want to use the default one
                 new_folder = filedialog.askdirectory(title="Select Folder to Move Favorites")
                 if new_folder:
                     self.move_file_to_folder(file_path, new_folder, file_status_dict)
@@ -180,7 +236,6 @@ class DeletionManager:
                     print(f"Skipping {file_path} as no folder was selected.")
                     return False
         else:
-            # If the user does not want to move the file, remove it from favorites and mark for deletion
             self.remove_from_favorites_and_delete(file_path, file_status_dict)
             return True 
 

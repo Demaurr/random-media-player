@@ -468,10 +468,6 @@ class FileExplorerApp:
                         all_snippets.append(file_path)
                         continue
 
-                    # related_paths = get_all_related_paths(file_path)
-                    # for related in related_paths:
-                    #     snippets = get_video_snippets_for_file(related)
-                    #     all_snippets.extend(snippets)
                     all_snippets.extend(natural_sort_iterables(self.get_snippets([file_path])))
 
                 self.root.after(100, lambda: (
@@ -569,9 +565,13 @@ class FileExplorerApp:
         if not confirm:
             return
 
+        skip_confirm = True if self.entry.get() == "show deletes" else False
+
         for item in selected_items:
             file_path = self.file_table.item(item, "values")[2]
-            self.deletion_manager.mark_for_deletion(file_path, status)
+            self.deletion_manager.mark_for_deletion(file_path, status, skip_confirm, commit=False)
+
+        self.deletion_manager.commit_changes()
         
         # Not currently deleting files directl
         if direct_delete:
