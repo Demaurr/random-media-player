@@ -27,6 +27,7 @@ class ImageViewer:
         self.shuffle_mode = False
         self.fullscreen = fullscreen
         self.deletion_manager = deletion_manager or DeletionManager()
+        self.deletion_manager.set_parent_window(self.master)
         self.master.attributes("-fullscreen", self.fullscreen)
 
         self.status_label = Label(master, text="", bg="black", fg="lime", font=("Segoe UI", 12, "bold"))

@@ -118,29 +118,6 @@ class DeletionManager:
 
         self.commit_changes()
 
-    # def delete_files_in_csv(self, skip_confirmation=False): 
-    #     """Deletes files marked for deletion, offering options skipping for files in favorites."""
-        
-    #     # Check if confirmation should be skipped
-    #     if not skip_confirmation:
-    #         confirm_delete = askyesno(self.parent_window, "Confirm Deletion", "Are you sure you want to delete all marked files?")
-    #         if not confirm_delete:
-    #             showinfo(self.parent_window, "Skipped", "Skipping Files marked for deletion.")
-    #             return
-
-    #     file_status_dict = self.read_csv_file()
-
-    #     for file_path, metadata in file_status_dict.items():
-    #         if metadata['status'] == "ToDelete":
-    #             if self.fav_manager.check_favorites(current_file=file_path):
-    #                 self.handle_favorites(file_path, file_status_dict)
-    #             else:
-    #                 self.delete_file(file_path, file_status_dict, handle_favs=False)
-    #                 file_status_dict[file_path]['status'] = "Deleted"
-
-    #     self.write_csv_file(file_status_dict)
-    #     showinfo(self.parent_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
-
     def delete_files_in_csv(self, skip_confirmation=False):
         """Deletes files marked for deletion, offering options skipping for files in favorites."""
 
@@ -184,33 +161,6 @@ class DeletionManager:
         else:
             showinfo(self.parent_window, "No Updates",
                     "All files marked as 'Deleted' are no longer present in the file system.")
-
-    # def check_deleted(self):
-    #     """
-    #     Check if files marked as 'Deleted' are still present in the file system. 
-    #     If found, reset their status to 'ToDelete'.
-    #     """
-    #     file_status_dict = self.read_csv_file()
-    #     updated = False
-
-    #     for file_path, metadata in file_status_dict.items():
-    #         if metadata['status'] == 'Deleted' and os.path.exists(file_path):
-    #             # File marked as deleted but still exists, reset status
-    #             file_status_dict[file_path]['status'] = 'ToDelete'
-    #             updated = True
-    #             print(f"File {file_path} exists. Status reset to 'ToDelete'.")
-    #         elif metadata['status'] == 'ToDelete' and not os.path.exists(file_path):
-    #             file_status_dict[file_path]['status'] = 'Deleted'
-    #             updated = True
-    #             print(f"File {file_path} doesn't exist. Status set to 'Deleted'.")
-
-    #     if updated:
-    #         self.write_csv_file(file_status_dict)
-    #         print("CSV updated with files reset to 'ToDelete'.")
-    #         self.logger.update_logs("[DELETED FILES UPDATED]", f"Checked The Deleted Files Still Available.")
-    #     else:
-    #         print("No updates required; all deleted files are missing.")
-    #         showinfo(self.parent_window, "No Updates", "Deletions Referesh \nAll files marked as 'Deleted' are no longer present in the file system.")
 
     def handle_favorites_move(self, file_path, file_status_dict):
         """Handles favorite files by either moving them to a folder or removing them from favorites."""
@@ -276,7 +226,6 @@ class DeletionManager:
         Removes a file from favorites and deletes it.
         For Now it will not Remove from favorites, but it will delete the file.
         """
-        # self.fav_manager.delete_from_favorites(file_path) # skipping the deletion from fav files
         if self.delete_file(file_path, file_status_dict, handle_favs=False):
             file_status_dict[file_path]["status"] = "Deleted"
         self.logger.update_logs(f"[DELETED] from Favorites", file_path)
@@ -284,7 +233,6 @@ class DeletionManager:
     def delete_file(self, file_path, file_status_dict, handle_favs=True):
         """Deletes a file by moving it to the recycle bin, checking if it's in favorites first."""
         try:
-            # Use handle_favorites to decide how to handle favorites
             if handle_favs:
                 if not self.handle_favorites(file_path, file_status_dict):
                     print(f"Skipping deletion of {file_path} because it's a favorite and not removed.")

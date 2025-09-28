@@ -198,21 +198,21 @@ class CategoryWindow(tk.Toplevel):
         self.file_controls = tk.Frame(self.right_frame, bg=Colors.PLAIN_BLACK)
         self.file_controls.grid(row=2, column=0, pady=5, sticky='ew')
         
-        def create_button(parent, text, command, bg_color, hover_color):
+        def create_button(parent, text, command, fg_color, hover_color):
             btn = tk.Button(
                 parent,
                 text=text,
                 command=command,
-                bg=bg_color,
-                fg=Colors.PLAIN_WHITE,
+                bg=Colors.PLAIN_BLACK,
+                fg=fg_color,
                 font=("Segoe UI", 10, "bold"),
                 relief=tk.FLAT,
                 padx=10,
                 pady=0,
                 cursor="hand2"
             )
-            btn.bind("<Enter>", lambda e: btn.configure(background=hover_color))
-            btn.bind("<Leave>", lambda e: btn.configure(background=bg_color))
+            btn.bind("<Enter>", lambda e: btn.configure(foreground=hover_color))
+            btn.bind("<Leave>", lambda e: btn.configure(foreground=fg_color))
             return btn
     
         self.add_category_btn = create_button(

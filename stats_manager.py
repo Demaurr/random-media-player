@@ -17,7 +17,7 @@ class VideoStatsManager:
     def __init__(self, stats_csv=VIDEO_STATS_CSV):
         self.stats_csv = stats_csv
         self.stats = self._load_existing_stats()
-        self.processor = VideoProcessor()
+        self.processor = VideoProcessor(max_workers=8)
 
     def _load_existing_stats(self):
         stats = {}

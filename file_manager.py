@@ -168,6 +168,11 @@ class FileManager:
                 args=(folders_to_reload,),
                 daemon=True
             ).start()
+            
+            threading.Thread(
+                target=self.video_stats_manager.create_stats, 
+                daemon=True
+            ).start()
 
 
     def log_transfer(self, src, dest, action="MOVED"):
