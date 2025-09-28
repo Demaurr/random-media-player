@@ -35,9 +35,11 @@ from player_constants import (
     WATCHED_HISTORY_LOG_PATH,
     DEMO_WATCHED_HISTORY,
     VIDEO_SNIPPETS_FOLDER,
+    FILE_TRANSFER_LOG,
 )
 from settings_manager import SettingsWindow
 from static_methods import (
+    convert_png_to_jpg,
     create_csv_file, 
     ensure_folder_exists, 
     gather_all_media,
@@ -66,6 +68,7 @@ from notes_window import NotesManagerGUI
 from snippets_manager import SnippetsManager
 from description_manager import DescriptionManager
 from backup_manager import BackupManager
+from task_manager import TaskManager
 # from pprint import pprint
 # import cProfile
 
@@ -98,9 +101,13 @@ class FileExplorerApp:
 
         create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
         create_csv_file(["Folder Path","Csv Path", "Date"], FOLDER_LOGS)
+        create_csv_file(["Source Path","Destination Path","Status","Date"], FILE_TRANSFER_LOG)
         self.root.after(0, self._show_loading_message)
+        self.task_manager = TaskManager(self.root)
+        self.task_manager.add_task(self._init_managers_background, threaded=True)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
-        threading.Thread(target=self._init_managers_background, daemon=True).start()
+        # threading.Thread(target=self._init_managers_background, daemon=True).start()
 
     def _show_loading_message(self):
         self.loading_label = tk.Label(self.root, text="Loading managers...", bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 18))
@@ -164,6 +171,13 @@ class FileExplorerApp:
         x_coordinate = (screen_width - width) // 2
         y_coordinate = (screen_height - height) // 2
         window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
+
+    def on_close(self):
+        """Handle window close event, prevent closing if tasks are running."""
+        if self.task_manager.is_busy():
+            showinfo(self.root, "Busy", "Background tasks are still running. Please wait for them to finish before closing.")
+            return
+        self.root.destroy()
 
     def _keybinding(self):
         self.entry.bind('<Return>', self.on_enter_pressed)
@@ -293,7 +307,14 @@ class FileExplorerApp:
         showinfo(self.root, "File(s) Added To Favorites", f"{len(selected_items)} file(s) Added-To Favorites successfully.")
 
     def create_context_menu(self):
-        self.context_menu = tk.Menu(self.root, tearoff=0, font=("Segoe UI", 9), foreground=Colors.PLAIN_WHITE, background=Colors.BLACK_HOVER)
+        self.context_menu = tk.Menu(
+            self.root,
+            tearoff=0,
+            font=("Segoe UI", 9),
+            foreground=Colors.PLAIN_WHITE,
+            background=Colors.BLACK_HOVER
+        )
+
         self.context_menu.add_command(label="Refresh Stats      ", command=self.refresh_stats_for_selected)
         self.context_menu.add_command(label="Add to Category    ", command=self.add_to_category)
         self.context_menu.add_command(label="Add Note           ", command=self.open_notes_manager)
@@ -303,6 +324,44 @@ class FileExplorerApp:
         self.context_menu.add_command(label="Show Screenshots   ", command=self.show_screenshots_for_selected)
         self.context_menu.add_command(label="Remove from All Media", command=self.remove_selected_from_all_media)
         self.context_menu.add_command(label="Properties         ", command=self.show_properties)
+
+        convert_menu = tk.Menu(
+            self.context_menu,
+            tearoff=0,
+            font=("Segoe UI", 9),
+            foreground=Colors.PLAIN_WHITE,
+            background=Colors.BLACK_HOVER
+        )
+
+        convert_menu.add_command(label="Convert to JPG", command=self.convert_selected_to_jpg)
+
+        self.context_menu.add_cascade(label="Convert", menu=convert_menu)
+
+    def convert_selected_to_jpg(self):
+        """Convert selected PNG files to JPG using statics.convert_png_to_jpg."""
+        try:
+
+            selected_items = self.file_table.selection()
+
+            if not selected_items:
+                showinfo(self.root, "Convert to JPG", "No files selected.")
+                return
+            
+            selected_files = [self.file_table.item(item, "values")[2] for item in selected_items]
+
+            res = convert_png_to_jpg(selected_files, delete_original=False)
+
+            msg = (
+                f"{len(res['converted'])} newly converted\n"
+                f"{len(res['skipped'])} already existed\n"
+                f"{len(res['failed'])} failed\n"
+                f"Saved in '{res['output_dir']}'"
+            )
+
+            showinfo(self.root, "Conversion Complete", msg)
+
+        except Exception as e:
+            showerror(self.root, "Conversion Failed", f"Error while converting:\n{e}")
 
     def show_properties(self, event=None):
         selected_items = self.file_table.selection()
@@ -358,6 +417,7 @@ class FileExplorerApp:
                 self.root.after(0, lambda: showinfo(self.root, "Success", f"Removed {len(file_paths)} file(s) from All Media."))
             else:
                 self.root.after(0, lambda: showerror(self.root, "Error", "Failed to remove selected files."))
+            self.root.after(0, loading_win.destroy())
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -447,7 +507,7 @@ class FileExplorerApp:
         if not shown_any:
             showinfo(self.root, "No Screenshots", "No screenshots found for any of the selected files.")
 
-    def get_video_snippets_for_selected(self, files=None, all_files=True, check_deleted=False, on_complete=None):
+    def get_video_snippets_for_selected(self, files=None, all_files=True, check_deleted=False, on_complete=None, msg="Fetching video snippets..."):
         """Fetch video snippets for selected files with a loading screen, then run on_complete(snippets)."""
         if not files:
             selected_items = self.file_table.selection()
@@ -457,7 +517,7 @@ class FileExplorerApp:
         else:
             selected_items = files if all_files else files[:1]
 
-        loading = self.show_loading_screen("Fetching video snippets...")
+        loading = self.show_loading_screen(msg)
 
         def worker():
             all_snippets = []
@@ -611,7 +671,7 @@ class FileExplorerApp:
             self.deletion_manager.set_parent_window(self.root)
             self.fav_manager = FavoritesManager()
             self.logger = LogManager(LOG_PATH)
-        SettingsWindow(self.root, backup_manager=self.backup_manager, on_save_callback=reload_constants)
+        SettingsWindow(self.root, backup_manager=self.backup_manager, task_manager=self.task_manager, on_save_callback=reload_constants)
 
     @staticmethod
     def convert_bytes(bytes_size):
@@ -994,7 +1054,7 @@ class FileExplorerApp:
         def on_motion(event):
             self._generate_table_tooltip(event=event, display_index=2 if self.entry.get() != "show categories" else 1)
 
-        self.file_table.bind("<Motion>", on_motion)
+        self.file_table.bind("<Motion>", on_motion, add="+")
         self.file_table.bind("<Leave>", lambda e: self._tooltip.hide_tooltip())
 
     def _generate_table_tooltip(self, event=None, display_index=2, column="#2"):
@@ -1365,16 +1425,60 @@ class FileExplorerApp:
             temp_files.append((os.path.basename(file),file))
         return temp_files
 
-    def insert_to_table(self, files: list|tuple):
+    # def insert_to_table(self, files: list|tuple):
+    #     """
+    #     Inserts files into the file table with alternate row colors.
+    #     Args:
+    #         files (list|tuple): List of tuples containing file name and file path.
+    #     """
+    #     self.file_table.delete(*self.file_table.get_children())
+    #     for idx, (file, file_path) in enumerate(files):
+    #         tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)
+    #         self.file_table.insert("", tk.END, values=(idx, file, file_path), tags=tags)
+
+    def insert_to_table(self, files: list | tuple):
         """
         Inserts files into the file table with alternate row colors.
-        Args:
-            files (list|tuple): List of tuples containing file name and file path.
+        Adds lazy loading if more than 1000 items.
         """
+
         self.file_table.delete(*self.file_table.get_children())
-        for idx, (file, file_path) in enumerate(files):
-            tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)
-            self.file_table.insert("", tk.END, values=(idx, file, file_path), tags=tags)
+        self._all_files = files
+        self._loaded_count = 0
+        self._chunk_size = 500
+
+        def load_next_chunk():
+            """Insert next chunk of rows"""
+            start = self._loaded_count
+            end = min(start + self._chunk_size, len(self._all_files))
+
+            for idx in range(start, end):
+                file, file_path = self._all_files[idx]
+                tags = ("evenrow",) if idx % 2 == 0 else ("oddrow",)
+                self.file_table.insert("", tk.END, values=(idx, file, file_path), tags=tags)
+
+            self._loaded_count = end
+
+        def check_scroll(event=None):
+            """Check if near bottom, load next chunk"""
+            if not self.file_table.yview():
+                return
+            top, bottom = self.file_table.yview()
+            # print(len(self._all_files))
+            if bottom > 0.9 and self._loaded_count < len(self._all_files):
+                load_next_chunk()
+
+        if len(files) <= 500:
+            load_next_chunk()
+        else:
+            load_next_chunk()
+
+            self.file_table.bind("<Configure>", check_scroll)
+            self.file_table.bind("<Motion>", check_scroll, add="+")
+            self.file_table.bind("<MouseWheel>", check_scroll)
+            # self.file_table.bind("<Button-4>", check_scroll)
+            # self.file_table.bind("<Button-5>", check_scroll)
+
 
     def insert_all_media_to_table(self, files: list|tuple):
         """
@@ -1728,12 +1832,13 @@ class FileExplorerApp:
                     self.files = [self.file_table.item(i, "values")[2] for i in selected_items]
                 else:
                     self.files = sorted(self.get_files_from_table())
+                    # self.files = self._all_files
 
                 if not os.path.exists(file_path) and not SHOW_SNIPPETS:
                         showerror(self.root, "File(s) Not Found", f"The file '{file_path}' does not exist.")
                         return False
                 
-                if SHOW_SNIPPETS and not os.path.exists(file_path):
+                if SHOW_SNIPPETS and (len(self.file_table.selection()) != 1 or (not os.path.exists(file_path))):
                     def after_snippets(snippets):
                         self.files = snippets
                         file_path = self.files[0] if self.files else None
@@ -1799,7 +1904,6 @@ class FileExplorerApp:
         for file in file_paths:
             snippets = self.snippets_manager.get_snippets_by_original_file(file, related_paths=True)
             files += [s["Output File"] for s in snippets if s.get("Output File")]
-        print(len(files))
         return list(set(files))
 
     def get_verticals(self):
@@ -1857,6 +1961,7 @@ class FileExplorerApp:
     def show_deletes(self, deleted=False):
         self.clean_memory(["categories"])
         self.reset_search_option()
+        self.deletion_manager.reload_deletion_files()
         self.video_files = self.get_files_marked_for_deletion() if not deleted else self.get_files_deleted()
         self.total_files = len(self.video_files)
         self.update_stats()
@@ -1984,12 +2089,15 @@ class FileExplorerApp:
         return seconds
         
 
-    def get_files_from_table(self):
+    def get_files_from_table(self, all_files=True):
         """
         Get file paths from the file_table.
         Returns a list of file paths.
         """
         file_paths = []
+        if all_files and hasattr(self, "_all_files"):
+            return [file[1] for file in self._all_files]
+        
         for item in self.file_table.get_children():
             file_path = self.file_table.item(item, "values")[2] if self.entry.get() != "show categories" else self.file_table.item(item, "values")[1]
             file_paths.append(file_path)
