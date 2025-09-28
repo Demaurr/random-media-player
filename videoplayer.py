@@ -25,7 +25,7 @@ from player_constants import (
     VIDEO_SNIPPETS_FOLDER, 
     Colors
     )
-from static_methods import build_transfer_graph, get_all_related_paths, normalise_path
+from static_methods import _convert_single, build_transfer_graph, get_all_related_paths, normalise_path
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -72,9 +72,12 @@ class MediaPlayerApp(tk.Toplevel):
         self.segment_speed = 1.0
         self.segment_forward = 0
         self.segment_prev = 0
+        self.active_trims = 0
         self.autoplay = True
         self.trim_start = None
-        self.loop_video = False
+        # self.loop_video = False
+        self.loop_var = tk.BooleanVar(value=False)
+        self.fast_trim = tk.BooleanVar(value=True)
         self._play_start_time = None
         self._total_play_time = 0
         # self.input_path = None
@@ -100,6 +103,14 @@ class MediaPlayerApp(tk.Toplevel):
             self.watch_history_csv = watch_history_csv
     
     def _on_close(self, event=None):
+        if self.active_trims > 0:
+            showwarning(
+                self,
+                "Trimming in Progress",
+                f"{self.active_trims} trim job(s) are still running.\n"
+                "Please wait until they finish before closing."
+            )
+            return
         self.session_end = timeit.default_timer()
         self.stop()
         # tk.Tk.quit(self)
@@ -144,6 +155,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.subtitles_visible = True
         
         self._create_widgets()
+        self._create_context_menu()
         if self.random_select:
             self.select_random_video()
         elif not self.random_select:
@@ -164,9 +176,9 @@ class MediaPlayerApp(tk.Toplevel):
             self.video_index += 1
 
     def _on_video_end(self, event):
-        print(f"Video ended. Loop: {self.loop_video}, Autoplay: {self.autoplay}")
+        print(f"Video ended. Loop: {self.loop_var.get()}, Autoplay: {self.autoplay}")
         # Schedule play_next or loop on the main thread
-        if self.loop_video:
+        if self.loop_var.get():
             print("Looping video...")
             self.after(50, self._loop_video)
         elif self.autoplay:
@@ -182,10 +194,12 @@ class MediaPlayerApp(tk.Toplevel):
                 self.after(0, self.play_video)
             else:
                 print("Current file not available for looping")
-                self.loop_video = False
+                # self.loop_video = False
+                self.loop_var.set(False)
         except Exception as e:
             print(f"Error during looping: {e}")
-            self.loop_video = False
+            # self.loop_video = False
+            self.loop_var.set(False)
 
 
     def _create_widgets(self):
@@ -327,7 +341,7 @@ class MediaPlayerApp(tk.Toplevel):
             elif "Auto" in txt:
                 e.widget.config(fg=Colors.SUCCESS_GREEN, bg=Colors.PLAIN_BLACK) if self.autoplay else e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
             elif "⟲" in txt:
-                e.widget.config(fg=Colors.SUCCESS_GREEN, bg=Colors.PLAIN_BLACK) if self.loop_video else e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
+                e.widget.config(fg=Colors.SUCCESS_GREEN, bg=Colors.PLAIN_BLACK) if self.loop_var.get() else e.widget.config(fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK)
             elif "☰" in txt:
                 e.widget.config(fg=Colors.PLAIN_PURPLE, bg=Colors.PLAIN_BLACK)
             else:
@@ -421,6 +435,66 @@ class MediaPlayerApp(tk.Toplevel):
             self.toggle_controls_visibility(True)
             self.minimized = False
 
+    def _create_context_menu(self):
+        """Create right-click context menu with submenus for audio and subtitle settings."""
+        self.context_menu = tk.Menu(self, tearoff=0, bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE)
+
+        audio_channel_menu = tk.Menu(self.context_menu, tearoff=0, bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE)
+        audio_channel_menu.add_command(label="Stereo", command=lambda: self.set_audio_channel("stereo"))
+        audio_channel_menu.add_command(label="Mono", command=lambda: self.set_audio_channel("mono"))
+        audio_channel_menu.add_command(label="Left Channel", command=lambda: self.set_audio_channel("left"))
+        audio_channel_menu.add_command(label="Right Channel", command=lambda: self.set_audio_channel("right"))
+
+        audio_track_menu = tk.Menu(self.context_menu, tearoff=0, bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE)
+        audio_track_menu.add_command(label="Next Audio Track", command=self.next_audio_track)
+        audio_track_menu.add_command(label="Toggle Audio", command=self.toggle_audio)
+
+        subs_menu = tk.Menu(self.context_menu, tearoff=0, bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE)
+        subs_menu.add_command(label="Increase Delay", command=self.increase_sub_delay)
+        subs_menu.add_command(label="Decrease Delay", command=self.decrease_sub_delay)
+        subs_menu.add_separator()
+        subs_menu.add_command(label="Toggle Subtitles", command=self.toggle_subtitles)
+        subs_menu.add_command(label="Next Subtitle Track", command=self.next_subtitle_track)
+        subs_menu.add_command(label="Add Subtitle File...", command=self.add_subtitle)
+
+        self.context_menu.add_cascade(label="Audio Stereo", menu=audio_channel_menu)
+        self.context_menu.add_cascade(label="Audio Tracks", menu=audio_track_menu)
+        self.context_menu.add_cascade(label="Subtitles", menu=subs_menu)
+        self.context_menu.add_checkbutton(
+            label="Loop",
+            variable=self.loop_var,
+            command=self.toggle_loop
+        )
+        self.context_menu.add_checkbutton(
+            label="Fast Trim (No Re-encode)",
+            variable=self.fast_trim,
+            onvalue=True,
+            offvalue=False
+        )
+
+        self.bind("<Button-3>", self._show_context_menu)
+        self.bind("<Button-2>", self._show_context_menu)
+
+
+    def _show_context_menu(self, event):
+        """Show the context menu at mouse pointer position."""
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+
+    def set_audio_channel(self, mode):
+        mapping = {
+            "stereo": 0,
+            "mono": 5,
+            "left": 2,
+            "right": 3,
+        }
+        if mode in mapping:
+            self.media_player.audio_set_channel(mapping[mode])
+            print(f"Audio channel set to {mode}")
+            self.show_marquee(f"Audio: {mode.capitalize()}")
+
 
     def shorten_window(self):
         screen_width = self.winfo_screenwidth()
@@ -453,15 +527,17 @@ class MediaPlayerApp(tk.Toplevel):
             self.overrideredirect(False)
     
     def toggle_loop(self, event=None):
-        self.loop_video = not self.loop_video
-        if self.loop_video:
+        if event is not None:  
+            self.loop_var.set(not self.loop_var.get())
+
+        if self.loop_var.get():
             self.loop_button.config(fg=Colors.SUCCESS_GREEN)
             print("Loop enabled")
         else:
             self.loop_button.config(fg=Colors.PLAIN_WHITE)
             print("Loop disabled")
-        self.show_marquee("Looping is ON" if self.loop_video else "Looping is OFF")
-        if self.loop_video and self.current_file:
+        self.show_marquee("Looping is ON" if self.loop_var.get() else "Looping is OFF")
+        if self.loop_var.get() and self.current_file:
             self.last_looped_file = self.current_file
 
     def _keybinding(self):
@@ -521,6 +597,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.bind('<Shift-KeyPress-n>', self.show_notes)
         self.bind('<Shift-KeyPress-N>', self.show_notes)
         self.bind('<Escape>', self._on_close)
+        self.bind("<KeyPress-q>", self.toggle_fast_trim)
+        self.bind("<KeyPress-Q>", self.toggle_fast_trim)
 
     def show_notes(self, event=None):
         if not self.current_file:
@@ -550,7 +628,7 @@ class MediaPlayerApp(tk.Toplevel):
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
         self.reset_trim()
-        if self.loop_video:
+        if self.loop_var.get():
             print(f"Looping video: {title}")
 
         self.title(title)
@@ -746,6 +824,7 @@ class MediaPlayerApp(tk.Toplevel):
         # length = self.get_duration_str
         screenshot_path = f"{SCREENSHOTS_FOLDER}\\screenshot_{filename}_{self.media_player.get_time()}.png"
         self.media_player.video_take_snapshot(0, screenshot_path, 0, 0)
+        # _convert_single(screenshot_path, delete_original=True)
 
     def volume_increase(self, event):
         """Increases the volume."""
@@ -781,7 +860,7 @@ class MediaPlayerApp(tk.Toplevel):
     def delete_video(self, event=None):
         """Marks the currently playing video for deletion."""
         if self.current_file:
-            self.deleter.mark_for_deletion(self.current_file)
+            self.deleter.mark_for_deletion(self.current_file, commit=True)
             self.show_marquee(f"Marked {self.current_file} for deletion")
             # Added Logging in deletion manager so No need to log here
             # self.logger.update_logs(f"[MARKED FOR DELETION]", self.current_file)
@@ -932,7 +1011,7 @@ class MediaPlayerApp(tk.Toplevel):
         """Starts loading and playing the video in a background thread."""
         def load_and_play():
             try:
-                if self.loop_video and hasattr(self, 'current_media'):
+                if self.loop_var.get() and hasattr(self, 'current_media'):
                     print("Looping: Seeking to start and replaying cached media.")
                     try:
                         self.media_player.set_time(0)
@@ -1040,6 +1119,17 @@ class MediaPlayerApp(tk.Toplevel):
             self.media_player.audio_toggle_mute()
             self.show_marquee("🔇Muted" if not is_muted else "🔊 Unmuted")
             self.volume_bar.toggle_mute()
+
+    def toggle_fast_trim(self, event=None):
+        """Toggle fast trim mode on/off."""
+        self.fast_trim.set(not self.fast_trim.get())
+        if self.fast_trim.get():
+            state = "enabled (copy mode, faster but less precise)"
+        else:
+            state = "disabled (re-encode mode, slower but accurate)"
+
+        self.show_marquee(f"Fast Trim {state}")
+        # self.logger.update_logs(f"[FAST TRIM] Now {state}")
 
     def rewind(self, event=None):
         """
@@ -1269,6 +1359,10 @@ class MediaPlayerApp(tk.Toplevel):
 
     def mark_start(self, event=None):
         try:
+            if not os.path.exists(VIDEO_SNIPPETS_FOLDER):
+                showerror(self, "Snippets Folder Doesn't Exist", "The path for storing snippets doesn't exists.")
+                self.logger.error_logs(f"Error {VIDEO_SNIPPETS_FOLDER} doesn't exists.")
+                return
             ms = self.media_player.get_time()
             self.trim_start = ms
             self.show_marquee(f"Start marked at {self.get_time_str(ms)}")
@@ -1294,7 +1388,7 @@ class MediaPlayerApp(tk.Toplevel):
             start_s = start_ms / 1000.0
             end_s = end_ms / 1000.0
 
-            fast_mode = True  # or ask user
+            fast_mode = self.fast_trim.get()
 
             threading.Thread(
                 target=self._trim_worker,
@@ -1318,13 +1412,13 @@ class MediaPlayerApp(tk.Toplevel):
         self.trim_start = None
 
     def _trim_worker(self, start_ms, end_ms, fast_mode=True):
+        self.active_trims += 1
         try:
             start_s = start_ms / 1000.0
             duration_s = (end_ms - start_ms) / 1000.0
             base_name = os.path.splitext(os.path.basename(self.current_file))[0]
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             out_file = f"{base_name[:100]}_{self.seconds_to_hhmmss(start_s)}_to_{self.seconds_to_hhmmss(start_s+duration_s)}.mp4"
-            # out_file = f"{base_name}_{start_s}_to_{start_s+duration_s}.mp4"
             out_path = os.path.join(VIDEO_SNIPPETS_FOLDER, out_file)
 
             if fast_mode:
@@ -1332,19 +1426,28 @@ class MediaPlayerApp(tk.Toplevel):
                     'ffmpeg', '-y', '-ss', str(start_s), '-t', str(duration_s),
                     '-i', self.current_file, '-c', 'copy', out_path
                 ]
-            else:
+            else: 
                 cmd = [
                     'ffmpeg', '-y', '-ss', str(start_s), '-t', str(duration_s),
-                    '-i', self.current_file, '-c:v', 'libx264', '-c:a', 'aac', out_path
+                    '-i', self.current_file,
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+                    '-c:a', 'aac',
+                    out_path
                 ]
 
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
             if self.winfo_exists():
-                self.after(0, lambda: showinfo(self, "Trim Complete", 
-                                           f"Saved clipped video from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}\nPath: {out_path}"))
+                self.after(0, lambda: showinfo(
+                    self, "Trim Complete",
+                    f"Saved clipped video from {self.seconds_to_hhmmss(start_s)} "
+                    f"to {self.seconds_to_hhmmss(start_s+duration_s)}\nPath: {out_path}"
+                ))
             self.show_marquee(f"Trimmed video saved: {out_path}")
+
             self.logger.update_logs(
-                f"[TRIMMED VIDEO] {self.current_file} from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}",
+                f"[TRIMMED VIDEO] {self.current_file} "
+                f"from {self.seconds_to_hhmmss(start_s)} to {self.seconds_to_hhmmss(start_s+duration_s)}",
                 out_path
             )
             self.category_manager.add_to_category("Trimmed Videos", out_path)
@@ -1360,12 +1463,15 @@ class MediaPlayerApp(tk.Toplevel):
                 video_format=os.path.splitext(out_path)[1][1:],
                 notes=""
             )
+
         except FileNotFoundError:
             self.logger.error_logs("ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
             showerror(self, "Trim Error", "ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
         except Exception as e:
             self.logger.error_logs(f"Unexpected error during trimming: {e}")
             showerror(self, "Trim Error", f"Unexpected error:\n{e}")
+        finally:
+            self.active_trims -= 1
 
     def increase_sub_delay(self, event=None):
         self.subtitle_delay += 50_000  # 0.05 seconds
