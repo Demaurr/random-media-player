@@ -10,6 +10,8 @@ Supported video formats include: **avi, mp4, mkv, m4v, mov, webm, wmv, flv**.
 
 For full details, advanced features, keyboard shortcuts, troubleshooting, and contributing guidelines, please see the [Documentation](Documentations/documentation.md).
 
+Download the zip from the tags for stable version.
+
 ---
 
 ## Installation
@@ -33,6 +35,8 @@ For full details, advanced features, keyboard shortcuts, troubleshooting, and co
    This application uses `python-vlc`, which requires the VLC Media Player and its libraries to be installed on your system.  
    **Download and install VLC from:** [https://www.videolan.org/vlc/](https://www.videolan.org/vlc/)  
    > Without VLC installed, video playback will not work.
+
+5. **FFmpeg Requirement**: Some features (video trimming, vertical/horizontal detection) require [FFmpeg](https://ffmpeg.org/download.html) to be installed and available in your system PATH.
 ---
 ## Screenshots
 ![Media Player](Screenshots/Current_Main_Screen.png)
@@ -83,9 +87,13 @@ These dashboards help you understand your viewing habits, spot trends, and manag
 - **Playback Controls:** Play, pause, stop, fast-forward, rewind, and adjust volume.
 - **Watch History:** Automatically logs watched videos and durations.
 - **Favorites:** Save and quickly access your favorite media files.
+- **Category Management:** Organize files into custom categories.
+- **Notes & Descriptions:** Add notes and descriptions to media files.
+- **Video Trimming:** Clip favorite segments from videos (requires FFmpeg).
 - **Image Viewing:** View screenshots taken during playback.
 - **File Management:** Move or mark files for deletion directly from the app.
 - **Session Statistics:** View and export watch statistics for your sessions.
+- **Dashboard:** Visualize media consumption statistics.
 
 ---
 
@@ -130,6 +138,21 @@ This also ensures the current directory is set correctly for relative paths:
 
 3. Double-click the batch file to launch the app.
 4. This way you can use this program as an executable.
+
+## Project Structure
+
+- **Documentations/**: Contains detailed documentation and usage guides.
+- **Screenshots/**: Example screenshots for UI and dashboard features.
+- **gui_main.py**: Launches the main graphical interface.
+- **main.py**: Command-line mode (legacy).
+- **videoplayer.py**: Handles video playback and controls.
+- **file_loader.py**: Loads and indexes media files.
+- **category_manager.py**: Organizes files into categories.
+- **notes_manager.py**: Manages notes and descriptions for media.
+- **snippets_manager.py**: Supports video trimming and snippet management.
+- **image_player.py**: Displays screenshots and images.
+- **player_constants.py**: Stores configuration settings and constants.
+- **requirements.txt**: Lists required Python packages.
 
 ## More Information
 
