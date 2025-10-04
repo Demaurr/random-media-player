@@ -43,7 +43,7 @@ class MediaPathsCollector:
 
                 self.file_data[path].update({
                     'size': size or 0,
-                    'duration': round(duration_sec, 3) if duration_sec else None,
+                    'duration': round(duration_sec, 1) if duration_sec else None,
                     'from_watch_history': True
                 })
 
@@ -68,7 +68,7 @@ class MediaPathsCollector:
                 except ValueError:
                     size = 0
                 try:
-                    duration = round(float(row.get('Duration (s)') or 0), 3)
+                    duration = round(float(row.get('Duration (s)') or 0), 1)
                 except ValueError:
                     duration = 0
 
@@ -152,7 +152,6 @@ class MediaPathsCollector:
             for path in all_paths:
                 related = get_all_related_paths(path, graph)
 
-                # Collect best size/duration across related paths
                 best_size = None
                 best_duration = None
 
@@ -287,11 +286,11 @@ def test_fingerprinting():
         print(f"  Partial hash: {record['partial_hash']}")
         print(f"  Duration   : {record['duration']}")
         print(f"  Size       : {record['size']}")
-        print(f"  Paths      : {record['paths']}")
+        print(f"  Name      : {record['name']}")
         print()
 
 if __name__ == "__main__":
     collector = MediaPathsCollector()
-    collector.collect_all(all=False, video_stats=True)
+    collector.collect_all(all=True)
     collector.create_fingerprints_parallel(workers=8)
     # test_fingerprinting()

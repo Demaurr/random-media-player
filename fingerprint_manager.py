@@ -1,8 +1,10 @@
 import csv
+from datetime import datetime
 import os
 import hashlib
 import tempfile
 from typing import Dict, List, Optional
+import uuid
 from player_constants import FINGERPRINTS_CSV, FINGERPRINTS_LOG_PATH, FINGERPRINTS_PATHS_CSV
 from logs_writer import LogManager
 from static_methods import _atomic_save_csv
@@ -15,10 +17,12 @@ class MediaFingerprintManager:
         self.logger = LogManager(FINGERPRINTS_LOG_PATH)
 
         self.fingerprints: Dict[str, Dict] = {}  
-        self.paths: Dict[str, List[str]] = {}
+        self.paths: Dict[str, List[Dict]] = {}
 
+        # self.refactor_paths_csv()
         self._load_from_csv()
         self._load_paths()
+        # self.refactor_fingerprints_round_duration()
 
     def _load_from_csv(self) -> None:
         """Load existing fingerprints into memory."""
@@ -40,7 +44,11 @@ class MediaFingerprintManager:
             with open(self.paths_file, mode="r", newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    self.paths.setdefault(row["index_hash"], []).append(row["file_path"])
+                    self.paths.setdefault(row["index_hash"], []).append({
+                        "file_path": row["file_path"],
+                        "unique_id": row.get("unique_id", str(uuid.uuid4())),
+                        "added_at": row.get("added_at", datetime.now().isoformat())
+                    })
         except Exception as e:
             self.logger.error_logs(f"Error loading paths CSV {self.paths_file}: {e}")
             self.paths = {}
@@ -56,17 +64,33 @@ class MediaFingerprintManager:
         )
 
     def _save_paths(self) -> None:
-        """Save all paths back to CSV (atomic)."""
+        """Save all paths back to CSV (atomic) with unique_id and timestamp."""
         rows = []
-        for h, paths in self.paths.items():
-            for p in paths:
-                rows.append({"index_hash": h, "file_path": p})
+        for h, paths_list in self.paths.items():
+            for path_entry in paths_list:
+                if isinstance(path_entry, dict):
+                    # Already has unique_id and timestamp
+                    rows.append({
+                        "index_hash": h,
+                        "file_path": path_entry["file_path"],
+                        "unique_id": path_entry["unique_id"],
+                        "added_at": path_entry["added_at"]
+                    })
+                else:
+                    entry = {
+                        "file_path": path_entry,
+                        "unique_id": str(uuid.uuid4()),
+                        "added_at": datetime.now().isoformat()
+                    }
+                    rows.append({"index_hash": h, **entry})
+                    paths_list[paths_list.index(path_entry)] = entry
 
         _atomic_save_csv(
             self.paths_file,
-            ["index_hash", "file_path"],
+            ["index_hash", "file_path", "unique_id", "added_at"],
             rows,
         )
+
 
     def _generate_partial_hash(self, file_path: str, block_size: int = 65536) -> str:
         """
@@ -116,8 +140,12 @@ class MediaFingerprintManager:
             index_hash = self._generate_index_hash(duration, size_bytes, partial_hash, force_partial)
 
         if index_hash in self.fingerprints:
-            if file_path not in self.paths.get(index_hash, []):
-                self.paths.setdefault(index_hash, []).append(file_path)
+            if not any(p["file_path"] == file_path for p in self.paths.get(index_hash, [])):
+                self.paths.setdefault(index_hash, []).append({
+                    "file_path": file_path,
+                    "unique_id": str(uuid.uuid4()),
+                    "added_at": datetime.now().isoformat()
+                })
                 self.logger.update_logs("[PATH ADDED]", f"{file_path} -> {index_hash}")
                 self.new_files_counter += 1
             else:
@@ -164,7 +192,9 @@ class MediaFingerprintManager:
         return [fp for fp in self.fingerprints.values() if fp["name"] == name]
     
     def get_paths_by_hash(self, index_hash: str) -> List[str]:
-        """Get all file paths for a given fingerprint."""
+        return [p["file_path"] for p in self.paths.get(index_hash, [])]
+    
+    def get_paths_info_by_hash(self, index_hash: str) -> List[Dict]:
         return self.paths.get(index_hash, [])
 
     def get_hash_by_path(self, file_path: str) -> Optional[str]:
@@ -242,7 +272,10 @@ class MediaFingerprintManager:
             Dict[str, List[str]]: A dictionary where the key is the index_hash,
             and the value is a list of file paths that share the same fingerprint.
         """
-        duplicates = {h: paths for h, paths in self.paths.items() if len(paths) > 1}
+        duplicates = {
+            h: [p["file_path"] for p in paths]
+            for h, paths in self.paths.items() if len(paths) > 1
+        }
         return duplicates
     
     def get_index_hash_by_path(self, file_path: str) -> Optional[str]:
@@ -251,9 +284,21 @@ class MediaFingerprintManager:
         Returns None if not found.
         """
         for index_hash, paths in self.paths.items():
-            if file_path in paths:
+            if any(p["file_path"] == file_path for p in paths):
                 return index_hash
         return None
+    
+    def are_files_same(self, path1: str, path2: str) -> bool:
+        """
+        Check if two file paths map to the same fingerprint (same index_hash).
+        Returns True if they have the same index_hash, False otherwise.
+        """
+        hash1 = self.get_index_hash_by_path(path1)
+        hash2 = self.get_index_hash_by_path(path2)
+
+        if hash1 and hash2:
+            return hash1 == hash2
+        return False
     
     def get_index_hashes_by_path(self, file_paths: List[str]) -> Dict[str, str]:
         result = {}
@@ -268,8 +313,61 @@ class MediaFingerprintManager:
         Given an index_hash, return all file paths that share the same fingerprint.
         If there are no duplicates, returns an empty list or a single-item list.
         """
-        return self.paths.get(index_hash, [])
+        return [p["file_path"] for p in self.paths.get(index_hash, [])]
     
+    def get_unique_id_by_path(self, file_path: str) -> str | None:
+        """
+        Return the unique_id for a given file path.
+        Returns None if the path is not found.
+        """
+        for entries in self.paths.values():
+            for p in entries:
+                if p["file_path"] == file_path:
+                    return p["unique_id"]
+        return None
+
+    def get_path_info_by_file(self, file_path: str) -> dict | None:
+        """
+        Return the full path entry (file_path, unique_id, added_at, index_hash) by file_path.
+        """
+        for index_hash, entries in self.paths.items():
+            for p in entries:
+                if p["file_path"] == file_path:
+                    return {
+                        "index_hash": index_hash,
+                        **p
+                    }
+        return None
+    
+    def update_path_info_bypath(self, old_file_path: str, new_file_path: str) -> bool:
+        """
+        Update the file path for an existing path entry.
+        The unique_id and added_at remain unchanged.
+        Returns True if updated, False if path not found.
+        """
+        for entries in self.paths.values():
+            for p in entries:
+                if p["file_path"] == old_file_path:
+                    p["file_path"] = new_file_path
+                    # self._save_paths()
+                    return True
+        return False
+    
+    def update_path_info_by_id(self, unique_id: str, new_file_path: str) -> bool:
+        """
+        Update the file path for an existing path entry identified by unique_id.
+        The unique_id and added_at remain unchanged.
+        Returns True if updated, False if unique_id not found.
+        """
+        for entries in self.paths.values():
+            for p in entries:
+                if p["unique_id"] == unique_id:
+                    p["file_path"] = new_file_path
+                    # self._save_paths()
+                    self.logger.update_logs("[PATH UPDATED]", f"{unique_id} -> {new_file_path}")
+                    return True
+        return False
+        
     def get_hashes_by_duration(self, duration: float, tolerance: float = 0.0) -> List[str]:
         """
         Return all index_hashes with the given duration.
@@ -361,6 +459,87 @@ class MediaFingerprintManager:
             key = (fp["duration"], fp["size_bytes"])
             groups.setdefault(key, []).append(h)
         return {k: hashes for k, hashes in groups.items() if len(hashes) > 1}
+    
+    def refactor_paths_csv(self):
+        """
+        Refactor the paths CSV:
+        - Ensure each entry has a unique_id and added_at timestamp.
+        - Convert old string-only paths to dict format.
+        - Remove duplicates based on (index_hash + file_path).
+        - Save back atomically.
+        """
+        if not os.path.exists(self.paths_file):
+            print("No paths CSV to refactor.")
+            return
+
+        seen = set()
+        new_rows = []
+
+        with open(self.paths_file, mode="r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                index_hash = row["index_hash"]
+                file_path = row["file_path"]
+                key = (index_hash, file_path)
+
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                unique_id = row.get("unique_id") or str(uuid.uuid4())
+                added_at = row.get("added_at") or datetime.now().isoformat()
+
+                new_rows.append({
+                    "index_hash": index_hash,
+                    "file_path": file_path,
+                    "unique_id": unique_id,
+                    "added_at": added_at
+                })
+
+        _atomic_save_csv(
+            self.paths_file,
+            ["index_hash", "file_path", "unique_id", "added_at"],
+            new_rows
+        )
+
+        print(f"Refactored paths CSV with {len(new_rows)} unique entries.")
+
+    def refactor_fingerprints_round_duration(self):
+        """
+        Refactor fingerprints:
+        - Round durations from 3 decimals to 1 decimal.
+        - Update index_hashes accordingly.
+        - Update paths mapping for new index_hashes.
+        """
+        new_fingerprints = {}
+        new_paths = {}
+
+        for old_index_hash, fp in self.fingerprints.items():
+            try:
+                rounded_duration = str(round(float(fp["duration"]), 1))
+            except (ValueError, TypeError):
+                rounded_duration = fp["duration"]
+
+            new_index_hash = self._generate_index_hash(
+                rounded_duration,
+                fp["size_bytes"],
+                fp.get("partial_hash", "")
+            )
+            new_fp = fp.copy()
+            new_fp["duration"] = rounded_duration
+            new_fp["index_hash"] = new_index_hash
+            new_fingerprints[new_index_hash] = new_fp
+
+            if old_index_hash in self.paths:
+                new_paths[new_index_hash] = self.paths.pop(old_index_hash)
+
+        self.fingerprints = new_fingerprints
+        self.paths.update(new_paths)
+
+        self._save_to_csv()
+        self._save_paths()
+
+        print(f"Refactored {len(new_fingerprints)} fingerprints with rounded durations.")
 
 
 if __name__ == "__main__":
@@ -370,12 +549,12 @@ if __name__ == "__main__":
     # print(len(dupes))
 
     # Find by exact duration
-    print(manager.get_hashes_by_duration(123.452))
+    # print(manager.get_hashes_by_duration(123.452))
 
     # Find by duration with tolerance (0.01 sec)
     # print(manager.get_hashes_by_duration(123.452, tolerance=0.01))
 
-    print(manager.get_groups_by_duration())
+    # print(manager.get_groups_by_duration())
 
     # Find all duplicate durations
     # print(manager.get_duplicate_durations(tolerance=0.01))
