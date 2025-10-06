@@ -6,9 +6,10 @@ import os
 from datetime import datetime
 from custom_messagebox import askdirectory, askopenfilename, showinfo, showwarning, showerror, askyesno
 from backup_manager import BackupManager
+from task_manager import TaskManager
 
 class SettingsWindow(tk.Toplevel):
-    def __init__(self, parent, backup_manager=None, on_save_callback=None):
+    def __init__(self, parent, backup_manager=None, task_manager=None, on_save_callback=None):
         super().__init__(parent)
         self.title("Settings")
         self.configure(bg="black")
@@ -23,13 +24,15 @@ class SettingsWindow(tk.Toplevel):
             "LOGS_FOLDER": player_constants.LOGS_FOLDER,
             "STYLES_FOLDER": player_constants.STYLES_FOLDER,
             "DEMO_FOLDER": player_constants.DEMO_FOLDER,
-            "FAV_PATH": player_constants.FAV_PATH,
-            "FAV_FILES": player_constants.FAV_FILES,
+            # "FAV_PATH": player_constants.FAV_PATH,
+            # "FAV_FILES": player_constants.FAV_FILES,
             "SKIP_FOLDERS": player_constants.SKIP_FOLDERS,
-            "VIDEO_SNIPPETS_FOLDER": player_constants.VIDEO_SNIPPETS_FOLDER
+            "VIDEO_SNIPPETS_FOLDER": player_constants.VIDEO_SNIPPETS_FOLDER,
         }
 
         self.backup_manager = backup_manager or BackupManager({})
+        self.task_manager = task_manager or TaskManager()
+        self.parent = parent
 
         self.constants_path = os.path.join(os.path.dirname(__file__), "player_constants.py")
         self.default_content = self._read_file(self.constants_path)
@@ -70,12 +73,12 @@ class SettingsWindow(tk.Toplevel):
                 self._add_setting_row(self.scrollable_frame, key, self.constants[key], row, label_font, entry_font, base_dir, True)
                 row += 1
     
-        add_category_header("Favorites")
-        fav_keys = ["FAV_PATH", "FAV_FILES"]
-        for key in fav_keys:
-            if key in self.constants:
-                self._add_setting_row(self.scrollable_frame, key, self.constants[key], row, label_font, entry_font, base_dir, True)
-                row += 1
+        # add_category_header("Favorites")
+        # fav_keys = ["FAV_PATH", "FAV_FILES"]
+        # for key in fav_keys:
+        #     if key in self.constants:
+        #         self._add_setting_row(self.scrollable_frame, key, self.constants[key], row, label_font, entry_font, base_dir, True)
+        #         row += 1
 
         add_category_header("Skip Folders")
         if "SKIP_FOLDERS" in self.constants:
@@ -120,23 +123,49 @@ class SettingsWindow(tk.Toplevel):
                              borderwidth=2, highlightbackground="red", highlightcolor="red")
         reset_btn.pack(side="left", padx=8, pady=3)
 
+        add_category_header("Other Options")
+        other_options_frame = tk.Frame(self.scrollable_frame, bg="black")
+        other_options_frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+        row += 1
+
+        convert_btn = tk.Button(
+            other_options_frame, text="Convert PNG -> JPG",
+            command=self.convert_pngs_to_jpg,
+            bg="black", fg="cyan", font=("Open Sans", 8, "bold"),
+            width=16, relief=tk.FLAT, activebackground="#222",
+            activeforeground="cyan", cursor="hand2"
+        )
+        convert_btn.pack(side="left", padx=(0, 8), pady=3)
+
+        convert_btn.bind("<Enter>", lambda e, b=convert_btn: b.config(bg="cyan", fg="black"))
+        convert_btn.bind("<Leave>", lambda e, b=convert_btn: b.config(bg="black", fg="cyan"))
+
+        restore_specific_btn = tk.Button(
+            other_options_frame, text="Restore Specific Backup",
+            command=self.restore_specific_backup,
+            bg="black", fg="orange", font=("Open Sans", 8, "bold"),
+            width=18, relief=tk.FLAT, activebackground="#222",
+            activeforeground="orange", cursor="hand2"
+        )
+        restore_specific_btn.pack(side="left", padx=(0, 8), pady=3)
+
+        restore_all_btn = tk.Button(
+            other_options_frame, text="Restore Full Backup",
+            command=self.restore_full_backup,
+            bg="black", fg="red", font=("Open Sans", 8, "bold"),
+            width=18, relief=tk.FLAT, activebackground="#222",
+            activeforeground="red", cursor="hand2"
+        )
+        restore_all_btn.pack(side="left", padx=(0, 8), pady=3)
+
         backup_btn = tk.Button(
-            button_container, text="Create Backup",
+            other_options_frame, text="Create Backup",
             command=self.create_backup,
             bg="black", fg="white", font=("Open Sans", 8, "bold"),
             width=14, relief=tk.FLAT, activebackground="#222",
             activeforeground="white", cursor="hand2"
         )
-        backup_btn.pack(side="left", padx=8, pady=3)
-
-        restore_btn = tk.Button(
-            button_container, text="Restore Backup",
-            command=self.restore_backup,
-            bg="black", fg="orange", font=("Open Sans", 8, "bold"),
-            width=14, relief=tk.FLAT, activebackground="#222",
-            activeforeground="orange", cursor="hand2"
-        )
-        restore_btn.pack(side="left", padx=8, pady=3)
+        backup_btn.pack(side="left", padx=(0, 8), pady=3)
 
         self.center_window()
         
@@ -145,7 +174,9 @@ class SettingsWindow(tk.Toplevel):
             (cancel_btn, "white", "black"),
             (reset_btn, "black", "red"),
             (backup_btn, "black", "white"),
-            (restore_btn, "black", "orange")
+            # (restore_btn, "black", "orange"),
+            (restore_specific_btn, "black", "orange"),
+            (restore_all_btn, "black", "red")
         ]:
             btn.bind("<Enter>", lambda e, b=btn, c=bg, f=fg: b.config(bg=f, fg=c))
             btn.bind("<Leave>", lambda e, b=btn, c=bg, f=fg: b.config(bg=c, fg=f))
@@ -253,8 +284,116 @@ class SettingsWindow(tk.Toplevel):
         with open(self.constants_path, "w", encoding="utf-8") as f:
             f.writelines(updated_lines)
 
+    def convert_pngs_to_jpg(self):
+        from static_methods import convert_png_to_jpg
+
+        def task():
+            return convert_png_to_jpg(delete_original=player_constants.DELETE_ORIGINAL_PNG)
+
+        def on_done(res):
+            parent = self.parent  
+
+            if not (res['converted'] or res['skipped']):
+                try:
+                    showinfo(parent, "Convert PNG -> JPG", "No PNG files found to convert.")
+                except Exception:
+                    pass
+                return
+
+            msg = (
+                f"{len(res['converted'])} newly converted\n"
+                f"{len(res['skipped'])} already existed\n"
+                f"{len(res['failed'])} failed\n"
+                f"Saved in '{res['output_dir']}'"
+            )
+            try:
+                showinfo(parent, "Conversion Complete", msg)
+            except Exception:
+                pass
+
+        self.task_manager.add_parallel_task(task, on_done=on_done)
+
+    def restore_specific_backup(self):
+        """Allow the user to restore a specific file from a backup JSON."""
+        backup_path = askopenfilename(
+            self,
+            title="Select Backup File",
+            initialdir=self.backup_manager.backup_folder,
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
+        )
+
+        if not backup_path:
+            return
+
+        # Let the user pick which specific file to restore
+        keys = list(self.backup_manager.file_paths.keys())
+        choice_window = tk.Toplevel(self)
+        choice_window.title("Select File to Restore")
+        choice_window.configure(bg="black")
+
+        tk.Label(
+            choice_window, text="Select a file to restore:",
+            bg="black", fg="red", font=("Open Sans", 12, "bold")
+        ).pack(pady=10)
+
+        combo_var = tk.StringVar(value=keys[0])
+        combo = tk.OptionMenu(choice_window, combo_var, *keys)
+        combo.config(bg="#222", fg="white", width=40, highlightthickness=1, highlightbackground="red")
+        combo.pack(pady=10)
+
+        def restore_selected():
+            selected_key = combo_var.get()
+            try:
+                self.backup_manager.restore_single_from_backup(backup_path, selected_key)
+                showinfo(self, "Restore Complete", f"'{selected_key}' restored successfully.")
+                choice_window.destroy()
+            except Exception as e:
+                showerror(self, "Restore Failed", str(e))
+
+        restore_btn = tk.Button(
+            choice_window, text="Restore",
+            command=restore_selected,
+            bg="red", fg="white", font=("Open Sans", 9, "bold"),
+            relief=tk.FLAT, cursor="hand2", width=12
+        )
+        restore_btn.pack(pady=(0, 15))
+
+        # Center the small dialog
+        choice_window.update_idletasks()
+        w, h = 400, 200
+        x = self.winfo_x() + (self.winfo_width() // 2) - (w // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (h // 2)
+        choice_window.geometry(f"{w}x{h}+{x}+{y}")
+
+    def restore_full_backup(self):
+        """Restore the entire backup (all files)."""
+        backup_path = askopenfilename(
+            self,
+            title="Select Full Backup File",
+            initialdir=self.backup_manager.backup_folder,
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
+        )
+
+        if not backup_path:
+            return
+
+        confirm = askyesno(self, "Confirm Full Restore", "This will overwrite all tracked files. Continue?")
+        if not confirm:
+            return
+
+        def task():
+            self.backup_manager.restore_backup(backup_path)
+
+        def on_done(_):
+            showinfo(self, "Restore Complete", "Full backup restored successfully.")
+
+        self.task_manager.add_parallel_task(task, on_done=on_done)
+
+
+
     def reset_to_default(self):
         """Reset settings to default values."""
+        pass
         confirm = askyesno(self, "Confirm Reset", "Are you sure you want to reset all settings to default values?")
         
         if confirm:
@@ -313,23 +452,23 @@ class SettingsWindow(tk.Toplevel):
             browse_btn.grid(row=row, column=2, padx=(0, 5), pady=6, sticky="ew")
 
     def create_backup(self):
-        try:
-            bm = self.backup_manager
-            bm.create_backup()
-            showinfo(self, "Backup", "Backup created successfully.")
-        except Exception as e:
-            showerror(self, "Backup Failed", f"Failed to create backup:\n{e}")
-
-    def restore_backup(self):
-        backup_path = askopenfilename(self,
-            title="Select Backup File",
-            initialdir=self.backup_manager.backup_folder,
-            filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
-             )
-        if backup_path:
+        if not self.task_manager:
             try:
-                bm = self.backup_manager
-                bm.restore_backup(backup_path)
-                showinfo(self, "Restore", "Backup restored successfully.")
+                self.backup_manager.create_backup()
+                showinfo(self.parent, "Backup", "Backup created successfully.")
             except Exception as e:
-                showerror(self, "Restore Failed", f"Failed to restore backup:\n{e}")
+                showerror(self.parent, "Backup Failed", f"Failed to create backup:\n{e}")
+            return
+
+        def task():
+            return self.backup_manager.create_backup()
+
+        def on_done(result):
+            parent = self.parent
+            try:
+                showinfo(parent, "Backup", "Backup created successfully.")
+            except Exception as e:
+                print(f"Error showing backup result: {e}")
+                showerror(parent, "Backup Failed", f"Failed to show backup result:\n{e}")
+
+        self.task_manager.add_parallel_task(task, on_done=on_done)
