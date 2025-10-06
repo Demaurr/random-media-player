@@ -1,11 +1,30 @@
 from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import csv
 from datetime import datetime
 import os
+from pathlib import Path
 import re
+import subprocess
+import tempfile
+from typing import Optional
+from PIL import Image
 import tracemalloc
-from player_constants import ALL_MEDIA_CSV, DELETE_FILES_CSV, FILE_TRANSFER_LOG, FILES_FOLDER, FOLDER_LOGS, LOG_PATH, SCREENSHOTS_FOLDER, SNIPPETS_HISTORY_CSV, WATCHED_HISTORY_LOG_PATH
+
+from tqdm import tqdm
+# from associations_manager import FileAssociator
+from player_constants import (
+    ALL_MEDIA_CSV,
+    ASSOCIATIONS_CSV, 
+    DELETE_FILES_CSV,
+    FILE_TRANSFER_LOG, 
+    FILES_FOLDER, 
+    FOLDER_LOGS, LOG_PATH,
+    SCREENSHOTS_FOLDER,
+    SCREENSHOTS_COMPRESSED_FOLDER,
+    SNIPPETS_HISTORY_CSV, 
+    WATCHED_HISTORY_LOG_PATH
+)
 from logs_writer import LogManager
 from collections import defaultdict, deque
 
@@ -15,7 +34,6 @@ def create_csv_file(headers=None, filename="New_CSV.csv"):
     if os.path.exists(filename):
         # print(f"{filename} File Exists...")
         return False
-    # If no headers are provided, create three random headers
     if headers is None:
         headers = ["Heading_1", "Heading_2", "Heading_3"]
     
@@ -26,7 +44,7 @@ def create_csv_file(headers=None, filename="New_CSV.csv"):
     print(f"CSV file '{filename}' created with headers: {headers}")
     return True
 
-def normalise_path(path) -> str:
+def normalise_path(path, use_os_norm=True) -> str:
         """
         Normalizes a file path to use backslashes '\' as separators instead of '/'.
         Args:
@@ -34,7 +52,7 @@ def normalise_path(path) -> str:
         Returns:
             str: The normalized file path with backslashes.
         """
-        return path.replace("/", "\\")
+        return path.replace("/", "\\") if not use_os_norm else os.path.normpath(path.replace("/", "\\"))
 
 def get_favs_folder():
     """
@@ -188,7 +206,7 @@ def gather_all_media(refresh=False):
                 for row in reader:
                     if len(row) < 7:
                         continue
-                    key = (normalise_path(row["Source Folder"]), row["File Name"].lower())
+                    key = (normalise_path(row["Source Folder"], use_os_norm=True), row["File Name"].lower())
                     row["Status"] = row.get("Status", "Present")
                     old_data[key] = row
 
@@ -201,7 +219,7 @@ def gather_all_media(refresh=False):
                     continue
                 csv_path = row[1].strip()
                 if csv_path:
-                    csv_paths.add(normalise_path(csv_path))
+                    csv_paths.add(normalise_path(csv_path, use_os_norm=True))
 
         new_data = {}
         for csv_file in csv_paths:
@@ -212,7 +230,7 @@ def gather_all_media(refresh=False):
                 for row in reader:
                     if len(row) < 7:
                         continue
-                    key = (normalise_path(row["Source Folder"]), row["File Name"].lower())
+                    key = (normalise_path(row["Source Folder"], use_os_norm=True), row["File Name"].lower())
                     file_path = os.path.join(row["Source Folder"], row["File Name"])
                     row["Status"] = "Present" if os.path.exists(file_path) else "Missing"
                     new_data[key] = row
@@ -324,26 +342,28 @@ def open_in_default_app(file_path):
     except Exception as e:
         print(f"Failed to open file: {e}")
 
+def are_paths_same(path1, path2):
+        normalized_path1 = os.path.normpath(path1)
+        normalized_path2 = os.path.normpath(path2)
+        return normalized_path1 == normalized_path2
+
+
 def sort_treeview_column(treeview, col, reverse):
     """
-    Generic function to sort a ttk.Treeview column.
-    
-    Args:
-        treeview: The ttk.Treeview widget to sort
-        col: The column identifier to sort by
-        reverse: Boolean indicating reverse sort order
-        
-    Returns:
-        None
+    Sorts a ttk.Treeview column using natural sorting.
     """
-    data = [(treeview.set(k, col), k) for k in treeview.get_children('')]
-    try:
-        data.sort(key=lambda t: int(t[0]), reverse=reverse)
-    except ValueError:
-        data.sort(key=lambda t: t[0].lower(), reverse=reverse)
-    
-    for index, (val, k) in enumerate(data):
-        treeview.move(k, '', index)
+    rows = treeview.get_children('')
+    data = []
+    for k in rows:
+        val = treeview.set(k, col)
+        key = natural_sort_key(val)
+        data.append((key, k, val))
+
+    data.sort(key=lambda t: t[0], reverse=reverse)
+
+    for idx, (_key, k, val) in enumerate(data):
+        treeview.move(k, '', idx)
+
     treeview.heading(col, command=lambda: sort_treeview_column(treeview, col, not reverse))
 
 def get_screenshots_for_file(filename):
@@ -362,7 +382,7 @@ def get_screenshots_for_file(filename):
             print(f"Screenshots folder does not exist: {SCREENSHOTS_FOLDER}")
             return screenshots
         for file in os.listdir(SCREENSHOTS_FOLDER):
-            if file.startswith(f"screenshot_{filename}_") and file.endswith(".png"):
+            if file.startswith(f"screenshot_{filename}_") and (file.endswith(".jpg") or file.endswith(".png")):
                 screenshots.append(os.path.join(SCREENSHOTS_FOLDER, file))
         if not screenshots:
             print(f"No screenshots found for file: {filename}")
@@ -371,7 +391,7 @@ def get_screenshots_for_file(filename):
         print(f"Error while getting screenshots for {filename}: {e}")
         return []
     
-def get_video_snippets_for_file(filename):
+def get_video_snippets_for_file(filename, sorted_list=False):
     """
     Returns a list of output file paths for video snippets that match the given original filename.
     Args:
@@ -394,7 +414,7 @@ def get_video_snippets_for_file(filename):
                         snippets.append(output_file)
         if not snippets:
             print(f"No video snippets found for file: {filename}")
-        return snippets
+        return natural_sort_iterables(snippets) if sorted_list else snippets
     except Exception as e:
         print(f"Error while getting video snippets for {filename}: {e}")
         return []
@@ -588,6 +608,30 @@ def get_all_related_paths(target_path, graph=None):
 
     return sorted(related_paths)
 
+def get_all_related_paths_multiple(file_paths, graph=None):
+    """
+    Return all related file paths connected to any file in file_paths.
+    
+    If graph is not provided, it will be built using build_transfer_graph().
+    """
+    if graph is None:
+        graph = build_transfer_graph()
+
+    file_paths = [normalise_path(p) for p in file_paths]
+
+    visited = set()
+    queue = deque(file_paths)
+    related_paths = set()
+
+    while queue:
+        path = queue.popleft()
+        if path not in visited:
+            visited.add(path)
+            related_paths.add(path)
+            queue.extend(graph[path] - visited)
+
+    return sorted(related_paths)
+
 
 def get_split_stats_by_folder(file_paths):
     """
@@ -715,6 +759,286 @@ def get_memory_usage():
     current, peak = tracemalloc.get_traced_memory()
     return round(current / 1024 / 1024, 2), round(peak / 1024 / 1024, 2)
 
+def _convert_single(file_path, output_dir, quality=80, delete_original=False):
+    """Worker: convert one PNG to JPG."""
+    try:
+        if not file_path.lower().endswith(".png"):
+            return None, "skipped"
+
+        filename = os.path.basename(file_path)
+        output_path = os.path.join(output_dir, os.path.splitext(filename)[0] + ".jpg")
+
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            if delete_original:
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"Could not delete {file_path}: {e}")
+            return output_path, "skipped"
+
+        img = Image.open(file_path).convert("RGB")
+        img.save(output_path, "JPEG", quality=quality, optimize=True)
+
+        if delete_original:
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Could not delete {file_path}: {e}")
+
+        return output_path, "converted"
+
+    except Exception as e:
+        print(f"Failed {file_path}: {e}")
+        return None, "failed"
+
+
+
+def convert_png_to_jpg(files=None, output_dir=SCREENSHOTS_FOLDER,
+                       quality=80, max_workers=None, delete_original=False):
+    os.makedirs(output_dir, exist_ok=True)
+
+    if files is None:
+        from file_loader import VideoFileLoader
+        files = VideoFileLoader.load_image_files()
+
+    file_list = [f for f in files if f.lower().endswith(".png")]
+
+    converted, skipped, failed = [], [], []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_convert_single, f, output_dir, quality, delete_original): f
+            for f in file_list
+        }
+        for future in as_completed(futures):
+            result, status = future.result()
+            if status == "converted" and result:
+                converted.append(result)
+            elif status == "skipped" and result:
+                skipped.append(result)
+            elif status == "failed":
+                failed.append(futures[future])
+
+    return {
+        "converted": converted,
+        "skipped": skipped,
+        "failed": failed,
+        "output_dir": output_dir,
+    }
+
+def convert_single_file_to_mp4(file, output_dir=None, overwrite=False):
+    """
+    Convert a single file to MP4 using ffmpeg.
+    Returns output path on success or error message on failure.
+    """
+    file_path = Path(file)
+
+    if not file_path.exists():
+        return f"File not found: {file}"
+    if not file_path.is_file():
+        return f"Not a valid file: {file}"
+
+    out_dir = Path(output_dir) if output_dir else file_path.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / (file_path.stem + ".mp4")
+
+    if out_file.exists() and not overwrite:
+        return f"Skipped (output exists: {out_file})"
+
+    try:
+        cmd = [
+            "ffmpeg", "-y" if overwrite else "-n",
+            "-i", str(file_path),
+            "-movflags", "faststart",
+            "-pix_fmt", "yuv420p",
+            str(out_file)
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return str(out_file)
+    except subprocess.CalledProcessError as e:
+        return f"Conversion failed for {file}: {e.stderr.decode(errors='ignore')[:200]}..."
+    
+def batch_convert_to_mp4(
+    task_manager,
+    files,
+    output_dir=None,
+    overwrite=False,
+    on_file_done=None,
+    on_all_done=None,
+    max_files=5,
+    same_folder=True,
+):
+    """
+    Add a batch of file conversions to the TaskManager as parallel tasks.
+
+    Args:
+        task_manager (TaskManager): your task manager instance
+        files (list[str]): list of file paths
+        output_dir (str | None): global output directory (ignored if same_folder=True)
+        overwrite (bool): overwrite existing files
+        on_file_done (callable): called with (file, result) when a file is done
+        on_all_done (callable): called when all files are processed
+        max_files (int): maximum number of files to process
+        same_folder (bool): if True, each file’s .mp4 will be saved in the same folder
+    """
+    if not files:
+        print("No files provided.")
+        return
+
+    if len(files) > max_files:
+        files = files[:max_files]
+        print(f"Only first {max_files} files will be converted.")
+
+    pending = len(files)
+
+    def file_done_closure(file):
+        def _inner(result):
+            nonlocal pending
+            if on_file_done:
+                on_file_done(file, result)
+            pending -= 1
+            if pending == 0 and on_all_done:
+                on_all_done()
+        return _inner
+
+    for file in files:
+        if same_folder:
+            out_dir = os.path.dirname(file)
+        else:
+            ensure_folder_exists(output_dir)
+            out_dir = output_dir
+
+        task_manager.add_parallel_task(
+            convert_single_file_to_mp4,
+            file,
+            output_dir=out_dir,
+            overwrite=overwrite,
+            on_done=file_done_closure(file),
+        )
+
+def get_related_associations(source_path, associator=None, graph=None):
+    """
+    Given a source path:
+      1. Get all related paths using transfer graph.
+      2. For each related path, fetch its associations from the associator.
+    Returns a list of unique associations.
+    """
+    from associations_manager import FileAssociator
+    associator = FileAssociator(ASSOCIATIONS_CSV) if associator is None else associator
+
+    source_path = normalise_path(source_path)
+
+    related_paths = get_all_related_paths(source_path, graph)
+
+    associations = []
+    seen = set()
+
+    for path in related_paths:
+        for assoc in associator.get_associations(path):
+            key = (assoc["source_file"], assoc["target_file"], assoc["association_type"])
+            if key not in seen:
+                seen.add(key)
+                associations.append((assoc["target_file"], assoc["target_size"], assoc["association_type"]))
+
+    return associations
+
+def get_related_targets(source_path, associator=None, graph=None, association_type=None, active_only=True, related_paths=None):
+    """
+    Given a source path:
+      1. Get all related paths using transfer graph.
+      2. For each related path, fetch its targets from the associator using get_targets().
+    Returns a list of unique target paths.
+    
+    - association_type can be None, a single type, or a list/tuple of types.
+    - active_only=True will include only active associations.
+    """
+    from associations_manager import FileAssociator
+    associator = FileAssociator(ASSOCIATIONS_CSV) if associator is None else associator
+
+    source_path = normalise_path(source_path)
+    related_paths = get_all_related_paths(source_path, graph) if related_paths is None else related_paths
+
+    if association_type is None:
+        types_set = None
+    elif isinstance(association_type, (list, tuple, set)):
+        types_set = set(association_type)
+    else:
+        types_set = {association_type}
+
+    targets = []
+    seen = set()
+
+    for path in related_paths:
+        path_targets = associator.get_targets(path, association_type=types_set, active_only=active_only)
+        targets.extend(path_targets)
+    # print(targets)
+
+    return targets
+
+def parse_duration_to_seconds(duration_str: str) -> Optional[float]:
+    """
+    Converts duration strings like '00:30.2' or '0:00:22.600' into seconds (float).
+    Returns None if invalid.
+    """
+    if not duration_str:
+        return None
+
+    try:
+        parts = duration_str.split(":")
+        if len(parts) == 1:
+            # Example: "30.2"
+            return float(parts[0])
+        elif len(parts) == 2:
+            # Example: "00:30.2" -> MM:SS
+            minutes, seconds = parts
+            return int(minutes) * 60 + float(seconds)
+        elif len(parts) == 3:
+            # Example: "0:00:22.600" -> HH:MM:SS
+            hours, minutes, seconds = parts
+            return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return None
+
+    return None
+
+def _atomic_save_csv(file_path: str, fieldnames: list[str], rows: list[dict]) -> None:
+        """
+        Atomically save a list of dict rows to CSV.
+        Writes to a temporary file first, then replaces the original.
+        """
+        dir_name = os.path.dirname(file_path) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp", prefix="atomic_")
+        try:
+            with os.fdopen(fd, mode="w", newline="", encoding="utf-8") as tmp_file:
+                writer = csv.DictWriter(tmp_file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+def center_window(window, width=1000, height=600, offset_x=0, offset_y=0):
+    """
+    Center a Tkinter window on the screen with optional offsets.
+
+    Args:
+        window: The Tkinter window to center (Tk() or Toplevel()).
+        width (int): Desired window width.
+        height (int): Desired window height.
+        offset_x (int): Extra horizontal offset (+ right, - left).
+        offset_y (int): Extra vertical offset (+ down, - up).
+    """
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    
+    x_coordinate = (screen_width - width) // 2 + offset_x
+    y_coordinate = (screen_height - height) // 2 + offset_y
+    
+    window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
+
 if __name__ == "__main__":
     # print("Static methods module loaded successfully.")
     # filepath_to_search = r"sample.mp4"
@@ -724,4 +1048,8 @@ if __name__ == "__main__":
     # for p in all_paths:
     #     print(p)
     # get_video_and_screenshots_map()
-    print()
+    # graph = build_transfer_graph()
+    # print(assoc)
+    # print(len(assoc))
+    print(parse_duration_to_seconds("00:06.3"))
+    pass
