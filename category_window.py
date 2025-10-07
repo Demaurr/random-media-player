@@ -153,6 +153,8 @@ class CategoryWindow(tk.Toplevel):
         self.category_tree.column("Count", width=50, anchor=tk.CENTER)
         self.category_tree.column("Status", width=80)
         self.category_tree.grid(row=1, column=0, sticky='nsew')
+        self.category_tree.focus_set()
+        self.category_tree.focus('')
         self.category_controls = tk.Frame(self.left_frame, bg=Colors.PLAIN_BLACK)
         self.category_controls.grid(row=2, column=0, pady=5, sticky='ew')
         
@@ -256,9 +258,24 @@ class CategoryWindow(tk.Toplevel):
         self.category_tree.delete(*self.category_tree.get_children())
         categories_with_dates = self.category_manager.get_all_categories_with_dates()
         categories_with_dates.sort(key=lambda x: x[1], reverse=True)
+        
+        priority = []
+        others = []
+
+        for category, date in categories_with_dates:
+            in_current_files = any(
+                self.category_manager.is_file_in_category(category, f)
+                for f in self.files
+            )
+            if in_current_files:
+                priority.append((category, date))
+            else:
+                others.append((category, date))
+
+        ordered_categories = priority + others
 
         items = []
-        for category, _ in categories_with_dates:
+        for category, _ in ordered_categories:
             files = self.category_manager.get_category_files(category)
             files_in_category = 0
             if self.files:
@@ -279,8 +296,12 @@ class CategoryWindow(tk.Toplevel):
             items.append(item_id)
 
         if select_recent and items:
-            self.category_tree.selection_set(items[0])
-            self.category_tree.see(items[0])
+            first_item = items[0]
+            self.category_tree.selection_set(first_item)
+            self.category_tree.focus(first_item)
+            self.category_tree.see(first_item)
+            self.category_tree.focus_set()
+
             self.on_category_select()
 
     def on_category_select(self, event=None):

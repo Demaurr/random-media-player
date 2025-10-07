@@ -9,7 +9,8 @@ from notes_manager import NotesManager
 from snippets_manager import SnippetsManager
 
 class NotesManagerGUI:
-    def __init__(self, notes_manager=None, snippets_manager=None, parent=None, file_path=None):
+    def __init__(self, notes_manager=None, snippets_manager=None, 
+                 parent=None, file_path=None, minimal=False):
         self.notes_manager = notes_manager or NotesManager()
         self.root = tk.Toplevel(parent) if parent else tk.Toplevel()
         self.root.title("File Notes Manager")
@@ -20,18 +21,18 @@ class NotesManagerGUI:
         self.root.grab_set()
         self.root.focus_force()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.title("Notes Manager" if not file_path else "Notes Manager - " + os.path.basename(file_path))
+        self.root.title("Notes Manager" if not file_path 
+                        else "Notes Manager - " + os.path.basename(file_path))
 
         self.colors = {
-            'bg_primary': "black",
-            'bg_secondary': "black" ,
+            'bg_primary': Colors.PLAIN_BLACK,
+            'bg_secondary': Colors.PLAIN_BLACK,
             'bg_tertiary': Colors.BLACK_ENTRYBOX, 
             'fg_primary': Colors.PLAIN_WHITE,    
             'fg_secondary': '#cccccc',     
             'accent_red': Colors.PLAIN_RED,      
             'accent_orange': Colors.PLAIN_ORANGE,
             'accent_green': '#44ff44',    
-            'accent_orange': '#ff8844',   
             'border': '#555555',          
             'select': '#ff4444',         
             'button_bg': '#2d2d2d',       
@@ -63,66 +64,66 @@ class NotesManagerGUI:
     def setup_styles(self):
         self.style = ttk.Style()
         
-        self.root.configure(bg=self.colors['bg_primary'])
+        self.root.configure(bg=Colors.PLAIN_BLACK)
         self.style.theme_use('clam')
         self.style.configure('Dark.TFrame', 
-                           background=self.colors['bg_primary'],
-#  background="black",
+                           background=Colors.PLAIN_BLACK,
+#  background=Colors.PLAIN_BLACK,
                            borderwidth=0)
         
         self.style.configure('Card.TFrame', 
-                           background=self.colors['bg_secondary'],
-                        # background="black",
+                           background=Colors.PLAIN_BLACK,
+                        # background=Colors.PLAIN_BLACK,
                            borderwidth=0,
                            relief='solid')
         self.style.configure('Dark.TLabel', 
-                           background=self.colors['bg_primary'],
-                           foreground=self.colors['fg_primary'],
+                           background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_WHITE,
                            font=('Segoe UI', 12))
         
         self.style.configure('Card.TLabel', 
-                           background=self.colors['bg_secondary'],
-                           foreground=self.colors['fg_primary'],
+                           background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_WHITE,
                            font=('Segoe UI', 11))
         
         self.style.configure('Title.TLabel', 
-                           background=self.colors['bg_secondary'],
-                           foreground=self.colors['accent_red'],
+                           background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_RED,
                            font=('Segoe UI', 11, 'bold'))
         
         self.style.configure('Info.TLabel', 
-                           background=self.colors['bg_secondary'],
+                           background=Colors.PLAIN_BLACK,
                            foreground=self.colors['fg_secondary'],
                            font=('Segoe UI', 9))
         self.style.configure('Dark.TButton',
-                           background=self.colors['button_bg'],
-                           foreground=self.colors['fg_primary'],
+                        #    background=self.colors['button_bg'],
+                            background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_WHITE,
                            borderwidth=0,
                            focuscolor='none',
-                           font=('Segoe UI', 9, 'bold'))
+                           font=('Segoe UI', 10, 'bold'))
         
         self.style.map('Dark.TButton',
-                      background=[('active', self.colors['button_hover']),
-                                ('pressed', self.colors['accent_red'])])
+                      foreground=[('active', Colors.PLAIN_GRAY),
+                                ('pressed', Colors.PLAIN_RED)])
         
         self.style.configure('Accent.TButton',
-                           background=self.colors['accent_red'],
-                           foreground=self.colors['fg_primary'],
+                        #    background=Colors.PLAIN_RED,
+                            background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_RED,
                            borderwidth=0,
                            focuscolor='none',
-                           font=('Segoe UI', 9, 'bold'))
+                           font=('Segoe UI', 10, 'bold'))
         
         self.style.map('Accent.TButton',
-                      background=[('active', '#ff6666'),
+                      foreground=[('active', '#ff6666'),
                                 ('pressed', '#cc2222')])
         
         self.style.configure('Dark.TEntry',
-            # fieldbackground=self.colors['bg_tertiary'],
             fieldbackground="#1a1a1a",
-            foreground=self.colors['fg_primary'],
+            foreground=Colors.PLAIN_WHITE,
             borderwidth=0,
-            # insertcolor=self.colors['fg_primary'],
-            insertcolor="black",
+            insertcolor=Colors.PLAIN_BLACK,
             background="#1a1a1a",
             font=('Segoe UI', 11)
         )
@@ -133,23 +134,23 @@ class NotesManagerGUI:
             ]})
         ])
         self.style.configure('Dark.TCombobox',
-                           fieldbackground=self.colors['bg_tertiary'],
-                           foreground=self.colors['fg_primary'],
+                           fieldbackground=Colors.BLACK_ENTRYBOX,
+                           foreground=Colors.PLAIN_WHITE,
                            borderwidth=0,
-                           arrowcolor=self.colors['fg_primary'])
+                           arrowcolor=Colors.PLAIN_WHITE)
         self.style.configure('Dark.TLabelframe',
-                           background=self.colors['bg_secondary'],
+                           background=Colors.PLAIN_BLACK,
                            borderwidth=0,
                            relief='solid',)
         
         self.style.configure('Dark.TLabelframe.Label',
-                           background=self.colors['bg_secondary'],
-                           foreground=self.colors['accent_red'],
+                           background=Colors.PLAIN_BLACK,
+                           foreground=Colors.PLAIN_RED,
                            font=('Segoe UI', 15, 'bold'))
     
     def apply_theme(self):
         """Apply the dark theme to the window."""
-        self.root.configure(bg=self.colors['bg_primary'])
+        self.root.configure(bg=Colors.PLAIN_BLACK)
         
     def setup_ui(self):
         main_frame = ttk.Frame(self.root, padding="15", style='Dark.TFrame')
@@ -194,10 +195,10 @@ class NotesManagerGUI:
         self.notes_listbox = tk.Listbox(
             listbox_frame,
             height=12,
-            bg=self.colors['bg_tertiary'],
-            fg=self.colors['fg_primary'],
-            selectbackground=self.colors['accent_red'],
-            selectforeground=self.colors['fg_primary'],
+            bg=Colors.BLACK_ENTRYBOX,
+            fg=Colors.PLAIN_WHITE,
+            selectbackground=Colors.PLAIN_RED,
+            selectforeground=Colors.PLAIN_WHITE,
             borderwidth=0,
             font=('Segoe UI', 11),
             selectmode=tk.EXTENDED
@@ -229,11 +230,8 @@ class NotesManagerGUI:
             file_path_frame,
             textvariable=self.current_video_key,
             width=30,
-            # style='Dark.TEntry',
             background="#1a1a1a",
             state="readonly",
-            # font=('Segoe UI', 9)
-            # borderwidth=0
         )
         self.video_key_entry.grid(row=0, column=1, sticky=(tk.W, tk.E))
         self.video_key_entry.configure(font=('Segoe UI', 11), background="#1a1a1a")
@@ -253,15 +251,17 @@ class NotesManagerGUI:
         note_text_frame.rowconfigure(0, weight=1)
         
         self.note_text = tk.Text(note_text_frame, height=10, wrap=tk.WORD,
-                               bg=self.colors['bg_tertiary'],
-                               fg=self.colors['fg_primary'],
-                               insertbackground=self.colors['fg_primary'],
-                               selectbackground=self.colors['accent_red'],
-                               selectforeground=self.colors['fg_primary'],
+                               bg=Colors.BLACK_ENTRYBOX,
+                               fg=Colors.PLAIN_WHITE,
+                               insertbackground=Colors.PLAIN_WHITE,
+                               selectbackground=Colors.PLAIN_RED,
+                               selectforeground=Colors.PLAIN_WHITE,
                                borderwidth=0,
                                relief='solid',
                                font=('Segoe UI', 11))
         self.note_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.note_text.bind("<Control-KeyPress-s>", self.save_note)
+        self.note_text.bind("<Control-KeyPress-S>", self.save_note)
         
         note_scrollbar = ttk.Scrollbar(note_text_frame, orient=tk.VERTICAL, command=self.note_text.yview)
         note_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
@@ -342,7 +342,7 @@ class NotesManagerGUI:
         self.status_var = tk.StringVar()
         # self.status_var.set("Ready")
         # status_bar = tk.Label(bottom_frame, textvariable=self.status_var, 
-        #                     bg=self.colors['bg_secondary'], 
+        #                     bg=Colors.PLAIN_BLACK, 
         #                     fg=self.colors['fg_secondary'],
         #                     relief=tk.SUNKEN, 
         #                     anchor=tk.W,
@@ -435,7 +435,7 @@ class NotesManagerGUI:
             self.timestamp_var.set("")
 
     
-    def save_note(self):
+    def save_note(self, event=None):
         video_key = self.current_video_key.get().strip()
         note = self.note_text.get(1.0, tk.END).strip()
 
@@ -548,7 +548,7 @@ class NotesManagerGUI:
     
     def show_high_rated(self):
         """Show highly rated notes (rating >= 4)."""
-        notes_list = self.notes_manager.get_notes_by_rating(4)
+        notes_list = self.notes_manager.get_notes_by_rating(7)
         self.populate_listbox(notes_list)
         self.search_var.set("")
     

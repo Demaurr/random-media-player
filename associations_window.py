@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import os
 
-from static_methods import are_paths_same, normalise_path, sort_treeview_column
+from static_methods import are_paths_same, build_transfer_graph, get_all_related_paths, normalise_path, sort_treeview_column
 from player_constants import ALL_MEDIA_CSV, Colors, ASSOCIATIONS_CSV
 from custom_messagebox import showinfo, showwarning, showerror, askyesno
 from associations_manager import FileAssociator
@@ -11,7 +11,7 @@ from tooltips import ToolTip
 
 
 class FileAssociationWindow:
-    def __init__(self, root, source_file=None, associator=None):
+    def __init__(self, root, source_file=None, associator=None, graph=None):
         self.root = root
         self.root.title("File Associations Manager")
         self.root.geometry("1000x600")
@@ -28,11 +28,15 @@ class FileAssociationWindow:
         self.root.bind("<Escape>", self.on_closing)
 
         self.associator = associator or FileAssociator(csv_path=ASSOCIATIONS_CSV)
+        self.transfer_graph = graph or build_transfer_graph()
+        self.root.withdraw()
+        self.root.deiconify()
 
         self._setup_styles()
-        self.center_window()
-        self._create_widgets()
         self._load_all_media()
+        self._create_widgets()
+        self.center_window()
+
 
     def _setup_styles(self):
         style = ttk.Style()
@@ -165,6 +169,16 @@ class FileAssociationWindow:
         self.results_tree.pack(fill="both", expand=True)
         self.results_tree.bind("<Return>", self._save_association)
 
+        self.stats_label = tk.Label(
+            self.left_frame,
+            text="Associations: 0 | Unique Sources: 0",
+            font=("Segoe UI", 11, "bold"),
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.PLAIN_WHITE,
+            anchor="w"
+        )
+        self.stats_label.pack(anchor="w", pady=(0, 10))
+
 
         type_frame = tk.Frame(self.left_frame, bg=Colors.PLAIN_BLACK)
         type_frame.pack(fill=tk.X, pady=5)
@@ -194,9 +208,21 @@ class FileAssociationWindow:
         )
         self.add_btn.pack(side=tk.LEFT, padx=5)
 
+        self.update_btn = tk.Button(
+            type_frame,
+            text="Update",
+            command=self._update_association,
+            bg=Colors.PLAIN_BLACK,
+            fg=Colors.ORANGE,
+            font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT,
+            cursor="hand2"
+        )
+        self.update_btn.pack(side=tk.LEFT, padx=5)
+
         self.delete_btn = tk.Button(
             type_frame,
-            text="Delete Selected Association",
+            text="Delete",
             command=self._delete_association,
             bg=Colors.PLAIN_BLACK,
             fg=Colors.RED,
@@ -209,12 +235,15 @@ class FileAssociationWindow:
         buttons = [
             (self.add_btn, Colors.GREEN, Colors.GREEN_HOVER),
             (self.delete_btn, Colors.RED, Colors.RED_HOVER),
+            (self.update_btn, Colors.ORANGE, Colors.ORANGE_HOVER),
         ]
         for btn, normal, hover in buttons:
             add_hover_effect(btn, normal, hover)
+
         self._load_associations()
         self._attach_tooltip_to_tree(self.assoc_tree)
         self._attach_tooltip_to_tree(self.results_tree)
+        self.root.deiconify()
 
     def _attach_tooltip_to_tree(self, tree):
         """Attach tooltips to every cell in the given treeview."""
@@ -242,6 +271,8 @@ class FileAssociationWindow:
 
         tree.bind("<Motion>", on_motion, add="+")
         tree.bind("<Leave>", lambda e: tooltip.hide_tooltip(), add="+")
+        ToolTip(self.delete_btn, "Delete the selected association", wraplength=200)
+        ToolTip(self.update_btn, "Update the association type of the selected", wraplength=200)
 
     def _load_all_media(self):
         """Load all media records once into memory and preprocess for fast search."""
@@ -281,27 +312,30 @@ class FileAssociationWindow:
     def _load_associations(self):
         """Load existing associations into the left treeview."""
         self.assoc_tree.delete(*self.assoc_tree.get_children())
+        related_paths = get_all_related_paths(self.source_file, self.transfer_graph) if self.source_file else set()
 
         try:
             all_assocs = self.associator.get_all_associations()
 
-            # Split into two groups: those directly involving source_file, and the rest
             priority_assocs = []
             other_assocs = []
+
+            total_assocs = len(all_assocs)
+            unique_sources = len({normalise_path(a["source_file"]) for a in all_assocs})
+            self.stats_label.config(text=f"Associations: {total_assocs} | Unique Sources: {unique_sources}")
 
             for assoc in all_assocs:
                 src = normalise_path(assoc['source_file'])
                 tgt = normalise_path(assoc['target_file'])
 
-                if self.source_file and (are_paths_same(src, self.source_file) or are_paths_same(tgt, self.source_file)):
+                # if self.source_file and (are_paths_same(src, self.source_file) or are_paths_same(tgt, self.source_file)):
+                if self.source_file and (src in related_paths or tgt in related_paths):
                     priority_assocs.append(assoc)
                 else:
                     other_assocs.append(assoc)
 
-            # Sort the "other" associations by date
             other_assocs.sort(key=lambda a: a['association_date'])
 
-            # Combine priority ones (keep original order) + others
             sorted_assocs = priority_assocs + other_assocs
 
             for assoc in sorted_assocs:
@@ -312,15 +346,50 @@ class FileAssociationWindow:
 
                 tags = ()
                 if self.source_file:
-                    if are_paths_same(assoc['source_file'], self.source_file):
+                    # if are_paths_same(assoc['source_file'], self.source_file):
+                    #     tags += ("has_assoc",)
+                    # if are_paths_same(assoc['target_file'], self.source_file):
+                    #     tags += ("is_assoc",)
+                    if normalise_path(assoc['source_file']) in related_paths:
                         tags += ("has_assoc",)
-                    if are_paths_same(assoc['target_file'], self.source_file):
+                    if normalise_path(assoc['target_file']) in related_paths:
                         tags += ("is_assoc",)
 
                 self.assoc_tree.insert("", "end", values=(source, target, assoc_type, date), tags=tags)
 
         except Exception as e:
             showerror(self.root, "Error", f"Error loading associations: {e}")
+
+    def _update_association(self):
+        """Update the type of the selected association."""
+        selected = self.assoc_tree.selection()
+        if not selected:
+            showwarning(self.root, "Warning", "Please select an association to update.")
+            return
+
+        item = self.assoc_tree.item(selected[0], "values")
+        source, target, old_type, date = item
+
+        new_type = self.type_var.get()
+        if new_type == old_type:
+            showwarning(self.root, "Warning", "New type is the same as the old type.")
+            return
+
+        try:
+            for assoc in self.associator.get_all_associations():
+                if (os.path.basename(assoc["source_file"]) == source and
+                    os.path.basename(assoc["target_file"]) == target and
+                    assoc["association_type"] == old_type):
+                    
+                    self.associator.update_association_type(
+                        assoc["source_file"], assoc["target_file"], old_type, new_type
+                    )
+                    break
+
+            showinfo(self.root, "Success", f"Association updated to type '{new_type}'.")
+            self._load_associations()
+        except Exception as e:
+            showerror(self.root, "Error", f"Failed to update association: {e}")
 
 
     def _save_association(self, event=None):
