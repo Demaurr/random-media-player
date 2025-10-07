@@ -168,7 +168,11 @@ class MediaFingerprintManager:
 
         self.logger.update_logs("[FINGERPRINT ADDED]", f"{entry}")
 
-        self.paths.setdefault(index_hash, []).append(file_path)
+        self.paths.setdefault(index_hash, []).append({
+                    "file_path": file_path,
+                    "unique_id": str(uuid.uuid4()),
+                    "added_at": datetime.now().isoformat()
+                })
 
         self.logger.update_logs("[PATH ADDED]", f"{file_path} -> {index_hash}")
 

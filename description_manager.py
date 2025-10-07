@@ -148,5 +148,5 @@ class DescriptionManager:
 
         self._save_descriptions()
 
-        logger.update_logs("[DESCRIPTION UPDATED]", f"Path Changed from {old_path} → {new_path}")
+        logger.update_logs("[DESCRIPTION UPDATED]", f"Path Changed from {old_path} -> {new_path}")
         return True

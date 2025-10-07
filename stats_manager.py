@@ -1,7 +1,9 @@
 import csv
 import os
+from snippets_manager import SnippetsManager
+from deletion_manager import DeletionManager
 from static_methods import gather_all_media, normalise_path
-from player_constants import ALL_MEDIA_CSV, VIDEO_STATS_CSV, STATS_LOG_PATH
+from player_constants import ALL_MEDIA_CSV, SNIPPETS_HISTORY_CSV, VIDEO_STATS_CSV, STATS_LOG_PATH
 from logs_writer import LogManager
 from get_aspects import VideoProcessor
 
@@ -14,10 +16,12 @@ class VideoStatsManager:
         "Profile", "Level", "Audio Codec", "Audio Channels", "Audio Sample Rate"
     ]
 
-    def __init__(self, stats_csv=VIDEO_STATS_CSV):
+    def __init__(self, stats_csv=VIDEO_STATS_CSV, snippets_manager=None, deletion_manager=None):
         self.stats_csv = stats_csv
         self.stats = self._load_existing_stats()
         self.processor = VideoProcessor(max_workers=8)
+        self.deletion_manager = deletion_manager or DeletionManager()
+        self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager)
 
     def _load_existing_stats(self):
         stats = {}
@@ -30,17 +34,32 @@ class VideoStatsManager:
                 stats[key] = row
         return stats
 
-    def create_stats(self):
+    def create_stats(self, include_snippets=True):
+        """
+        Creates stats for all media files and optionally snippet files.
+        """
         all_media_csv = gather_all_media(refresh=True)
         if not all_media_csv or not os.path.exists(all_media_csv):
             logger.error_logs("All media CSV not found or failed to generate.")
             return
 
         files_to_process = []
+
         with open(all_media_csv, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 file_path = normalise_path(os.path.join(row["Source Folder"], row["File Name"]))
+                if not os.path.exists(file_path):
+                    continue
+                file_size = str(os.path.getsize(file_path))
+                key = (os.path.basename(file_path), file_size)
+                if key not in self.stats:
+                    files_to_process.append(file_path)
+
+        if include_snippets and os.path.exists(SNIPPETS_HISTORY_CSV):
+            # snippets_manager = SnippetsManager()
+            for snippet in self.snippets_manager.get_all_snippets():
+                file_path = normalise_path(snippet["Output File"])
                 if not os.path.exists(file_path):
                     continue
                 file_size = str(os.path.getsize(file_path))
@@ -123,12 +142,17 @@ class VideoStatsManager:
         If file_paths is provided, only return verticals among them.
         """
         vertical = []
-        check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+        # check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+        check_set = {os.path.basename(p):normalise_path(p) for p in file_paths} if file_paths else None
+
 
         for row in self.stats.values():
             if row.get("Orientation") == "Vertical":
-                if check_set is None or normalise_path(row["File Path"]) in check_set:
-                    vertical.append(row["File Path"])
+                # if check_set is None or normalise_path(row["File Path"]) in check_set:
+                if check_set is None or os.path.basename(row["File Path"]) in check_set:
+                    # vertical.append(row["File Path"])
+                    vertical.append(check_set[os.path.basename(row["File Path"])])
+
         return vertical
 
     def get_horizontal_videos(self, file_paths=None):
@@ -137,12 +161,16 @@ class VideoStatsManager:
         If file_paths is provided, only return horizontals among them.
         """
         horizontal = []
-        check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+        # check_set = {normalise_path(p) for p in file_paths} if file_paths else None
+        check_set = {os.path.basename(p): normalise_path(p) for p in file_paths} if file_paths else None
+
 
         for row in self.stats.values():
             if row.get("Orientation") == "Horizontal":
-                if check_set is None or normalise_path(row["File Path"]) in check_set:
-                    horizontal.append(row["File Path"])
+                # if check_set is None or normalise_path(row["File Path"]) in check_set:
+                if check_set is None or os.path.basename(row["File Path"]) in check_set:
+                    # horizontal.append(row["File Path"])
+                    horizontal.append(check_set[os.path.basename(row["File Path"])])
         return horizontal
 
     def refresh_stats(self, file_path, file_size=None):
