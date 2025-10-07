@@ -3,16 +3,19 @@ import csv
 import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
+from associations_manager import FileAssociator
 from custom_messagebox import showerror
-from deletion_manager import DeletionManager
 from player_constants import (
     SNIPPETS_HISTORY_CSV, 
     VIDEO_STATS_CSV,
     Colors
 )
 from static_methods import (
-    convert_bytes, 
-    get_file_transfer_history, 
+    build_transfer_graph,
+    convert_bytes,
+    get_all_related_paths_multiple, 
+    get_file_transfer_history,
+    get_related_targets, 
     get_screenshots_for_file,
     natural_sort_iterables,
     normalise_path, 
@@ -29,11 +32,17 @@ from notes_manager import NotesManager
 from description_manager import DescriptionManager
 from stats_manager import VideoStatsManager
 from snippets_manager import SnippetsManager
+from fingerprint_manager import MediaFingerprintManager
+from deletion_manager import DeletionManager
+
 
 class PropertiesWindow(tk.Toplevel):
     def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, 
-                 description_manager=None, deletion_manager=None, snippets_manager=None,stats_manager=None, trimmed_segments=None):
+                 description_manager=None, deletion_manager=None, snippets_manager=None,
+                 stats_manager=None, trimmed_segments=None,
+                 association_manager=None, fingerprint_manager=None):
         super().__init__(parent)
+        self.withdraw()
         self.parent = parent
         self.file_path = file_path
         self.category_manager = category_manager or CategoryManager()
@@ -43,6 +52,8 @@ class PropertiesWindow(tk.Toplevel):
         self.deletion_manager = deletion_manager or DeletionManager()
         self.stats_manager = stats_manager or VideoStatsManager()
         self.snippets_manager = snippets_manager or SnippetsManager()
+        self.association_manager = association_manager or FileAssociator(deletion_manager=self.deletion_manager)
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
 
         self.trimmed_segments = trimmed_segments or {}
         self._setup_styles()
@@ -52,16 +63,16 @@ class PropertiesWindow(tk.Toplevel):
         self.maxsize(1000, 600)
         self.configure(bg=self.colors['bg_primary'])
         self.transient(self.parent)
-        self.grab_set()
+        # self.grab_set()
         self._center_window(self, 1000, 600)
-        self._show_properties_window()
+        self.properties_data = None
+        # self._show_properties_window()
 
     def _setup_styles(self):
         self.colors = {
             'bg_primary': Colors.PLAIN_BLACK,     
             'bg_secondary': '#1A1F26',    
-            'bg_card': '#252B35',        
-            # 'bg_hover': '#2D3441',  
+            'bg_card': '#252B35',     
             'bg_hover': Colors.BLACK_HOVER,      
             'accent': '#dc3545',          
             'accent_hover': '#c82333',    
@@ -72,35 +83,114 @@ class PropertiesWindow(tk.Toplevel):
             'success': Colors.SUCCESS_GREEN,        
             'warning': Colors.WARNING_ORANGE,        
         }
+    
+    def preload_properties(self):
+        """Preload all properties data in the background"""
+        try:
+            file_exists = os.path.isfile(self.file_path)
+            if not file_exists:
+                deleted_notice = True
+                file_size = self.deletion_manager.get_deleted_file_size(self.file_path)
+            else:
+                deleted_notice = False
+                file_size = os.path.getsize(self.file_path)
+
+            self.file_key = (os.path.basename(self.file_path), str(file_size))
+            graph = build_transfer_graph()
+            targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
+            related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
+            stats = self._get_video_stats()
+            screenshots = self._get_screenshots(related_paths) 
+            snippets = self._get_video_snippets(related_paths)
+            categories = self.category_manager.get_file_categories(self.file_path)
+            is_favorite = self.favorites_manager.check_favorites(self.file_path)
+            watch_stats = get_watch_stats_for_filenames(related_paths)
+            note_data = self.notes_manager.get_note(self.file_path)
+            related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
+            current_desc = self.description_manager.get_description(self.file_path)
+            path_info = self.fingerprint_manager.get_path_info_by_file(self.file_path)
+
+            self.properties_data = {
+                'deleted_notice': deleted_notice,
+                'stats': stats,
+                'screenshots': screenshots,
+                'snippets': snippets,
+                'categories': categories,
+                'is_favorite': is_favorite,
+                'related_paths': related_paths,
+                'watch_stats': watch_stats,
+                'note_data': note_data,
+                'related_descs': related_descs,
+                'current_desc': current_desc,
+                'path_info': path_info
+            }
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error preloading properties: {e}")
+            return False
+        
+    def show_properties(self):
+        """Show the properties window with preloaded or newly loaded data"""
+        if self.properties_data:
+            self._build_ui(**self.properties_data)
+            self.deiconify()
+        else:
+            self._show_properties_window()
+            self.deiconify()
 
     def _show_properties_window(self):
-        # if os.path.isdir(self.file_path):
-        #     messagebox.showinfo("Folder Selected", "The selected item is a folder. Please select a file.")
-        #     return
 
-        file_exists = os.path.isfile(self.file_path)
-        if not file_exists:
-            deleted_notice = True
-            file_size = self.deletion_manager.get_deleted_file_size(self.file_path)
-        else:
-            deleted_notice = False
-            file_size = os.path.getsize(self.file_path)
+        def worker():
+            try:
+                file_exists = os.path.isfile(self.file_path)
+                if not file_exists:
+                    deleted_notice = True
+                    file_size = self.deletion_manager.get_deleted_file_size(self.file_path)
+                else:
+                    deleted_notice = False
+                    file_size = os.path.getsize(self.file_path)
 
-        self.file_key = (os.path.basename(self.file_path), str(file_size))
-        related_paths = get_all_related_paths(self.file_path)
-        stats = self._get_video_stats()
-        screenshots = self._get_screenshots(related_paths)
-        snippets = self._get_video_snippets(related_paths)
-        categories = self.category_manager.get_file_categories(self.file_path)
-        is_favorite = self.favorites_manager.check_favorites(self.file_path)
-        watch_stats = get_watch_stats_for_filenames(related_paths)
-        note_data = self.notes_manager.get_note(self.file_path)
-        related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
-        current_desc = self.description_manager.get_description(self.file_path)
+                self.file_key = (os.path.basename(self.file_path), str(file_size))
+                graph = build_transfer_graph()
+                targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
+                related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
+                stats = self._get_video_stats()
+                screenshots = self._get_screenshots(related_paths) 
+                snippets = self._get_video_snippets(related_paths)
+                categories = self.category_manager.get_file_categories(self.file_path)
+                is_favorite = self.favorites_manager.check_favorites(self.file_path)
+                watch_stats = get_watch_stats_for_filenames(related_paths)
+                note_data = self.notes_manager.get_note(self.file_path)
+                related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
+                current_desc = self.description_manager.get_description(self.file_path)
+                path_info = self.fingerprint_manager.get_path_info_by_file(self.file_path)
+
+
+                if self.winfo_exists():
+                    self.after(0, lambda: self._build_ui( deleted_notice, stats, screenshots, snippets,
+                        categories, is_favorite, related_paths, watch_stats,
+                        note_data, related_descs, current_desc, path_info
+                    ))
+            except Exception as e:
+                if self.winfo_exists():
+                    self.after(0, lambda: self._handle_worker_error(str(e)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _handle_worker_error(self, error_msg):
+        """Handle any errors that occur in the worker thread"""
+        showerror(self, "Error", f"Failed to load properties:\n{error_msg}")
+        self._close_window()
+
+    def _build_ui(self, deleted_notice, stats, screenshots, snippets,
+                categories, is_favorite, related_paths, watch_stats,
+                note_data, related_descs, current_desc, path_info):
 
         main_container = tk.Frame(self, bg=self.colors['bg_primary'])
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
-        self._create_header(main_container, stats, screenshots)
+        self._create_header(main_container, stats, screenshots, path_info)
 
         if deleted_notice:
             warning_label = tk.Label(
@@ -113,8 +203,11 @@ class PropertiesWindow(tk.Toplevel):
             )
             warning_label.pack(fill="x", pady=(0, 10), padx=10)
 
-        self._create_scrollable_content(main_container, stats, screenshots, snippets, categories,
-                                         is_favorite, related_paths, watch_stats, note_data, related_descs, current_desc)
+        self._create_scrollable_content(
+            main_container, stats, screenshots, snippets, categories,
+            is_favorite, related_paths, watch_stats, note_data,
+            related_descs, current_desc
+        )
         self._bind_window_events()
 
     def _get_screenshots(self, file_paths):
@@ -126,7 +219,7 @@ class PropertiesWindow(tk.Toplevel):
         return natural_sort_iterables(screenshots)
 
 
-    def _create_header(self, parent, stats, screenshots):
+    def _create_header(self, parent, stats, screenshots, path_info):
         header_frame = tk.Frame(parent, bg=self.colors['bg_card'], relief="flat", bd=0)
         header_frame.pack(fill="x", pady=(0, 15))
         
@@ -173,9 +266,12 @@ class PropertiesWindow(tk.Toplevel):
             bg=self.colors['bg_card'],
             fg=self.colors['text_secondary']
         ).pack(side="left")
+        
+        path_info_frame = tk.Frame(info_frame, bg=self.colors['bg_card'])
+        path_info_frame.pack(fill="x")
 
         path_label = tk.Label(
-            info_frame,
+            path_info_frame,
             text=os.path.dirname(self.file_path),
             font=("Segoe UI", 10),
             bg=self.colors['bg_card'],
@@ -185,6 +281,27 @@ class PropertiesWindow(tk.Toplevel):
             anchor="w"
         )
         path_label.pack(fill="x")
+
+        if path_info:
+            unique_id_label = tk.Label(
+                path_info_frame,
+                text=f"Unique ID: {path_info['unique_id']}",
+                font=("Segoe UI", 8, "italic"),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted'],
+                anchor="w"
+            )
+            unique_id_label.pack(fill="x")
+
+            index_hash_label = tk.Label(
+                path_info_frame,
+                text=f"Index Hash: {path_info['index_hash']}",
+                font=("Segoe UI", 9, "italic"),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted'],
+                anchor="w"
+            )
+            index_hash_label.pack(fill="x")
 
     def _create_thumbnail(self, parent, screenshots):
         thumb_container = tk.Frame(parent, bg=self.colors['bg_secondary'], relief="flat", bd=0)
@@ -334,7 +451,8 @@ class PropertiesWindow(tk.Toplevel):
 
         self._desc_label.bind("<Double-Button-1>", switch_to_entry)
         self._desc_entry.bind("<FocusOut>", save_description)
-        self._desc_entry.bind("<Control-Return>", save_description)
+        self._desc_entry.bind("<Control-S>", save_description)
+        self._desc_entry.bind("<Control-s>", save_description)
 
         for path, desc in related_descs.items():
             if path != self.file_path:
@@ -785,7 +903,10 @@ class PropertiesWindow(tk.Toplevel):
                             favorites_manager = self.favorites_manager,
                             category_manager=self.category_manager,
                             notes_manager=self.notes_manager,
-                            trimmed_segments=self.trimmed_segments
+                            trimmed_segments=self.trimmed_segments,
+                            snippets_manager=self.snippets_manager,
+                            associations_manager=self.association_manager,
+                            deletion_manager=self.deletion_manager
                         )
                         app.update_video_progress()
                         app.lift()
@@ -986,4 +1107,8 @@ class PropertiesWindow(tk.Toplevel):
         self.after(0, do_close)
 
 if __name__ == "__main__":
-    print(dir(PropertiesWindow))
+    root = tk.Tk()
+    # root.withdraw()
+    test_file = r"C:\Path\To\Your\Video.mp4" 
+    pw = PropertiesWindow(root, test_file)
+    pw.mainloop()
