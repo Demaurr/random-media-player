@@ -3,6 +3,7 @@ import shutil
 import csv
 from datetime import datetime
 from description_manager import DescriptionManager
+from fingerprint_manager import MediaFingerprintManager
 from player_constants import FILE_TRANSFER_LOG, LOG_PATH
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
@@ -12,22 +13,28 @@ from category_manager import CategoryManager
 from stats_manager import VideoStatsManager
 from file_loader import VideoFileLoader
 from notes_manager import NotesManager
+from task_manager import TaskManager
 import threading
 
 
 class FileManager:
     def __init__(self, parent_window=None, favorites_manager=None, deletion_manager=None,
-            category_manager=None, video_stats_manager=None, notes_manager=None, description_manager=None):
+            category_manager=None, video_stats_manager=None, notes_manager=None, description_manager=None,
+            fingerprint_manager=None, task_manager=None):
         self.log_file = FILE_TRANSFER_LOG
+        
         self.favorites = favorites_manager or FavoritesManager()
         self.deletes = deletion_manager or DeletionManager()
+        if parent_window:
+            self.deletes.set_parent_window(parent_window)
         self.categories = category_manager or CategoryManager()
         self.video_stats_manager = video_stats_manager or VideoStatsManager()
         self.file_loader = VideoFileLoader()
         self.notes_manager = notes_manager or NotesManager()
         self.description_manager = description_manager or DescriptionManager()
-        if parent_window:
-            self.deletes.set_parent_window(parent_window)
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.task_manager = task_manager or TaskManager()
+        
         self.logger = LogManager(LOG_PATH)
         create_csv_file(["Source Path", "Destination Path", "Status", "Date"], self.log_file)
 
@@ -73,7 +80,7 @@ class FileManager:
         ensure_folder_exists(dest_dir)
 
         if compare_folders(src, dest_dir):
-            print(f"[Skipping] (same folder): {src} → {dest_dir}")
+            print(f"[Skipping] (same folder): {src} -> {dest_dir}")
             return None
 
         filename = os.path.basename(src)
@@ -95,7 +102,8 @@ class FileManager:
             self._update_categories,
             self._update_stats,
             self._update_notes_key,
-            self._update_description
+            self._update_description,
+            self._update_fingerprint_path,
             # self._reload_folder_async,
         ]:
             try:
@@ -137,6 +145,18 @@ class FileManager:
         if self.notes_manager:
             self.notes_manager.update_note_key(old_src, new_src)
 
+    def _update_fingerprint_path(self, old_src, new_src):
+        """
+        Update the file path in MediaFingerprintManager if the file has a fingerprint entry.
+        """
+        if not hasattr(self, "fingerprint_manager"):
+            return
+
+        entry = self.fingerprint_manager.get_path_info_by_file(old_src)
+        if entry:
+            unique_id = entry["unique_id"]
+            self.fingerprint_manager.update_path_info_by_id(unique_id, new_src)
+
     def _reload_folder_async(self, old_src, new_src):
         dest_folder = os.path.dirname(new_src)
         threading.Thread(
@@ -161,18 +181,10 @@ class FileManager:
                 any_success = True
 
         folders_to_reload = [normalise_path(dest_folder)] + list(src_folders)
-        # print(folders_to_reload)
         if any_success:
-            threading.Thread(
-                target=self.file_loader.add_folder_data_csv,
-                args=(folders_to_reload,),
-                daemon=True
-            ).start()
-            
-            threading.Thread(
-                target=self.video_stats_manager.create_stats, 
-                daemon=True
-            ).start()
+            self.task_manager.add_task(self.file_loader.add_folder_data_csv, folders_to_reload, threaded=True)
+            self.task_manager.add_task(self.video_stats_manager.create_stats, threaded=True)
+            self.task_manager.add_task(self.fingerprint_manager.flush, threaded=True)
 
 
     def log_transfer(self, src, dest, action="MOVED"):
