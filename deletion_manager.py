@@ -1,5 +1,6 @@
 import os
 import csv
+import tkinter as tk
 from send2trash import send2trash
 from tkinter import filedialog
 from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists
@@ -11,12 +12,14 @@ import shutil
 from custom_messagebox import showinfo, showwarning, showerror, askyesno
 
 class DeletionManager:
-    def __init__(self, fav_manager=None):
+    def __init__(self, fav_manager=None, gui_parent=None):
         self.delete_csv = DELETE_FILES_CSV  
         self.fav_manager = fav_manager or FavoritesManager(FAV_FILES) 
         self.logger = LogManager(LOG_PATH)
         self.deletion_files = self.read_csv_file()
+        self.gui_parent = gui_parent
         self.parent_window = None
+        self.message_window = self.parent_window
 
     def set_parent_window(self, parent):
         """Set the parent window for message boxes."""
@@ -62,7 +65,7 @@ class DeletionManager:
     def mark_for_deletion(self, video_file, status="ToDelete", skip_confirmation=False, commit=True):
         video_file = normalise_path(video_file)
         if not os.path.exists(video_file):
-            showerror(self.parent_window, "Error", f"File not found: {video_file}")
+            showerror(self.message_window, "Error", f"File not found: {video_file}")
             return
 
         try:
@@ -73,7 +76,7 @@ class DeletionManager:
                 existing_status = self.deletion_files[video_file]['status']
                 if existing_status == "ToDelete":
                     confirm_delete = askyesno(
-                        self.parent_window,
+                        self.message_window,
                         "File Already Marked",
                         f"{video_file} is already marked. Delete now?"
                     ) if not skip_confirmation else True
@@ -91,7 +94,7 @@ class DeletionManager:
 
         except Exception as e:
             self.logger.error_logs(f"Error marking {video_file} for deletion: {e}")
-            showerror(self.parent_window, "Error", f"Error marking {video_file} for deletion: {e}")
+            showerror(self.message_window, "Error", f"Error marking {video_file} for deletion: {e}")
 
         if commit:
             self.write_csv_file(self.deletion_files)
@@ -113,7 +116,7 @@ class DeletionManager:
                 del self.deletion_files[video_file]
                 self.logger.update_logs('[REMOVED FROM DELETION]', video_file)
             elif existing_status == "Deleted":
-                showinfo(self.parent_window, "Already Deleted",
+                showinfo(self.message_window, "Already Deleted",
                         f"{video_file} is already deleted and cannot be undeleted.")
 
         self.commit_changes()
@@ -122,10 +125,10 @@ class DeletionManager:
         """Deletes files marked for deletion, offering options skipping for files in favorites."""
 
         if not skip_confirmation:
-            confirm_delete = askyesno(self.parent_window, "Confirm Deletion",
+            confirm_delete = askyesno(self.message_window, "Confirm Deletion",
                                     "Are you sure you want to delete all marked files?")
             if not confirm_delete:
-                showinfo(self.parent_window, "Skipped", "Skipping Files marked for deletion.")
+                showinfo(self.message_window, "Skipped", "Skipping Files marked for deletion.")
                 return
 
         for file_path, metadata in list(self.deletion_files.items()):
@@ -137,7 +140,7 @@ class DeletionManager:
                         self.deletion_files[file_path]['status'] = "Deleted"
 
         self.commit_changes()
-        showinfo(self.parent_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
+        showinfo(self.message_window, "Deletion Complete", "All 'ToDelete' files have been processed.")
 
     def check_deleted(self):
         """Check if files marked as 'Deleted' are still present in the file system."""
@@ -159,7 +162,7 @@ class DeletionManager:
             self.logger.update_logs("[DELETED FILES UPDATED]",
                                     "Checked The Deleted Files Still Available.")
         else:
-            showinfo(self.parent_window, "No Updates",
+            showinfo(self.message_window, "No Updates",
                     "All files marked as 'Deleted' are no longer present in the file system.")
 
     def handle_favorites_move(self, file_path, file_status_dict):
@@ -167,11 +170,11 @@ class DeletionManager:
         if not self.fav_manager.check_favorites(file_path):
             return True
         
-        move_to_favorites = askyesno(self.parent_window, "File in Favorites", 
+        move_to_favorites = askyesno(self.message_window, "File in Favorites", 
                                                 f"{file_path} is in your favorites. Do you want to move it to the backup folder instead of deleting?")
         if move_to_favorites:
             default_favorites_folder = get_favs_folder()
-            use_default_folder = askyesno(self.parent_window, "Select Folder", 
+            use_default_folder = askyesno(self.message_window, "Select Folder", 
                                                     f"Do you want to move the file to the default folder: {default_favorites_folder}?")
 
             if use_default_folder:
@@ -195,7 +198,7 @@ class DeletionManager:
             return True
         
         skip_download = askyesno(
-            self.parent_window,
+            self.message_window,
             "File in Favorites",
             f"{file_path} is in your favorites.\nDo you want to skip deletion this file?"
         )
@@ -230,7 +233,7 @@ class DeletionManager:
             file_status_dict[file_path]["status"] = "Deleted"
         self.logger.update_logs(f"[DELETED] from Favorites", file_path)
 
-    def delete_file(self, file_path, file_status_dict, handle_favs=True):
+    def delete_file(self, file_path, file_status_dict, handle_favs=True, retry=False):
         """Deletes a file by moving it to the recycle bin, checking if it's in favorites first."""
         try:
             if handle_favs:
@@ -242,9 +245,21 @@ class DeletionManager:
             print(f"[FILE DELETED] {file_path} has been deleted.")
             self.logger.update_logs('[FILE DELETED]', file_path)
             return True
+        
+        except tk.TclError as e:
+            if "bad window path name" in str(e):
+                if not retry:
+                    print("Updated the parent window reference due to TclError.")
+                    self.parent_window = getattr(self, "gui_parent", None)
+                    self.message_window = self.parent_window
+                    return self.delete_file(file_path, file_status_dict, handle_favs, retry=True)
+                else:
+                    self.logger.error_logs(f"TclError persisted after retry for {file_path}: {e}")
+            else:
+                raise e
             
         except Exception as e:
-            self.logger.error_logs(f'Error deleting {file_path}: {e}')
+            self.logger.error_logs(f'Error deleting {file_path} in delete_file: {e}')
             return False
 
     def update_file_name_in_csv(self, old_name, new_name):
