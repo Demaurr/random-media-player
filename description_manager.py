@@ -6,16 +6,19 @@ import datetime
 from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH, FILE_TRANSFER_LOG
 from static_methods import create_csv_file, normalise_path
 from logs_writer import LogManager
+from associations_manager import FileAssociator
 
 logger = LogManager(DESCRIPTION_LOG_PATH)
 
 class DescriptionManager:
-    def __init__(self, csv_path=DESCRIPTION_CSV):
+    def __init__(self, csv_path=DESCRIPTION_CSV, association_manager=None, deletion_manager=None):
         self.csv_path = csv_path
         self.descriptions = {}
+        self.association_manager = association_manager or FileAssociator(deletion_manager=deletion_manager)
         create_csv_file(headers=["video_path", "size", "description", "timestamp"], filename=csv_path)
         self._load_descriptions()
         self.graph = self.build_graph()
+
 
     def _load_descriptions(self):
         if not os.path.exists(self.csv_path):
@@ -80,7 +83,8 @@ class DescriptionManager:
         Return all descriptions for paths related to the given file.
         Uses the transfer log graph to collect connected paths.
         """
-        related_paths = self.get_related_paths(target_path)
+        related_paths = self.get_related_paths(target_path)\
+            .union(self.association_manager.get_targets(target_path, association_type=["duplicate", "descriptions"]))
         descs = {}
         for path in related_paths:
             descs[path] = self.get_description(path)
@@ -127,6 +131,67 @@ class DescriptionManager:
                     results.update(self.get_related_paths(p))
 
         return list(results)
+    
+    def search_description_by_keys_advanced(
+        self, 
+        query, 
+        allowed_paths, 
+        also_related=True, 
+        match_threshold=0.7
+    ):
+        """
+        Multi-field, token-based search across descriptions, filenames, and metadata.
+
+        Args:
+            query (str): The text to search for (split into words).
+            allowed_paths (list): Restrict search to these paths (and optionally related ones).
+            also_related (bool): Include related paths in the search.
+            match_threshold (float): Minimum fraction of query words that must match.
+
+        Returns:
+            list[str]: Matching file paths.
+        """
+        query_words = query.lower().split()
+        if not query_words:
+            return []
+
+        expanded_paths = set()
+        for path in allowed_paths:
+            related = self.get_related_paths(path)
+            expanded_paths.update(related)
+
+        results = []
+        checked_paths = set()
+
+        for path in expanded_paths:
+            if path in checked_paths:
+                continue
+            checked_paths.add(path)
+
+            data = self.descriptions.get(path)
+            if not data:
+                continue
+
+            searchable_text = " ".join([
+                os.path.basename(path),
+                data.get("description", ""),
+                str(data.get("size", "")),
+                str(data.get("timestamp", "")),
+            ]).lower()
+
+            match_count = sum(1 for word in query_words if word in searchable_text)
+            match_ratio = match_count / len(query_words)
+
+            if match_ratio >= match_threshold:
+                results.append(path)
+
+                if also_related:
+                    results.extend(self.get_related_paths(path))
+
+        seen = set()
+        final_results = [p for p in results if not (p in seen or seen.add(p))]
+
+        return final_results
 
     def update_video_path(self, old_path, new_path):
         """
@@ -142,7 +207,7 @@ class DescriptionManager:
             logger.error_logs(f"New path already exists in descriptions: {new_path}")
             return False
 
-        self.descriptions[new_path] = self.descriptions[old_path].copy()
+        self.descriptions[new_path] = self.descriptions[old_path].pop()
 
         self.descriptions[new_path]["timestamp"] = datetime.datetime.now().isoformat()
 

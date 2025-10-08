@@ -12,12 +12,12 @@ except ImportError:
 
 from datetime import datetime
 from logs_writer import LogManager
-from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_FOLDER, SKIP_FOLDERS
+from player_constants import CSV_FOLDER, LOG_PATH, SCREENSHOTS_CSV, SCREENSHOTS_FOLDER, SKIP_FOLDERS
 
 class VideoFileLoader:
     """A class for loading video files from folders or CSV files."""
 
-    def __init__(self, csv_folder=None, media_extensions=[".avi", ".mov",".mp4", ".mkv", ".m4v", ".webm", ".wmv", ".flv"]):
+    def __init__(self, csv_folder=None, media_extensions=[".avi", ".mov",".mp4", ".mkv", ".m4v", ".webm", ".wmv", ".flv", ".gif"]):
         """
         Initializes the VideoFileLoader.
 
@@ -32,11 +32,14 @@ class VideoFileLoader:
         self.refresh = []
         self.logger = LogManager(LOG_PATH)
         self.total_size_in_bytes = 0
+        self.updated = False
 
     @staticmethod
-    def load_image_files():
+    def load_image_files(create_csv=True):
         stats = filestatser.FileStatsCollector(SCREENSHOTS_FOLDER, media_extensions=[".jpeg", ".jpg", ".PNG", ".png", ".JPG"], all_files=False)
-        image_files = [file["Source Folder"] + "/" + file["File Name"] for file in stats.file_stats]
+        image_files = [file["Source Folder"] + "\\" + file["File Name"] for file in stats.file_stats]
+        if create_csv:
+            stats.generate_file_stats_csv(SCREENSHOTS_CSV)
         return image_files
 
     @staticmethod
@@ -106,6 +109,7 @@ class VideoFileLoader:
                 stats.generate_file_stats_csv(csv_path=testing_csv_path)
                 self.add_to_csv_file(folder, testing_csv_path)
                 csv_files.append(testing_csv_path)
+            self.updated = True
             return csv_files
         except Exception as e:
             print(f"An error occurred while storing file data: {e}")
@@ -127,6 +131,7 @@ class VideoFileLoader:
                 stats.generate_file_stats_csv(csv_path=csv_file)
                 # Update CSV path in Log_Folders.csv
                 self.add_to_csv_file(folder, csv_file)
+                self.updated = True
         except Exception as e:
             print(f"An error occurred while updating folder data CSV: {e}")    
 

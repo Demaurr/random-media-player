@@ -192,7 +192,7 @@ def gather_all_media(refresh=False):
         ]
 
         if not os.path.exists(LOG_FOLDERS_CSV):
-            # create_csv_file(headers=["Folder Path", "Csv Path", "Date"], filename=LOG_FOLDERS_CSV)
+            create_csv_file(headers=["Folder Path", "Csv Path", "Date"], filename=LOG_FOLDERS_CSV)
             create_csv_file(headers=HEADER, filename=OUTPUT_CSV)
             return OUTPUT_CSV
 

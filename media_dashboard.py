@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
+from custom_messagebox import showerror
 from player_constants import DEMO_WATCHED_HISTORY
 from static_methods import normalise_path, sort_treeview_column
 from category_manager import CategoryManager
@@ -147,17 +148,14 @@ class DashboardWindow():
         try:
             df = pd.read_csv(self.csv_path)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load CSV: {e}")
+            showerror("Error", f"Failed to load CSV: {e}")
             return
 
-        # --- Data Preparation ---
-        # Fix durations
         for col in [COL_TOTAL_DURATION, COL_DURATION_WATCHED]:
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: f"00:{x}" if isinstance(x, str) and len(x.split(':')) == 2 else x)
                 df[col] = pd.to_timedelta(df[col], errors="coerce")
         
-        # Dates
         if COL_DATE_WATCHED in df.columns:
             df[COL_DATE_WATCHED] = pd.to_datetime(df[COL_DATE_WATCHED], errors="coerce")
             df["date"] = df[COL_DATE_WATCHED].dt.date
@@ -169,12 +167,10 @@ class DashboardWindow():
         else:
             weekday_counts = pd.Series(dtype=int)
             
-        # Video name/folder
         if COL_FILE_NAME in df.columns:
             df["video_name"] = df[COL_FILE_NAME].apply(lambda x: os.path.basename(x) if isinstance(x, str) else "Unknown")
             df["primary_folder"] = df[COL_FILE_NAME].apply(lambda x: os.path.dirname(normalise_path(x)) if isinstance(x, str) else "Unknown")
 
-        # --- Stats ---
         total_duration = df[COL_TOTAL_DURATION].sum() if COL_TOTAL_DURATION in df.columns else pd.Timedelta(0)
         total_watch_time = df[COL_DURATION_WATCHED].sum() if COL_DURATION_WATCHED in df.columns else pd.Timedelta(0)
 
@@ -193,13 +189,11 @@ class DashboardWindow():
             info_items.append(("Rewatched Videos", str(rewatched)))
             info_items.append(("Unique Videos", str(unique_videos)))
 
-        # --- Top 10 Most Watched Videos by Duration ---
         if "video_name" in df.columns and COL_DURATION_WATCHED in df.columns:
             top_10_duration = df.groupby('video_name')[COL_DURATION_WATCHED].sum().nlargest(10).reset_index()
         else:
             top_10_duration = pd.DataFrame(columns=['video_name', COL_DURATION_WATCHED])
 
-        # --- Top 5 Most Watched Hours ---
         if "hour" in df.columns:
             top_5_hours = df['hour'].value_counts().head(5).reset_index()
             top_5_hours.columns = ['Hour', 'Count']
@@ -215,12 +209,10 @@ class DashboardWindow():
         else:
             video_count_by_date = pd.Series(dtype=int)
 
-        # --- Clear Scrollable Frames ---
         for scroll_frame in [self.overview_scroll, self.folder_scroll, self.hour_scroll, self.weekday_scroll]:
             for widget in scroll_frame.scrollable_frame.winfo_children():
                 widget.destroy()
 
-        # --- Overview Tab ---
         overview_content = self.overview_scroll.scrollable_frame
         overview_left = tk.Frame(overview_content, bg="black")
         overview_right = tk.Frame(overview_content, bg="black")
@@ -863,8 +855,11 @@ class DashboardWindow():
             parent, columns=cols, show="headings", height=table_height, style="dashboardStyle.Treeview"
         )
         for col in cols:
-            tree.heading(col, text=col,
-                command=lambda: sort_treeview_column(tree, col, False))
+            tree.heading(
+                col,
+                text=col,
+                command=lambda c=col: sort_treeview_column(tree, c, False)
+            )
             tree.column(col, anchor="w", stretch=True, width=175)
         for _, rowdata in df.iterrows():
             tree.insert('', 'end', values=tuple(rowdata))
