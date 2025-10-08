@@ -33,13 +33,15 @@ from watch_dictionary import WatchDict
 from watch_history_logger import WatchHistoryLogger
 from snippets_manager import SnippetsManager
 from notes_manager import NotesManager
+from associations_manager import FileAssociator
 from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno
 
 
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
-                  notes_manager=None, snippets_manager=None, trimmed_segments=None):
+                  notes_manager=None, snippets_manager=None, trimmed_segments=None,
+                  associations_manager=None):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
@@ -51,6 +53,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
+        self.associations_manager = associations_manager or FileAssociator()
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
         self._precompute_trimmed_segments(video_files)
@@ -114,12 +117,13 @@ class MediaPlayerApp(tk.Toplevel):
         self.session_end = timeit.default_timer()
         self.stop()
         # tk.Tk.quit(self)
-        self.show_seassion_stats(self.get_stats())
-        if hasattr(self, 'media_player'):
-            self.media_player.stop()
-            self.media_player.release()
-        if hasattr(self, 'instance'):
-            self.instance.release()
+        self.show_session_stats(self.get_stats())
+        # if hasattr(self, 'media_player'):
+        #     self.media_player.stop()
+        #     self.media_player.release()
+        # if hasattr(self, 'instance'):
+        #     self.instance.release()
+        
         # self.deleter.set_parent_window(self.master)
         # self.destroy()
         # print("Closing window...")
@@ -456,6 +460,9 @@ class MediaPlayerApp(tk.Toplevel):
         subs_menu.add_command(label="Toggle Subtitles", command=self.toggle_subtitles)
         subs_menu.add_command(label="Next Subtitle Track", command=self.next_subtitle_track)
         subs_menu.add_command(label="Add Subtitle File...", command=self.add_subtitle)
+        self.context_menu.add_command(label="Add Notes", command=self.show_notes, accelerator="Shift + N")
+        self.context_menu.add_command(label="Add to Category", command=self.open_category_manager, accelerator="Shift + A")
+        self.context_menu.add_separator()
 
         self.context_menu.add_cascade(label="Audio Stereo", menu=audio_channel_menu)
         self.context_menu.add_cascade(label="Audio Tracks", menu=audio_track_menu)
@@ -469,9 +476,10 @@ class MediaPlayerApp(tk.Toplevel):
             label="Fast Trim (No Re-encode)",
             variable=self.fast_trim,
             onvalue=True,
-            offvalue=False
+            offvalue=False,
+            command=lambda: self.toggle_fast_trim(value=not self.fast_trim.get())
         )
-
+        
         self.bind("<Button-3>", self._show_context_menu)
         self.bind("<Button-2>", self._show_context_menu)
 
@@ -542,63 +550,82 @@ class MediaPlayerApp(tk.Toplevel):
 
     def _keybinding(self):
         """
-        All the keys Shortcuts binded into the player
+        All the key shortcuts bound into the player.
+        Automatically unbinds existing ones before rebinding.
         """
-        self.bind("<Shift-KeyPress-Left>", self.play_previous)
-        self.bind("<KeyPress-Left>", self.rewind)
-        self.bind("<KeyPress-space>", self.pause_video)
-        self.bind("<KeyPress-Right>", self.fast_forward)
-        self.bind("<Shift-KeyPress-Right>", self.play_next)
-        self.bind("<KeyPress-n>", self.play_next)
-        self.bind("<KeyPress-N>", self.play_next)
-        self.bind("<KeyPress-m>", self.toggle_mute)
-        self.bind("<KeyPress-M>", self.toggle_mute)
-        self.bind("<KeyPress-Up>", self.volume_increase)
-        self.bind("<KeyPress-Down>", self.volume_decrease)
-        self.bind("<KeyPress-f>", self.toggle_fullscreen)
-        self.bind("<KeyPress-F>", self.toggle_fullscreen)
-        self.bind("<Shift-KeyPress-S>", self.save_screenshot)
-        self.bind("<Shift-KeyPress-s>", self.save_screenshot)
-        self.bind("<Control-f>", self.add_to_favorites)
-        self.bind("<Control-F>", self.add_to_favorites)
-        self.bind("<Control-d>", self.remove_from_favorites)
-        self.bind("<Control-D>", self.remove_from_favorites)
-        self.bind("<KeyPress-x>", self.cycle_playback_speed)
-        self.bind("<KeyPress-X>", self.cycle_playback_speed)
-        self.bind("<Shift-KeyPress-X>", self.slow_playback_speed)
-        self.bind("<Shift-KeyPress-x>", self.slow_playback_speed)
-        self.bind("<Control-Right>", self.play_im_next)
-        self.bind("<Control-Left>", self.play_im_previous)
-        self.bind("<Delete>", self.delete_video)
-        self.bind('<Control-Shift-Delete>', self.remove_from_deletion)
-        self.bind("<Shift-KeyPress-a>", self.open_category_manager)
-        self.bind("<Shift-KeyPress-A>", self.open_category_manager)
-        self.bind("<KeyPress-a>", self.toggle_autoplay)
-        self.bind("<KeyPress-A>", self.toggle_autoplay)
-        self.bind("<Alt-t>", self.toggle_always_on_top)
-        self.bind("<Alt-T>", self.toggle_always_on_top)
-        self.bind("<F10>", self.toggle_always_on_top_minimized_only)
-        self.bind('<Control-S>', self.mark_start)
-        self.bind('<Control-s>', self.mark_start)
-        self.bind('<Control-E>', self.mark_end)
-        self.bind('<Control-e>', self.mark_end)
-        self.bind('<Shift-b>', self.add_subtitle)
-        self.bind('<Shift-B>', self.add_subtitle)
-        self.bind('<KeyPress-B>', self.toggle_subtitles)
-        self.bind('<KeyPress-b>', self.toggle_subtitles)
-        self.bind('<KeyPress-,>', self.decrease_sub_delay)
-        self.bind('<KeyPress-.>', self.increase_sub_delay)
-        self.bind('<Control-b>', self.next_subtitle_track)
-        self.bind('<Control-B>', self.next_subtitle_track)
-        self.bind("<Control-V>", self.next_audio_track)
-        self.bind("<Control-v>", self.next_audio_track)
-        self.bind('<KeyPress-l>', self.toggle_loop)
-        self.bind('<KeyPress-L>', self.toggle_loop)
-        self.bind('<Shift-KeyPress-n>', self.show_notes)
-        self.bind('<Shift-KeyPress-N>', self.show_notes)
-        self.bind('<Escape>', self._on_close)
-        self.bind("<KeyPress-q>", self.toggle_fast_trim)
-        self.bind("<KeyPress-Q>", self.toggle_fast_trim)
+        if hasattr(self, "_bindings"):
+            for seq, _ in self._bindings:
+                self.unbind(seq)
+        else:
+            self._bindings = []
+
+        self._bindings = [
+            ("<Shift-KeyPress-Left>", self.play_previous),
+            ("<KeyPress-Left>", self.rewind),
+            ("<KeyPress-space>", self.pause_video),
+            ("<KeyPress-Right>", self.fast_forward),
+            ("<Shift-KeyPress-Right>", self.play_next),
+            ("<KeyPress-n>", self.play_next),
+            ("<KeyPress-N>", self.play_next),
+            ("<KeyPress-m>", self.toggle_mute),
+            ("<KeyPress-M>", self.toggle_mute),
+            ("<KeyPress-Up>", self.volume_increase),
+            ("<KeyPress-Down>", self.volume_decrease),
+            ("<KeyPress-f>", self.toggle_fullscreen),
+            ("<KeyPress-F>", self.toggle_fullscreen),
+            ("<Shift-KeyPress-S>", self.save_screenshot),
+            ("<Shift-KeyPress-s>", self.save_screenshot),
+            ("<Control-f>", self.add_to_favorites),
+            ("<Control-F>", self.add_to_favorites),
+            ("<Control-d>", self.remove_from_favorites),
+            ("<Control-D>", self.remove_from_favorites),
+            ("<KeyPress-x>", self.cycle_playback_speed),
+            ("<KeyPress-X>", self.cycle_playback_speed),
+            ("<Shift-KeyPress-X>", self.slow_playback_speed),
+            ("<Shift-KeyPress-x>", self.slow_playback_speed),
+            ("<Control-Right>", self.play_im_next),
+            ("<Control-Left>", self.play_im_previous),
+            ("<Delete>", self.delete_video),
+            ("<Control-Shift-Delete>", self.remove_from_deletion),
+            ("<Shift-KeyPress-a>", self.open_category_manager),
+            ("<Shift-KeyPress-A>", self.open_category_manager),
+            ("<KeyPress-a>", self.toggle_autoplay),
+            ("<KeyPress-A>", self.toggle_autoplay),
+            ("<Alt-t>", self.toggle_always_on_top),
+            ("<Alt-T>", self.toggle_always_on_top),
+            ("<F10>", self.toggle_always_on_top_minimized_only),
+            ("<Control-S>", self.mark_start),
+            ("<Control-s>", self.mark_start),
+            ("<Control-E>", self.mark_end),
+            ("<Control-e>", self.mark_end),
+            ("<Shift-b>", self.add_subtitle),
+            ("<Shift-B>", self.add_subtitle),
+            ("<KeyPress-B>", self.toggle_subtitles),
+            ("<KeyPress-b>", self.toggle_subtitles),
+            ("<KeyPress-,>", self.decrease_sub_delay),
+            ("<KeyPress-.>", self.increase_sub_delay),
+            ("<Control-b>", self.next_subtitle_track),
+            ("<Control-B>", self.next_subtitle_track),
+            ("<Control-V>", self.next_audio_track),
+            ("<Control-v>", self.next_audio_track),
+            ("<KeyPress-l>", self.toggle_loop),
+            ("<KeyPress-L>", self.toggle_loop),
+            ("<Shift-KeyPress-n>", self.show_notes),
+            ("<Shift-KeyPress-N>", self.show_notes),
+            ("<Escape>", self._on_close),
+            ("<KeyPress-q>", self.toggle_fast_trim),
+            ("<KeyPress-Q>", self.toggle_fast_trim),
+        ]
+
+        for seq, func in self._bindings:
+            self.bind(seq, func)
+
+    def _unbind_keys(self):
+        """Unbind all keyboard shortcuts used in the player."""
+        if hasattr(self, "_bindings"):
+            for seq, _ in self._bindings:
+                self.unbind(seq)
+            self._bindings.clear()
 
     def show_notes(self, event=None):
         if not self.current_file:
@@ -855,7 +882,7 @@ class MediaPlayerApp(tk.Toplevel):
     def current_stats(self):
         # self.watched_videos.increment_duration_and_count(self.current_file, self.media_player.get_time())
         self.session_end = timeit.default_timer()
-        self.show_seassion_stats(self.get_stats(), for_current=True)
+        self.show_session_stats(self.get_stats(), for_current=True)
 
     def delete_video(self, event=None):
         """Marks the currently playing video for deletion."""
@@ -991,6 +1018,8 @@ class MediaPlayerApp(tk.Toplevel):
             self.play_next()
             self.random_select = True
         else:
+            current_index = self.video_files.index(self.current_file)
+            self.video_index = current_index + 1 if current_index < len(self.video_files) else 0
             self.play_next()
     
     def play_im_previous(self, event=None):
@@ -1004,6 +1033,8 @@ class MediaPlayerApp(tk.Toplevel):
             self.play_previous()
             self.random_select = True
         else:
+            current_index = self.video_files.index(self.current_file)
+            self.previous_file = self.video_files[current_index - 1] if current_index > 0 else self.video_files[len(self.video_files) - 1]
             self.play_previous()
         
 
@@ -1066,6 +1097,15 @@ class MediaPlayerApp(tk.Toplevel):
         Also handles potential VLC operation timeouts by creating a new VLC instance.
         """
         try:
+            if hasattr(self, 'media_player'):
+                self._saved_volume = self.media_player.audio_get_volume()
+                self._saved_mute_state = self.media_player.audio_get_mute()
+                self._saved_playback_rate = self.media_player.get_rate()
+            else:
+                self._saved_volume = 100
+                self._saved_mute_state = False
+                self._saved_playback_rate = 1.0
+
             def vlc_operations():
                 try:
                     if hasattr(self, 'media_player'):
@@ -1080,7 +1120,7 @@ class MediaPlayerApp(tk.Toplevel):
             
             vlc_thread = threading.Thread(target=vlc_operations, daemon=True)
             vlc_thread.start()
-            vlc_thread.join(timeout=1.5)
+            vlc_thread.join(timeout=2)
             
             if vlc_thread.is_alive():
                 print("VLC operations timed out, forcing continue...")
@@ -1090,6 +1130,14 @@ class MediaPlayerApp(tk.Toplevel):
                     self.instance = vlc.Instance("--aout=directsound", '--avcodec-hw=dxva2', '--file-caching=4000')
                     self._create_new_player()
                     print("Created a fresh VLC instance after timeout.")
+
+                    if hasattr(self, '_saved_volume'):
+                        self.media_player.audio_set_volume(self._saved_volume)
+                    if hasattr(self, '_saved_mute_state') and self._saved_mute_state:
+                        self.media_player.audio_toggle_mute()
+                    if hasattr(self, '_saved_playback_rate'):
+                        self.media_player.set_rate(self._saved_playback_rate)
+
                 except Exception as e:
                     print(f"Error while forcing new VLC instance: {e}")
                     self.logger.error_logs(f"Error while forcing new VLC instance: {e}")
@@ -1120,9 +1168,26 @@ class MediaPlayerApp(tk.Toplevel):
             self.show_marquee("🔇Muted" if not is_muted else "🔊 Unmuted")
             self.volume_bar.toggle_mute()
 
-    def toggle_fast_trim(self, event=None):
-        """Toggle fast trim mode on/off."""
-        self.fast_trim.set(not self.fast_trim.get())
+    def toggle_fast_trim(self, event=None, value=None):
+        """Toggle fast trim mode on/off, with warning when disabling."""
+        current_state = self.fast_trim.get() if value is None else value
+
+        if current_state:
+            confirm = askyesno(
+                self,
+                "Warning",
+                "Disabling Fast Trim will switch to re-encode mode.\n\n"
+                "This makes trimming very slow but more accurate.\n\n"
+                "Do you want to continue?"
+            )
+            if not confirm:
+                self.fast_trim.set(True)
+                return
+
+            self.fast_trim.set(False)
+        else:
+            self.fast_trim.set(True)
+
         if self.fast_trim.get():
             state = "enabled (copy mode, faster but less precise)"
         else:
@@ -1300,7 +1365,7 @@ class MediaPlayerApp(tk.Toplevel):
         print("Error occurred while playing the media.")
         self.destroy()
     
-    def show_seassion_stats(self, video_data, session_start=timeit.default_timer(), for_current=False):
+    def show_session_stats(self, video_data, session_start=timeit.default_timer(), for_current=False):
         """
         Displays statistics for watched videos in a separate window.
 
@@ -1308,12 +1373,22 @@ class MediaPlayerApp(tk.Toplevel):
             video_data (list): A list containing statistics for watched videos.
                             Each element in the list is a dictionary with keys 'File Name', 'Duration Watched', 'Count', and 'Folder'.
         """
+        start = session_start if self.session_start is None else self.session_start
+        session_time = self.session_end-start
+        # master = self.master
         if not for_current:
+            if hasattr(self, 'media_player'):
+                self.media_player.stop()
+                self.media_player.release()
+            if hasattr(self, 'instance'):
+                self.instance.release()
+            self._unbind_keys()
             self.destroy()
             self.quit()
+            for attr in list(vars(self)):
+                setattr(self, attr, None)
         root = tk.Tk()
-        start = session_start if self.session_start is None else self.session_start
-        app = VideoStatsApp(root, REPORTS_FOLDER, video_data, int(self.session_end-start), fg=self.fg_color, bg=self.bg_color, for_current=for_current)
+        VideoStatsApp(root, REPORTS_FOLDER, video_data, int(session_time), fg=Colors.PLAIN_WHITE, bg=Colors.PLAIN_BLACK, for_current=for_current)
         root.mainloop()
     
     def center_window(self):
@@ -1462,6 +1537,11 @@ class MediaPlayerApp(tk.Toplevel):
                 file_size=os.path.getsize(out_path),
                 video_format=os.path.splitext(out_path)[1][1:],
                 notes=""
+            )
+            self.associations_manager.add_association(
+                source_file=self.current_file,
+                target_file=out_path,
+                association_type="related"
             )
 
         except FileNotFoundError:
