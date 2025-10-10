@@ -180,7 +180,7 @@ class FileExplorerApp:
                     self.total_size = total_size
                     self.total_files = total_files
                     self.update_stats()
-                    if vf_loader.updated:
+                    if vf_loader.updated and folder_path_string != "":
                         self.update_stats_async()
                         vf_loader.updated = False
                     loading_win.destroy()
@@ -373,6 +373,27 @@ class FileExplorerApp:
         self.context_menu.add_command(label="Move to Recycle Bin", command=self.delete_selected_files, accelerator="Del")
         self.context_menu.add_command(label="Show Screenshots   ", command=self.show_screenshots_for_selected, accelerator="Shift+S")
         self.context_menu.add_command(label="Show Video Snippets   ", command=self.show_video_snippets_for_selected, accelerator="Shift+T")
+        duplicates_menu = tk.Menu(
+            self.context_menu,
+            tearoff=0,
+            font=("Segoe UI", 9),
+            foreground=Colors.PLAIN_WHITE,
+            background=Colors.BLACK_HOVER
+        )
+        duplicates_menu.add_command(
+            label="By Hash   ", 
+            command=lambda: self.show_duplicates_for_selected(mode="hash")
+        )
+        duplicates_menu.add_command(
+            label="By Duration", 
+            command=lambda: self.show_duplicates_for_selected(mode="duration")
+        )
+        duplicates_menu.add_command(
+            label="By Size   ", 
+            command=lambda: self.show_duplicates_for_selected(mode="size")
+        )
+        self.context_menu.add_cascade(label="Show Duplicates    ", menu=duplicates_menu)
+        
         self.context_menu.add_separator()
 
         convert_menu = tk.Menu(
@@ -400,26 +421,7 @@ class FileExplorerApp:
 
         self.context_menu.add_cascade(label="Favorites", menu=favorites_menu)
 
-        duplicates_menu = tk.Menu(
-            self.context_menu,
-            tearoff=0,
-            font=("Segoe UI", 9),
-            foreground=Colors.PLAIN_WHITE,
-            background=Colors.BLACK_HOVER
-        )
-        duplicates_menu.add_command(
-            label="By Hash   ", 
-            command=lambda: self.show_duplicates_for_selected(mode="hash")
-        )
-        duplicates_menu.add_command(
-            label="By Duration", 
-            command=lambda: self.show_duplicates_for_selected(mode="duration")
-        )
-        duplicates_menu.add_command(
-            label="By Size   ", 
-            command=lambda: self.show_duplicates_for_selected(mode="size")
-        )
-        self.context_menu.add_cascade(label="Show Duplicates    ", menu=duplicates_menu)
+        
 
         self.context_menu.add_command(label="Properties         ", command=self.show_properties, accelerator="Shift+P")
 
@@ -579,8 +581,8 @@ class FileExplorerApp:
     def show_loading_screen(self, message="Loading...", width=300, height=100):
         loading_win = tk.Toplevel(self.root)
         # loading_win.title("Loading...")
-        loading_win.overrideredirect(True)
-        loading_win.attributes("-topmost", True)
+        # loading_win.overrideredirect(True)
+        # loading_win.attributes("-topmost", True)
         loading_win.geometry(f"{width}x{height}")
         loading_win.configure(bg=Colors.PLAIN_BLACK)
         loading_win.transient(self.root)
@@ -1439,12 +1441,17 @@ class FileExplorerApp:
                     #     parts.append((size_text, {"foreground": "cyan"}))
                     text_display = file_path
                     text_display += f"\nSize - {convert_bytes(get_file_size(file_path))}" if self.entry.get() != "show categories" else ""
-                    descs = self.description_manager.get_all_related_descriptions(file_path)
-                    all_desc = " ".join([d for d in descs.values() if d])
+                    descs = self.description_manager.get_all_related_descriptions(file_path, latest_only=True).get("description", "")
+                    # all_desc = " ".join([d for d in descs.values() if d])
+                    all_desc = descs
                     if all_desc:
                         sentence = all_desc.split("\n")
                         short_desc = "\n".join(sentence[:10]) + ("..." if len(sentence) > 10 else "")
-                        text_display += f"\n\nDescription:\n{short_desc}"
+                        text_display += f"\n\n{short_desc}"
+                    
+                    categories = self.category_manager.get_file_categories(file_path)
+                    if categories:
+                        text_display += f"\nin-{categories}"
                         # parts.append(("\nDescription:\n", {"foreground": "orange", "font": ("Segoe UI", 9, "bold")}))
                         # parts.append((short_desc, {"foreground": "lightgray"}))
                         
@@ -1470,7 +1477,7 @@ class FileExplorerApp:
             return
 
         self._info_window = tk.Toplevel(self.root)
-        self._info_window.title("How to Use Random Media Player")
+        self._info_window.title("How to use this App")
         self._info_window.configure(bg="#222")
         self._info_window.geometry("600x500")
         self._info_window.resizable(False, False)
@@ -1699,7 +1706,9 @@ class FileExplorerApp:
             else:
                 # folder_paths = [folder.strip() for folder, csv in self.folders]
                 # msg = f"Refreshed {len(folder_paths)} folder(s)."
+                folder_paths = []
                 showerror(self.root, "No Selection", "Please select folders to refresh stats for.")
+                return
 
             self.refresh_folders(folder_paths, msg)
             
@@ -1888,7 +1897,7 @@ class FileExplorerApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def on_enter_pressed(self, event=None):
-        folder_path_string = self.entry.get()
+        folder_path_string = self.entry.get().strip()
         vf_loader = VideoFileLoader()
         self.reset_search_option()
         self.clean_memory(["video_files", "image_files", "categories"], mode="empty")
@@ -2081,7 +2090,7 @@ class FileExplorerApp:
                     matched = True
 
                 if matched:
-                    file_name = os.path.basename(file)
+                    file_name = os.path.basename(file) if self.entry.get() != "show categories" else file
                     file_list.append((file_name, file))
             
             # if top_level_only and matched_snippets_keys:

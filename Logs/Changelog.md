@@ -1,8 +1,77 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+---
 
-## **Version [3.5.0]** **2025-06-29**
+## **Version [3.6.3]** — *2025-10-10*
+
+### **Added**
+- fallback logic in *`FileExplorerApp`* to handle cases when no folder is selected during refresh operations.  
+- *`generate_batch_file.py`* to automatically create a `.bat` file for easily accessing the Analyser from anywhere.  
+- categories alongside descriptions and size in the **file_table** tooltip for more detailed info for the file.
+
+### **Changed**
+- Updated *`FileExplorerApp`* to use the new `latest_only=True` parameter, ensuring only the latest related description is displayed.  
+- Updated the method `get_all_related_descriptions()` in *`description_manager.py`* with an optional `latest_only` flag to fetch only the most recent description among related files.  
+- Modified the loading screen behavior in *`gui_main.py`* by disabling `overrideredirect` and `-topmost` attributes for smoother user interaction.  
+- Renamed the info window title from **“How to Use Random Media Player”** -> **“How to use this App”** for consistency.  
+- Improved tooltip positioning logic in *`tooltips.py`* to better handle screen edge alignment.  
+
+### **Fixed**
+- Prevented potential errors when no folders are selected during stats refresh in *`gui_main.py`*.  
+
+## **Version [3.6.0]** — *2025-10-08*
+
+### Added
+- **FileAssociationsManager** module for managing file-type relationships and video-to-note/snippet linking.
+- **Associations integration** in `VideoPlayer`, allowing direct association of current media with notes, snippets, or other files.
+- **Properties Window** to display detailed information about the selected video file (size, duration, codec, resolution, etc.). Along with related snippets, screenshots, descriptions and notes.
+- **File Category display** within the File Explorer, enabling quick grouping and browsing of files by category.
+- **Category-based file viewer** implemented via `display_category_files`, allowing multi-category display and contextual navigation.
+- **Enhanced Notes and Snippets Managers**:
+  - Added note creation from video position context.
+  - Integrated notes/snippets syncing with the associations system.
+  - Improved saving and retrieval of notes/snippets via unique file identifiers.
+- **dynamic tooltip enhancements**:
+  - Tooltips now adapt to screen boundaries and prevent clipping.
+  - Support for rich, multi-line tooltip text for better UI clarity.
+- Introduced **temporary instance lock system** to prevent multiple app instances from running simultaneously.
+- **multi-selection support** in file operations and folder-based stats visualization.
+- **"Fast Trim (No Re-encode)" toggle** with warning prompt when disabled, providing flexible snippet export control.
+- **"Audio Track toggle"** with shortcuts and change the stereo for the video using content menu.
+- **Unicode-based button icons** (Recycle, Duplicate, Split Stats, etc.) compatible across Windows 10/11 systems.
+- **split statistics by folder view** for selected files, showing visual breakdowns and category stats.
+- **Enhanced Search** for searching in everything and in category related detail, efficiently.
+
+### Changed
+- Refactored **VideoPlayer** initialization for improved modularity and reduced redundancy between managers.
+- Enhanced **Context Menus**:
+  - Added dynamic state management for Fast Trim, Favorites, and Associations.
+  - Improved organization and UX flow for file-level actions.
+- Updated **tooltip rendering system** to use centralized `show_tooltip` logic for uniform display.
+- Updated **category and search performance**:
+  - Optimized `refresh_categories` and `on_category_select` for faster rendering on large file directories.
+  - Improved caching and event handling for smoother navigation.
+- Refactored **file operation methods** to use the new association and category systems cohesively.
+- Enhanced **FileExplorerApp** structure for modularity and extensibility in handling new managers.
+- Increased **application stability** when switching between categories, loading media, or accessing external file dialogs.
+- UI layout refinements for videoplayer, properties windows, tooltips, and modal dialogs for a more cohesive dark theme experience.
+
+### Fixed
+- Multiple instance crashes by introducing a single-instance lock mechanism.
+- Tooltip misalignment and overflow on high-DPI screens.
+- Incorrect updates of favorites paths after file operations.
+- Snippets not syncing correctly with associated media files.
+- Context menu misbehavior when no file is selected.
+- Occasional lag when switching between categories or displaying file stats.
+- Window stacking issue where dialogs could appear behind the main window.
+- Volume and playback sync glitches introduced after snippet trimming.
+
+### Notes
+This release focuses on expanding **interconnected file management features**, **usability improvements**, and **interface enhancements**.  
+The addition of file associations and detailed property displays represents a step toward a fully contextual, media-aware experience.
+
+## **Version [3.5.0]** - *2025-06-29*
 
 ### Added
 - Subtitle support in videos, including speed management and dedicated keybindings.
@@ -24,7 +93,7 @@ All notable changes to this project will be documented in this file.
 - Autoplay settings now correctly update via keybinding.
 - Improved speed of `refresh_categories` and `on_category_select` methods for large file sets.
 
-## **Version [3.4.0]** **2025-06-03**
+## **Version [3.4.0]** - *2025-06-03*
 
 ### Added
 - Category management system for organizing and saving video playlists.
@@ -52,7 +121,7 @@ All notable changes to this project will be documented in this file.
 - Various minor issues related to video playback and UI responsiveness.
 - Error handling with improved user feedback and engagement.
 
-## **Version [3.3.0]** **2025-05-26**
+## **Version [3.3.0]** - *2025-05-26*
 
 ### Added
 - Messagebox in `deletion_manager` to display info if no updates are available.
@@ -77,7 +146,7 @@ All notable changes to this project will be documented in this file.
 - Bugs related to image displaying in `image_player`.
 - Bug of calculating the watch duration based on video duration even if the video is set to 2x.
 
-## **Version [3.2.6]** **2025-05-23**
+## **Version [3.2.6]** - *2025-05-23*
 ### Added
 - Icons for pause and resume actions on mouse leave for improved UI feedback.
 - Method for displaying previously used paths, replacing hard-coded logic.
@@ -92,7 +161,7 @@ All notable changes to this project will be documented in this file.
 - requirements.txt to include the `Pillow` library.
 - readme to include the instructions to download vlc Mediaplayer before use.
 
-## **Version [3.2.3]** **2025-05-22**
+## **Version [3.2.3]** - *2025-05-22*
 
 ### Added
 - Playback speed adjustments and keybindings for changing speed.
@@ -128,7 +197,7 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 - Updated documentation for new features and usage patterns.
 
-## **Version [3.1.0]** **2025-03-08**
+## **Version [3.1.0]** - *2025-03-08*
 
 ### Added
 - Landscape and Vertical file filtering using ffmpeg in get_aspect.py
@@ -147,7 +216,7 @@ All notable changes to this project will be documented in this file.
 - Spaces issues with the Paths (now strips paths for outer spaces)
 - Minor Bugs
 
-## **Version [3.0.2]** **2024-9-29**
+## **Version [3.0.2]** - *2024-9-29*
 
 ### Added
 - A new videotype **`.flv`**
@@ -177,7 +246,7 @@ All notable changes to this project will be documented in this file.
 - Deletion list wrting bugs in an event of an error.
 - Date format in the **Watched_History_Csv** to follow a consistent format.
 
-## **Version [2.7.4]** **2024-9-18**
+## **Version [2.7.4]** - *2024-9-18*
 
 ### Added 
 - Handling of deleting files that are in favorites
@@ -189,7 +258,7 @@ All notable changes to this project will be documented in this file.
 - Managing of Deletion Now It's Done Through separate **DeletionManager** from **`deletion_manager.py`**
 - Using of methods like ensure_folder_exists and other from ***`static_methods.py`***
 
-## **Version [2.7.2]** **2024-9-11**
+## **Version [2.7.2]** - *2024-9-11*
 
 ### Added
 - File position in the video title in videoplayer.
@@ -210,7 +279,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - the position of the play_images tag, now works fine with the '`CapShots`'.
 
-## **Version [2.5.0]** **2024-7-30**
+## **Version [2.5.0]** - *2024-7-30*
 
 ### Added
 - An Image Player to View Saved Image Captures from the Videos through the Class ImageViewer in `image_player.py`.
@@ -220,7 +289,7 @@ All notable changes to this project will be documented in this file.
 ### Updated
 - The on_double_click, on_search_pressed and on_enter_pressed methods to comply with the image viewing and searching options.
 
-## **Version [2.4.1]** **2024-06-15**
+## **Version [2.4.1]** - *2024-06-15*
 
 ### Added
 - A Functionality to Show Previously Recorded/Searched Paths For Ease of Displaying and Playing videos from it.
@@ -233,7 +302,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Displaying of Duration in the Marquee when user forwards or backwards a video. This now displayes the changed Duration Correctly.
 
-## **Version [2.3.0]** **2024-04-20**
+## **Version [2.3.0]** - *2024-04-20*
 
 ### Added
 - Added support for *.wmv* file-type.
@@ -249,7 +318,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Volume Controls in FullScreen Mode.
 
-## **Version [2.2.0]** **2024-04-14**
+## **Version [2.2.0]** - *2024-04-14*
 
 ### Added
 - `gui_main.py` file which doesn't require the passing of path through the cmd, instead the path can be provided through the input in the gui app.
@@ -261,7 +330,7 @@ All notable changes to this project will be documented in this file.
 - The setting of feedback. Now using vlc's **marquee** method to display this.
 - The Loading of Files by normalising paths with **\\** instead of **/**.
 
-## **Version [2.1.2]** **2024-03-22**
+## **Version [2.1.2]** - *2024-03-22*
 
 ### Added
 - functionality in `file_loader` to refresh `path(s)` if files are moved using **--update** after Path.
@@ -273,7 +342,7 @@ All notable changes to this project will be documented in this file.
 ### Bug Fixes
 - Fixed Closing  Mediaplayer after Current Stats Window is Closed.
 
-## **Version [2.1.1]** **2024-03-21**
+## **Version [2.1.1]** - *2024-03-21*
 
 ### Added
 - writing Logs in `file_loader.py` and `watch_history_logger`
@@ -283,7 +352,7 @@ All notable changes to this project will be documented in this file.
 - Resolved "after script" error in `videoplayer.py`. Might also stop Some Crashing related issues.
 
 
-## **Version [2.0.0]** **2024-03-19**
+## **Version [2.0.0]** - *2024-03-19*
 
 ### Added
 - Functionality to Save Favorites
@@ -323,6 +392,6 @@ All notable changes to this project will be documented in this file.
 - Implemented HTML summary generation for session statistics
 - Created project documentation (README.md, documentation.md)
 
-## **[Version 1.0.0]** **2024-03-09**
+## **[Version 1.0.0]** - *2024-03-09*
 - First official release of the Media Player Application
 

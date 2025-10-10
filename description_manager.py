@@ -78,7 +78,7 @@ class DescriptionManager:
         desc = self.descriptions.get(video_path)
         return desc.get("description", "") if desc else ""
     
-    def get_all_related_descriptions(self, target_path):
+    def get_all_related_descriptions_old(self, target_path):
         """
         Return all descriptions for paths related to the given file.
         Uses the transfer log graph to collect connected paths.
@@ -89,6 +89,62 @@ class DescriptionManager:
         for path in related_paths:
             descs[path] = self.get_description(path)
         return descs
+    
+    def get_all_related_descriptions(self, target_path, latest_only=False):
+        """
+        Return all or only the latest description among all paths related to the given file.
+        Uses the transfer log graph to collect connected paths.
+
+        Args:
+            target_path (str): The file path whose related descriptions are to be fetched.
+            latest_only (bool): If True, return only the most recent description.
+                                If False, return all related descriptions.
+        """
+        related_paths = self.get_related_paths(target_path).union(
+            self.association_manager.get_targets(target_path, association_type=["duplicate", "descriptions"])
+        )
+
+        descs = {}
+        latest_desc = None
+        latest_timestamp = None
+        latest_path = None
+
+        for path in related_paths:
+            data = self.descriptions.get(path)
+            if not data:
+                continue
+
+            desc = data.get("description", "")
+            ts_str = data.get("timestamp", "")
+
+            if not ts_str or not desc:
+                continue
+
+            descs[path] = {
+                "description": desc,
+                "timestamp": ts_str
+            }
+
+            try:
+                ts = datetime.datetime.fromisoformat(ts_str)
+            except Exception:
+                continue
+
+            if latest_timestamp is None or ts > latest_timestamp:
+                latest_timestamp = ts
+                latest_desc = desc
+                latest_path = path
+
+        if latest_only:
+            if latest_desc:
+                return {
+                    "latest_path": latest_path,
+                    "description": latest_desc,
+                    "timestamp": latest_timestamp.isoformat()
+                }
+            return {}
+        else:
+            return descs
 
 
     def set_description(self, video_path, size, description):

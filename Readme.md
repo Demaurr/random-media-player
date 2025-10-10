@@ -1,4 +1,4 @@
-# Random Media Analyser
+# Random Media Analyser ![Version](https://img.shields.io/badge/version-3.6.3-blue.svg)
 
 ![Main Screen Page](Screenshots/Current_Gui_Main_Screen.png)
 
@@ -6,7 +6,7 @@
 
 **Random Media Analyser** is a Python-based desktop application for playing local video files, tracking your watch time, and managing your media library. It features all the conventional video playing options with an addition to the analysing of media consumption.
 
-Supported video formats include: **avi, mp4, mkv, m4v, mov, webm, wmv, flv**.
+Supported video formats include: **avi, mp4, mkv, m4v, mov, webm, wmv, flv, gif**.
 
 For full details, advanced features, keyboard shortcuts, troubleshooting, and contributing guidelines, please see the [Documentation](Documentations/documentation.md).
 
@@ -37,6 +37,11 @@ Download the zip from the tags for stable version.
    > Without VLC installed, video playback will not work.
 
 5. **FFmpeg Requirement**: Some features (video trimming, vertical/horizontal detection) require [FFmpeg](https://ffmpeg.org/download.html) to be installed and available in your system PATH.
+
+6. **Create Batch File**:  
+   Once everything is installed, run `generate_batch_file.py`.  
+   It will automatically create a `Random Media Analyser.bat` file on your Desktop.  
+   You can use this `.bat` file to launch the app anytime without needing to open `gui_main.py` manually.
 ---
 ## Screenshots
 ![Media Player](Screenshots/Current_Main_Screen.png)
@@ -90,6 +95,7 @@ These dashboards help you understand your viewing habits, spot trends, and manag
 - **Category Management:** Organize files into custom categories.
 - **Notes & Descriptions:** Add notes and descriptions to media files.
 - **Video Trimming:** Clip favorite segments from videos (requires FFmpeg).
+- **Files Associations:** Connect/Association different related files with each other.
 - **Image Viewing:** View screenshots taken during playback.
 - **File Management:** Move or mark files for deletion directly from the app.
 - **Session Statistics:** View and export watch statistics for your sessions.
@@ -111,6 +117,7 @@ These dashboards help you understand your viewing habits, spot trends, and manag
    - Use the interface or keyboard shortcuts for playback and management.
    - Double-click a file to start playback.
    - Access favorites, screenshots, and statistics from within the app.
+   - View How to guide in the App for more details. Or see [full documentation](Documentations/documentation.md).
 
 3. **Command-Line Mode (Optional/Deprecated):**  
    Run `main.py` for a command-line interface:
@@ -121,38 +128,23 @@ These dashboards help you understand your viewing habits, spot trends, and manag
 
 ---
 
-## Quick Launch (Batch File)
-
-If you haven't created an executable yet, you can use a batch file to run the app as if it were an executable.  
-This also ensures the current directory is set correctly for relative paths:
-
-1. Create a new file named `RunRandomMediaAnalyser.bat` in the project directory.
-2. Add the following code to the batch file:
-
-    ```bat
-    @echo off
-    cd <path to random-media-player dir>
-    python gui_main.py
-    pause
-    ```
-
-3. Double-click the batch file to launch the app.
-4. This way you can use this program as an executable.
-
 ## Project Structure
 
-- **Documentations/**: Contains detailed documentation and usage guides.
-- **Screenshots/**: Example screenshots for UI and dashboard features.
-- **gui_main.py**: Launches the main graphical interface.
-- **main.py**: Command-line mode (legacy).
-- **videoplayer.py**: Handles video playback and controls.
-- **file_loader.py**: Loads and indexes media files.
-- **category_manager.py**: Organizes files into categories.
-- **notes_manager.py**: Manages notes and descriptions for media.
-- **snippets_manager.py**: Supports video trimming and snippet management.
-- **image_player.py**: Displays screenshots and images.
-- **player_constants.py**: Stores configuration settings and constants.
-- **requirements.txt**: Lists required Python packages.
+The project follows a modular structure to separate concerns and improve maintainability:
+
+- **`Documentations/`**: Contains detailed documentation and usage guides.  
+- **`Screenshots/`**: Example screenshots for UI and dashboard features.  
+- **`gui_main.py`**: Launches the main graphical interface.  
+- **`main.py`**: Command-line mode (legacy).  
+- **`videoplayer.py`**: Handles video playback and controls.  
+- **`file_loader.py`**: Loads and indexes media files.  
+- **`category_manager.py`**: Organizes files into categories.  
+- **`associations_manager.py`**: Associate related files.
+- **`notes_manager.py`**: Manages notes and descriptions for media.  
+- **`snippets_manager.py`**: Supports video trimming and snippet management.  
+- **`image_player.py`**: Displays screenshots and images.  
+- **`player_constants.py`**: Stores configuration settings and constants.  
+- **`requirements.txt`**: Lists required Python packages.  
 
 ## More Information
 
@@ -160,6 +152,7 @@ This also ensures the current directory is set correctly for relative paths:
 - **Advanced Commands**
 - **Troubleshooting**
 - **Contributing**
-- **Project Structure**
 
 See the [full documentation](Documentations/documentation.md) for details on all features, usage tips, and development guidelines.
+
+See the [Changelog](Logs/CHANGELOG.md) for release history.

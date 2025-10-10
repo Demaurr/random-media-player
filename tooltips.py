@@ -79,15 +79,15 @@ class ToolTip:
         if x < 0:
             x = 5
 
-        # if y + height > screen_height:
-        #     y = y - height - 25  
-        # elif y < 0:
-        #     y = 5
-
         if y + height > screen_height:
-            y = screen_height - height - 5
-        if y < 0:
+            y = y - height - 30 
+        elif y < 0:
             y = 5
+
+        # if y + height > screen_height:
+        #     y = screen_height - height - 5
+        # if y < 0:
+        #     y = 5
 
         tw.wm_geometry(f"+{x}+{y}")
 

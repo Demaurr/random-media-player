@@ -8,35 +8,54 @@ It helps users to keep track of their watch_time while watching movies or any vi
 
 It provides all the typical mediaplayer features such as playing, pausing, fast forwarding, rewinding, selecting files, saving favs. The application uses the Tkinter library for the graphical user interface (GUI) and the python-vlc library for video playback.
 
-The Player Can Play Typical Media Files and Keep Stats tracking and Saving Your Favorites and Play Your Favorites in a easy and efficient way.
+The player supports common media formats, tracks detailed playback statistics, and provides easy access to your favorites for efficient playback.
+
+### Key Features
+- Smart Watch-Time Tracking
+- Favorites & Category Management
+- Video Trimming and Snippet Playback
+- Real-time Statistics and Media Dashboard
+- HTML Session Summaries
+- Duplicate Detection & File Associations
 
 ## Project Structure
 
 The project follows a modular structure to separate concerns and improve maintainability:
 
-- **gui_main.py**: Entry point for running the application.
-- **category_manager.py**: Manages adding, updating and deleting user defined categories(playlist).
-- **category_window.py**: GUI for category_manager for ease of use.
-- **custom_messagebox.py**: Manages tkinter's messagebox display for errors and info.
-- **deletion_manager.py**: Handles deletion of files through the file browser window.
-- **favorites_manager.py**: Manages saving, removing, and reading favorites to/from a CSV file.
-- **file_loader.py**: Handles file loading functionalities.
-- **file_manager.py**: Manages file operations such as moving and renaming files.
-- **default_settings.py**: Stores default application settings.
-- **settings_manager.py**: Manages user and application settings.
-- **snippets_manager.py**: Handles code or text snippets for the application.
-- **image_player.py**: Handles the viewing of Snapshots taken through the player.
-- **logs_writer.py**: Class which can be used to record update/error logs in a given file.
-- **media_dashboard.py**: Displays media consumption statistics and dashboard visualizations using matplotlib and seaborn.
-- **player_constants.py**: Contains pre-set constants necessary for the application.
-- **static_methods.py**: Contains the helpful methods to be used by the Application.
-- **summary_generator.py**: Generates summary in HTML file format for the recent session's watches.
-- **video_progress_bar.py**: Manages the video progress bar widget.
-- **video_stats.py**: Handles video playback statistics.
-- **videoplayer.py**: Implements the main media player application. Contains all the methods for functionalities in Mediaplayer.
-- **volume_bar.py**: Controls the volume adjustment widget.
-- **watch_dictionary.py**: Defines the custom dictionary class for watch history.
-- **watch_history_logger.py**: Logs watch history data to a CSV file.
+- **`gui_main.py`**: Entry point for running the application.  
+- **`associations_manager.py`**: Manages creation of associations between files.  
+- **`associations_window.py`**: GUI for `associations_manager` for ease of use.  
+- **`backup_manager.py`**: Manages creation and restoring of backups.  
+- **`category_manager.py`**: Manages adding, updating, and deleting user-defined categories (playlist).  
+- **`category_window.py`**: GUI for `category_manager` for ease of use.  
+- **`custom_messagebox.py`**: Manages tkinter's messagebox display for errors and info.  
+- **`deletion_manager.py`**: Handles deletion of files through the file browser window.  
+- **`description_manager.py`**: Manages the CRUD for descriptions for any media file.  
+- **`favorites_manager.py`**: Manages saving, removing, and reading favorites to/from a CSV file.  
+- **`file_loader.py`**: Handles file loading functionalities.  
+- **`file_manager.py`**: Manages file operations such as moving and renaming files.  
+- **`generate_batch_file.py`**: Creates a batch file for ease of use from anywhere.  
+- **`get_aspects.py`**: `VideoProcessor` for collecting relevant stats for media files.  
+- **`default_settings.py`**: Stores default application settings.  
+- **`settings_manager.py`**: Manages user and application settings.  
+- **`snippets_manager.py`**: Handles code or text snippets for the application.  
+- **`image_player.py`**: Handles the viewing of snapshots taken through the player.  
+- **`logs_writer.py`**: Class used to record update/error logs in a given file.  
+- **`media_dashboard.py`**: Displays media consumption statistics and dashboard visualizations using `matplotlib` and `seaborn`.  
+- **`player_constants.py`**: Contains pre-set constants necessary for the application.  
+- **`properties_window.py`**: Window to display stats, screenshots, video snippets, and all relevant data for a media file in one place.  
+- **`static_methods.py`**: Contains helpful utility methods to be used by the application.  
+- **`stats_manager.py`**: Creates stats using `VideoProcessor` through multiple threads.  
+- **`summary_generator.py`**: Generates summaries in HTML format for recent session’s watches.  
+- **`task_manager.py`**: Task Manager to schedule tasks sequentially or in parallel to prevent PC overloading.  
+- **`tooltips.py`**: General Tooltip class for displaying tooltips in relevant places.  
+- **`video_progress_bar.py`**: Manages the video progress bar widget.  
+- **`video_stats.py`**: Handles video playback statistics.  
+- **`videoplayer.py`**: Implements the main media player application, containing all functionalities.  
+- **`volume_bar.py`**: Controls the volume adjustment widget.  
+- **`watch_dictionary.py`**: Defines the custom dictionary class for watch history.  
+- **`watch_history_logger.py`**: Logs watch history data to a CSV file.  
+
 
 ### Other folders and files:
 - **Screenshots/**: Stores screenshots taken during video playback.
@@ -77,26 +96,28 @@ The project follows a modular structure to separate concerns and improve maintai
    [Download VLC here](https://www.videolan.org/vlc/).  
    > Without VLC installed, video playback will not work.
 
-5. (Optional, for video orientation filters) 
-   To use the **"V"** (vertical) and **"L"** (landscape) filter buttons, you must have [FFmpeg](https://ffmpeg.org/download.html) installed and available in your system PATH.
+5. (Optional, for video orientation and trimming features) 
+   To use the **"V"** (vertical), **"L"** (landscape) filter buttons and trim video snippets you must have [FFmpeg](https://ffmpeg.org/download.html) installed and available in your system PATH.
 
-## Functionality
+## Core Functionality
 
 * Walk the Given Folder using `os` library and get all the media files in the directory and its sub-directory.
 * Keep Track of the All The Videos Watched related Info and store it in a **csv** through `watch_history_logger.py`.
 * Records the Statistics for the Current Open Session and shows stats through `video_stats.py` in a separate window.
 * Generates Summary in HTML Format Through The respective Button in **"Session Statistics"** window.
+* Provide detailed visualization of the media consumption.
+* Categorize, add notes, descriptions, to any media and much more.
 
 ## Supported Video Formats
 
-The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov` and `.m4v` files by default. You can add more formats in the `get_video_files` method in `videoplayer.py`.
+The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov`, `.gif`, and `.m4v` files by default. You can add more formats in the `get_video_files` method in `videoplayer.py`.
 
 ## Keyboard Shortcuts
 
 ### In Media Player Window
 | Shortcut                        | Action                                              |
 |----------------------------------|-----------------------------------------------------|
-| **`Alt + T`**                    | Toggle Always on Top on/off                         |
+| **`Alt + T/t`**                  | Toggle always on and minimize                       |
 | **`B/b`**                        | Toggle subtitles on/off                             |
 | **`Ctrl + B/b`**                 | Switch to next subtitle track                       |
 | **`Ctrl + D/d`**                 | Remove from favorites                               |
@@ -111,16 +132,20 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov` and 
 | **`Left Arrow`**                 | Rewind                                              |
 | **`M/m`**                        | Mute and unmute the media                           |
 | **`N/n`**                        | Play next video                                     |
+| **`Q/q`**                        | Toggle fast trim mode (enabled by default)          |
 | **`Right Arrow`**                | Fast forward                                        |
 | **`Shift + A/a`**                | Open category manager                               |
 | **`Shift + B/b`**                | Open filedialog box to add subtitle file            |
 | **`Shift + Left Arrow`**         | Play previous video                                 |
 | **`Shift + Right Arrow`**        | Play next video                                     |
 | **`Shift + S/s`**                | Save screenshot (with filename and timestamp)       |
+| **`Shift + N/n`**                | Open notes manager to add note for current media    |
 | **`Space`**                      | Pause/resume video                                  |
 | **`Up Arrow`**                   | Increase volume                                     |
 | **`Down Arrow`**                 | Decrease volume                                     |
-| **`X/x`**                        | Cycle playback speed (1x, 1.5x, 1.5x, 1.75x, 2x)                 |
+| **`X/x`**                        | Cycle playback speed (1x, 1.5x, 1.5x, 1.75x, 2x)    |
+| **`Shift + X/x`**                | Slow playback speed by .25x                         |
+| **`F10`**                        | Toggle Always On mode (only works when minimized)   |
 | **`,`**                          | Decrease subtitle delay                             |
 | **`.`**                          | Increase subtitle delay                             |
 
@@ -130,11 +155,16 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov` and 
 |----------------------------------|-----------------------------------------------------|
 | **`Delete`**                     | Mark selected files for deletion                    |
 | **`Shift + A/a`**                 | Open category manager                               |
+| **`Shift + N/n`**                  | To add note to the selected file       |
 | **`Ctrl + M/m`**                   | Move selected files                                 |
 | **`Ctrl + F/f`**                   | Add selected files to favorites                     |
 | **`Ctrl + D/d`**                   | Remove selected files from favorites                |
 | **`Ctrl + Shift + Delete`**      | Remove selected files from deletion list            |
-| **`Ctrl + Enter`**                | To play random media from the given folder        |
+| **`Shift + R/r`**                | To open association Manager and Associate current File        |
+| **`Shift + T/t`**                | To play video snippets  if any for the selected files        |
+| **`Shift + P/p`**                | To open properties window everything related to the selected file        |
+| **`Ctrl + Enter`**               | To play random media from the given folder        |
+| **`Enter`**                      | To play selected media                             |
 
 
 ## Categories System
@@ -158,19 +188,23 @@ The player supports `.mp4`, `.mkv`, `.avi`, `.webm`, `.wmv`, `.flv`, `.mov` and 
 | `show paths` | Shows all previously entered and available paths |
 | `play favs` | Lists all the favorite media files |
 | `show categories` | Shows all available categories and their contents |
-| `folder path --update` | Updates the file list of the specified folder |
+| `<folder_path> --update` | Updates the file list of the specified folder |
 
 
 ## Features
 
 - **Video Playback**: Users can select and play video files from their local directories.
 - **Playback Controls**: Provides controls for play, pause, stop, fast-forward, and rewind.
-- **Manage Categories**: Allows you to save videos in different categories and playthem from there easily with having to explicitly typing folder path.
+- **Manage Categories**: Allows you to save videos in different categories and play them from there easily with having to explicitly typing folder path.
+- **Manage Notes/Descriptions**: Allows user to save notes or add the description to the file for easier search.
+- **Add Associations**: Allows user to associate two files if are duplicate, related or given options and get associated info in the target.
 - **Watch History**: Keeps track of watched videos and their playback durations.
 - **Statistics**: Displays statistics on watched videos, including total duration watched and frequency of playback.
 - **View Snapshots**: View all the Snapshots taken from the Videoplayer in a built-in Image Viewer.
 - **Customization**: Users can customize the application by selecting different video files, adjusting volume, and viewing playback progress.
 - **Profile Management**: Users can create different profile by just changing the *FILE_FOLDER* in GUI settings and enjoy fresh profile.
+- **Format Conversion**: Convert .gif -> mp4 and .png -> .jpg, to save space and play the media easily (gif might not play without conversion).
+- **Filter Duplicates**: Filter for the available duplicates of any video easily, can associate with each other, or delete the duplicate file.
 
 ## Statistics and Analytics
 - **Media Dashboard**:
@@ -218,9 +252,9 @@ After closing the player, a session statistics window appears, showing:
 ## Known Issues & Limitations
 
 - Some advanced video codecs may not be supported if VLC is not installed properly.
-- Large folders with thousands of videos may cause slow loading.
+- Large folders with thousands of videos may cause slow loading at the start.
 - Watch time is based on playback segments and may not be 100% accurate if the app is force-closed.
-- Might Hang if the CPU is slow.
+- Might hang if the CPU is slow or older.
 
 ## Troubleshooting & FAQ
 
@@ -253,7 +287,7 @@ Contributions to the Media Player Application are welcome! If you have any sugge
 Special thanks to the developers of the Tkinter and python-vlc libraries and [makeuseof](https://www.makeuseof.com/python-video-media-player-how-to-build/) site for their contributions to open-source software.
 
 ## Future Enhancements
-* Displaying properties for each media files.
-* Sorting my Duration or giving the user Duration related info.
+* Sorting by Duration or giving the user Duration related info.
 * Record Sessions info for better time management.
+* Use of hash frequently without relying on paths. So same video with different paths will have all info attached.
 
