@@ -155,4 +155,4 @@ The project follows a modular structure to separate concerns and improve maintai
 
 See the [full documentation](Documentations/documentation.md) for details on all features, usage tips, and development guidelines.
 
-See the [Changelog](Logs/CHANGELOG.md) for release history.
+See the [Changelog](Logs/Changelog.md) for release history.
