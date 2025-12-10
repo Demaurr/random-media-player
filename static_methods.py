@@ -608,6 +608,30 @@ def get_all_related_paths(target_path, graph=None):
 
     return sorted(related_paths)
 
+def get_all_connected_paths(target_path, graph):
+    """
+    Return all related file paths connected to target_path using BFS.
+    """
+    target_path = normalise_path(target_path)
+
+    if target_path not in graph:
+        return [target_path]
+
+    visited = set()
+    queue = deque([target_path])
+    related_paths = []
+
+    while queue:
+        path = queue.popleft()
+        if path in visited:
+            continue
+        visited.add(path)
+        related_paths.append(path)
+        queue.extend(graph[path] - visited)
+
+    return sorted(related_paths)
+
+
 def get_all_related_paths_multiple(file_paths, graph=None):
     """
     Return all related file paths connected to any file in file_paths.
@@ -632,6 +656,64 @@ def get_all_related_paths_multiple(file_paths, graph=None):
 
     return sorted(related_paths)
 
+def build_path_to_fingerprint_map(fingerprint_manager, graph=None):
+    """
+    Build a dict mapping each path (including related/linked paths)
+    to its fingerprint (index_hash).
+    """
+
+    # --- 1. Build direct map from fingerprint_manager ---
+    # path → fingerprint
+    path_to_index = {}
+
+    for index_hash, paths in fingerprint_manager.paths.items():
+        for p in paths:
+            norm = normalise_path(p["file_path"])
+            path_to_index[norm] = index_hash
+
+    # --- 2. Build transfer graph ---
+    graph = graph or build_transfer_graph()
+
+    # Ensure graph contains keys for paths from fingerprint manager
+    for p in path_to_index.keys():
+        graph.setdefault(p, set())
+
+    final_map = {}
+    visited_groups = set()
+
+    # --- 3. For each group of related paths, assign a single fingerprint ---
+    for path in graph.keys():
+
+        if path in visited_groups:
+            continue
+
+        # Get all paths linked to this one
+        related_paths = get_all_related_paths(path, graph)
+        visited_groups.update(related_paths)
+
+        # Determine the fingerprint for the group
+        fingerprint = None
+
+        # Priority 1: direct fingerprint
+        for p in related_paths:
+            if p in path_to_index:
+                fingerprint = path_to_index[p]
+                break
+
+        # Priority 2: if none found, skip (unknown fingerprint)
+        if not fingerprint:
+            continue
+
+        # Assign to all paths in the group
+        for p in related_paths:
+            final_map[p] = fingerprint
+
+    # --- 4. Add paths that were not in graph but exist in fingerprint_manager ---
+    for p, f in path_to_index.items():
+        if p not in final_map:
+            final_map[p] = f
+
+    return final_map
 
 def get_split_stats_by_folder(file_paths):
     """
@@ -1039,6 +1121,66 @@ def center_window(window, width=1000, height=600, offset_x=0, offset_y=0):
     
     window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
 
+
+def now_str():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def plot_fingerprint_analysis(csv_file, key_column="File Name", value_column="Fingerprint"):
+    """
+    Load CSV, analyze missing vs present fingerprints, and plot the results.
+
+    Args:
+        csv_file (str): Path to CSV file.
+        key_column (str): Column to use as key (default "File Name").
+        value_column (str): Column to analyze for missing values (default "Fingerprint").
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    try:
+        df = pd.read_csv(csv_file)
+        df.columns = [c.strip() for c in df.columns]
+
+        # Normalize keys if needed
+        df[key_column] = df[key_column].astype(str).apply(normalise_path)
+
+        # Flag missing fingerprints
+        df["Has_Fingerprint"] = df[value_column].notna() & (df[value_column].astype(str).str.strip() != "")
+
+        # Summary counts
+        summary = df["Has_Fingerprint"].value_counts().rename({True: "Has Fingerprint", False: "Missing Fingerprint"})
+
+        # Plotting
+        sns.set(style="whitegrid")
+        plt.figure(figsize=(8, 6))
+        ax = sns.barplot(x=summary.index, y=summary.values, palette=["green", "red"])
+        plt.title("Fingerprint Availability Analysis")
+        plt.ylabel("Number of Files")
+        plt.xlabel("")
+        for i, v in enumerate(summary.values):
+            ax.text(i, v + max(summary.values)*0.01, str(v), ha="center", fontweight="bold")
+        plt.show()
+
+        return summary.to_dict()
+
+    except Exception as e:
+        print(f"Error plotting fingerprint analysis: {e}")
+        return {}
+
+def format_seconds_to_str(time_duration):
+    from datetime import timedelta
+    """
+    Convert a duration in seconds to a human-readable format.
+
+    Args:
+        time_duration (int): Duration in milliseconds.
+
+    Returns:
+        str: A string representing the duration in the format 'HH:MM:SS'.
+    """
+    time_str = str(timedelta(seconds=time_duration))[:-3]
+    return time_str
+
 if __name__ == "__main__":
     # print("Static methods module loaded successfully.")
     # filepath_to_search = r"sample.mp4"
@@ -1051,5 +1193,8 @@ if __name__ == "__main__":
     # graph = build_transfer_graph()
     # print(assoc)
     # print(len(assoc))
-    print(parse_duration_to_seconds("00:06.3"))
+    # print(parse_duration_to_seconds("00:06.3"))
+    from player_constants import WATCHED_HISTORY_LOG_PATH
+    plot_fingerprint_analysis(WATCHED_HISTORY_LOG_PATH, "File Name", "Fingerprint")
+    # print(get_all_related_paths(r"C:\Users\dever\From D Drive\New folder\Youtube Downloaded\Departure Lane X Wishes X Afsos - Talha Anjum Ft. Anuv Jain & AP Dhillon ｜ DJ Sumit Rajwanshi [JuXuakMtsMQ].webm"))
     pass
