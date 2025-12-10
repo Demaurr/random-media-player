@@ -15,6 +15,7 @@ class VideoProgressBar(tk.Canvas):
         self.current_time = 0
         self.tooltip = ToolTip(self, wraplength=100, position="above")
         self._file = ""
+        self._last_position_cache = {}
 
         self.bind("<Button-1>", self.on_click)
         self.bind("<B1-Motion>", self.on_drag)
@@ -69,44 +70,43 @@ class VideoProgressBar(tk.Canvas):
                 handle_x, bar_y1 - 3, handle_x, bar_y2 + 3, 
                 fill=Colors.PLAIN_RED, width=3
             )
-            # self.draw_last_position(total_duration, width, bar_y1, bar_y2)
+            self.draw_last_position(total_duration, width, bar_y1, bar_y2)
             
     def draw_last_position(self, total_duration, width, bar_y1, bar_y2):
-        if hasattr(self, "_last_seconds") and self._last_seconds and total_duration:
-            if 0 < self._last_seconds < total_duration:
-                last_x = int((self._last_seconds / total_duration) * width)
-                self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
+        current_file = getattr(self.parent, "current_file", None)
+        if not current_file or not total_duration:
             return
 
-        if not self.last_pos_str or (self._file != self.parent.current_file):
-            if hasattr(self.parent, "watch_history_logger") and hasattr(self.parent, "current_file"):
-                self.last_pos_str = self.parent.watch_history_logger.get_last_position(self.parent.current_file)
-                self._file = self.parent.current_file
+        if current_file in self._last_position_cache:
+            last_seconds = self._last_position_cache[current_file]
+        else:
+            last_pos_str = ""
+            if hasattr(self.parent, "watch_history_logger"):
+                last_pos_str = self.parent.watch_history_logger.get_last_position(current_file)
+                print(last_pos_str, "last position string from logger")
 
-        if self.last_pos_str:
-            try:
-                parts = [int(float(x)) for x in self.last_pos_str.split(":")]
+            if last_pos_str:
+                try:
+                    parts = [int(float(x)) for x in last_pos_str.split(":")]
+                    if len(parts) == 2:
+                        h, m, s = 0, parts[0], parts[1]
+                    elif len(parts) == 3:
+                        h, m, s = parts
+                    else:
+                        raise ValueError(f"Unexpected time format: {last_pos_str}")
 
-                if len(parts) == 2:
-                    h, m, s = 0, parts[0], parts[1]
-                elif len(parts) == 3:
-                    h, m, s = parts
-                else:
-                    raise ValueError(f"Unexpected time format: {self.last_pos_str}")
+                    last_seconds = h * 3600 + m * 60 + s
+                    self._last_position_cache[current_file] = last_seconds
+                    print("Caching last position:", last_seconds)
+                except Exception as e:
+                    print(f"Error parsing last position '{last_pos_str}': {e}")
+                    last_seconds = None
+            else:
+                last_seconds = None
 
-                self._last_seconds = h * 3600 + m * 60 + s
-
-                if 0 < self._last_seconds < total_duration:
-                    last_x = int((self._last_seconds / total_duration) * width)
-                    self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
-
-                print(self.last_pos_str)
-
-            except Exception as e:
-                print(f"Error parsing last position '{self.last_pos_str}': {e}")
-                self._last_seconds = None
-
-
+        if last_seconds and 0 < last_seconds < total_duration:
+            last_x = int((last_seconds / total_duration) * width)
+            self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
             
     def update_progress(self, total_duration=None):
         """Update the handle according to the video playback."""
@@ -142,7 +142,7 @@ class VideoProgressBar(tk.Canvas):
     def move_handle(self, x):
         """Move handle to x and update video position"""
         width = self.winfo_width()
-        x = max(0, min(x, width))  # clamp
+        x = max(0, min(x, width))
         if hasattr(self.parent, "media_player") and self.parent.media_player:
             total_duration = self.parent.media_player.get_length() / 1000
             if total_duration > 0:
