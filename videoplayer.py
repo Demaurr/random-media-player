@@ -34,14 +34,16 @@ from watch_history_logger import WatchHistoryLogger
 from snippets_manager import SnippetsManager
 from notes_manager import NotesManager
 from associations_manager import FileAssociator
+from fingerprint_manager import MediaFingerprintManager
 from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno
+from tooltips import ToolTip
 
 
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None,
-                  associations_manager=None):
+                  associations_manager=None, fingerprint_manager=None):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
@@ -50,12 +52,14 @@ class MediaPlayerApp(tk.Toplevel):
         self.deleter = deletion_manager or DeletionManager(self.favorites_manager)
         self.deleter.set_parent_window(self)
         self.category_manager = category_manager or CategoryManager()
-        self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv)
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv, self.fingerprint_manager)
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
         self.associations_manager = associations_manager or FileAssociator()
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
+        self.trimmed_segments_metadata = {}
         self._precompute_trimmed_segments(video_files)
 
         self.bg_color = Colors.PLAIN_BLACK
@@ -104,6 +108,10 @@ class MediaPlayerApp(tk.Toplevel):
                 self.watch_history_csv = watch_history_csv
         except FileNotFoundError:
             self.watch_history_csv = watch_history_csv
+
+    def _get_trimmed_segments_metadata(self):
+        """Get metadata for current file's trimmed segments."""
+        return self.trimmed_segments_metadata.get(self.current_file, {})
     
     def _on_close(self, event=None):
         if self.active_trims > 0:
@@ -358,6 +366,17 @@ class MediaPlayerApp(tk.Toplevel):
         ]:
             btn.bind("<Enter>", on_enter)
             btn.bind("<Leave>", on_leave)
+        self.set_tooltip()
+
+    def set_tooltip(self):
+        ToolTip(self.play_button, "Play Video (Spacebar)")
+        ToolTip(self.category_button, "Open Category Manager (Shift + A)")
+        ToolTip(self.autoplay_button, "Toggle Autoplay (A)")
+        ToolTip(self.loop_button, "Toggle Loop (L)")
+        ToolTip(self.next_button, "Play Next Video (N or Ctrl + Right Arrow)")
+        ToolTip(self.prev_button, "Play Previous Video (Shift + Left Arrow or Ctrl + Left Arrow)")
+        ToolTip(self.rewind_button, "Rewind 5 Seconds (Left Arrow)")
+        ToolTip(self.fast_forward_button, "Fast Forward 10 Seconds (Right Arrow)")
 
     def _start_move(self, event=None):
         self._drag_last_x = event.x_root
@@ -615,6 +634,7 @@ class MediaPlayerApp(tk.Toplevel):
             ("<Escape>", self._on_close),
             ("<KeyPress-q>", self.toggle_fast_trim),
             ("<KeyPress-Q>", self.toggle_fast_trim),
+            ("<Return>", self.display_name)
         ]
 
         for seq, func in self._bindings:
@@ -651,6 +671,11 @@ class MediaPlayerApp(tk.Toplevel):
             if was_topmost:
                 self.attributes("-topmost", True)
 
+    def display_name(self, event=None):
+        if self.current_file:
+            filename = os.path.basename(self.current_file)
+            self.show_marquee(f"{filename}")
+
 
     def _on_video_loaded(self, title):
         self.reset_values(segment_speed=self.segment_speed)
@@ -669,17 +694,30 @@ class MediaPlayerApp(tk.Toplevel):
         self.progress_bar.update_progress()
 
     def _precompute_trimmed_segments(self, video_files):
-        """Precompute trimmed segments for all files in the background."""
+        """Precompute trimmed segments and metadata in the background."""
         
         if not any(f not in self.trimmed_segments for f in video_files):
             print("[INFO] All trimmed segments already precomputed, skipping thread.")
             if hasattr(self, "current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
-                self.after(0, lambda: self.progress_bar.set_trimmed_segments(self._get_trimmed_segments()))
+                self.after(0, lambda: self._apply_trimmed_segments_to_progress_bar())
             return
 
         def worker():
             if not hasattr(self, "transfer_graph"):
                 self.transfer_graph = build_transfer_graph()
+
+            snippet_lookup = {}
+            if hasattr(self, 'snippets_manager') and self.snippets_manager:
+                for snippet in self.snippets_manager.get_all_snippets():
+                    try:
+                        start_s = float(snippet.get("Start Time (s)", 0))
+                        end_s = float(snippet.get("End Time (s)", 0))
+                        notes = snippet.get("Notes", "")
+                        key = (round(start_s, 2), round(end_s, 2))
+                        if notes:
+                            snippet_lookup[key] = notes
+                    except (ValueError, TypeError):
+                        continue
 
             for f in video_files:
                 if f in self.trimmed_segments:
@@ -703,13 +741,27 @@ class MediaPlayerApp(tk.Toplevel):
                             continue
 
                 self.trimmed_segments[f] = segments
+                
+                metadata = {}
+                for start, end in segments:
+                    key = (round(start, 2), round(end, 2))
+                    if key in snippet_lookup:
+                        metadata[(start, end)] = {"notes": snippet_lookup[key]}
+                self.trimmed_segments_metadata[f] = metadata
 
             if hasattr(self, "current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
-                self.after(0, lambda: self.progress_bar.set_trimmed_segments(self._get_trimmed_segments()))
+                self.after(0, lambda: self._apply_trimmed_segments_to_progress_bar())
 
-            print("[INFO] Precomputation of trimmed segments completed.")
+            print("[INFO] Precomputation of trimmed segments (with metadata) completed.")
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_trimmed_segments_to_progress_bar(self):
+        """Apply current file's segments and metadata to progress bar."""
+        if self.current_file in self.trimmed_segments:
+            segments = self.trimmed_segments[self.current_file]
+            metadata = self.trimmed_segments_metadata.get(self.current_file, {})
+            self.progress_bar.set_trimmed_segments(segments, segment_metadata=metadata)
 
 
     def _get_trimmed_segments(self):
@@ -730,12 +782,11 @@ class MediaPlayerApp(tk.Toplevel):
         if self.playing_video:
             speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]  # full range
             current_speed = self.media_player.get_rate()
-            # Find the largest speed in the list that is less than the current speed
             lower_speeds = [s for s in speeds if s < current_speed]
             if lower_speeds:
-                new_speed = lower_speeds[-1]  # closest lower speed
+                new_speed = lower_speeds[-1]
             else:
-                new_speed = speeds[0]  # already at minimum
+                new_speed = speeds[0]
             self.set_playback_speed(new_speed)
             print(f"Playback Slowed to: {new_speed}x")
 
@@ -1067,7 +1118,7 @@ class MediaPlayerApp(tk.Toplevel):
                     self.total_duration = int(self.media_player.get_length()) or 0
                     self.last_looped_file = self.current_file
                     self.previous_title = title
-                    # self.last_pos_seconds = self.parse_last_position()
+                    self.last_pos_seconds = self.parse_last_position()
                     self.after(0, lambda: self._on_video_loaded(title))
                     self.after(220, lambda: self.redraw_progress_bar(self.total_duration))
                     # print(self.watch_history_logger.get_last_position(self.current_file))
@@ -1087,8 +1138,16 @@ class MediaPlayerApp(tk.Toplevel):
         self._video_thread.start()
         
     def redraw_progress_bar(self, total_duration=None):
+        """Redraw progress bar with precomputed metadata (no searching)."""
         if self.current_file in self.trimmed_segments:
-            self.progress_bar.set_trimmed_segments(self._get_trimmed_segments(), total_duration)
+            segments = self.trimmed_segments[self.current_file]
+            metadata = self.trimmed_segments_metadata.get(self.current_file, {})
+            self.progress_bar.set_trimmed_segments(segments, total_duration, metadata)
+        try:
+            if hasattr(self.progress_bar, 'set_last_position_from_history'):
+                self.progress_bar.set_last_position_from_history(file=self.current_file, total_duration=total_duration)
+        except Exception:
+            pass
 
 
     def _release_current_media(self):
@@ -1247,8 +1306,12 @@ class MediaPlayerApp(tk.Toplevel):
             self._release_current_media()
             self._total_play_time = 0
             
+            fingerprint = None
+            if hasattr(self, 'fingerprint_manager'):
+                fingerprint = self.fingerprint_manager.get_index_hash_by_path(self.current_file)
+
             self.watch_history_logger.log_watch_history(
-                self.current_file, total_duration, duration_watched, last_position
+                self.current_file, total_duration, duration_watched, last_position, fingerprint
             )
             self.watched_videos.increment_duration_and_count(self.current_file, total_watched)
             self.media_player.stop()
@@ -1475,6 +1538,11 @@ class MediaPlayerApp(tk.Toplevel):
             self.time_label.config(fg=Colors.PLAIN_WHITE)
 
             self.trimmed_segments.setdefault(self.current_file, []).append((start_s, end_s))
+            
+            if self.current_file not in self.trimmed_segments_metadata:
+                self.trimmed_segments_metadata[self.current_file] = {}
+            
+            self.trimmed_segments_metadata[self.current_file][(start_s, end_s)] = {"notes": ""}
 
             self.after(200, lambda: self.redraw_progress_bar(self.total_duration))
 
