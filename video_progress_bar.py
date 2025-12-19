@@ -40,7 +40,8 @@ class VideoProgressBar(tk.Canvas):
         self._interval_tree = IntervalTree()
         for start, end in self.trimmed_segments:
             note = self._segment_metadata.get((start, end), {}).get("notes", "")
-            self._interval_tree[start:end] = f"[{format_seconds_to_str(start)} - {format_seconds_to_str(end)}]\n{note}"
+            # self._interval_tree[start:end] = f"[{format_seconds_to_str(start)} - {format_seconds_to_str(end)}]\n{note}"
+            self._interval_tree[start:end] = note
 
         self.redraw(total_duration=total_duration)
 
@@ -73,7 +74,7 @@ class VideoProgressBar(tk.Canvas):
             handle_x = int((self.current_time / total_duration) * width)
             self.handle = self.create_line(handle_x, bar_y1 - 3, handle_x, bar_y2 + 3,
                                            fill=Colors.PLAIN_RED, width=3)
-            self.draw_last_position(total_duration, width, bar_y1, bar_y2)
+            # self.draw_last_position(total_duration, width, bar_y1, bar_y2)
 
     def draw_last_position(self, total_duration, width, bar_y1, bar_y2):
         current_file = getattr(self.parent, "current_file", None)
@@ -121,17 +122,17 @@ class VideoProgressBar(tk.Canvas):
             total_duration = self.parent.media_player.get_length() / 1000
             if total_duration > 0:
                 hovered_time = (event.x / width) * total_duration
-                segment_note = self._get_segment_at_time(hovered_time)
+                segment_content = self._get_segment_at_time(hovered_time)
 
                 self._highlight_segment(hovered_time)
 
-                if segment_note:
-                    tooltip_text = segment_note
+                if segment_content:
+                    self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, segment_content)
                 else:
                     hours, remainder = divmod(int(hovered_time), 3600)
                     mins, secs = divmod(remainder, 60)
                     tooltip_text = f"{hours:02}:{mins:02}:{secs:02}"
-                self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, tooltip_text)
+                    self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, tooltip_text)
             else:
                 self.tooltip.hide_tooltip()
         else:
@@ -155,7 +156,14 @@ class VideoProgressBar(tk.Canvas):
     def _get_segment_at_time(self, time_seconds):
         intervals = self._interval_tree[time_seconds]
         if intervals:
-            return "\n".join(iv.data for iv in sorted(intervals))
+            content = []
+            for iv in sorted(intervals):
+                start_str, end_str = iv.begin, iv.end
+                time_text = f"[{format_seconds_to_str(start_str)} - {format_seconds_to_str(end_str)}]\n"
+                note_text = iv.data or ""
+                content.append((time_text, {"foreground": "yellow", "font": ("Segoe UI", 9, "bold")}))
+                content.append((note_text, {"foreground": "white", "font": ("Segoe UI", 9)}))
+            return content
         return None
 
     def on_leave(self, event):

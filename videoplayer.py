@@ -25,7 +25,7 @@ from player_constants import (
     VIDEO_SNIPPETS_FOLDER, 
     Colors
     )
-from static_methods import _convert_single, build_transfer_graph, get_all_related_paths, normalise_path
+from static_methods import build_transfer_graph, get_all_related_paths, get_all_related_paths_multiple, normalise_path, measure_time
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -43,7 +43,7 @@ class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None,
-                  associations_manager=None, fingerprint_manager=None):
+                  associations_manager=None, fingerprint_manager=None, trimmed_segments_metadata=None):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
@@ -59,7 +59,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.associations_manager = associations_manager or FileAssociator()
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
-        self.trimmed_segments_metadata = {}
+        self.trimmed_segments_metadata = trimmed_segments_metadata if trimmed_segments_metadata is not None else {}
         self._precompute_trimmed_segments(video_files)
 
         self.bg_color = Colors.PLAIN_BLACK
@@ -154,6 +154,7 @@ class MediaPlayerApp(tk.Toplevel):
 
         self.video_files = self.get_video_files(folder_path) if folder_path is not None else video_files
         self.current_file = cur_file
+        self.current_fingerprint = self.fingerprint_manager.get_index_hash_by_path(normalise_path(self.current_file))
         self.previous_file = None
         self.playing_video = False
         self.video_paused = False
@@ -693,6 +694,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.watched_videos.add_watch(self.current_file)
         self.progress_bar.update_progress()
 
+    @measure_time(print_time=True, prefix="[TIMER] ")
     def _precompute_trimmed_segments(self, video_files):
         """Precompute trimmed segments and metadata in the background."""
         
@@ -706,17 +708,23 @@ class MediaPlayerApp(tk.Toplevel):
             if not hasattr(self, "transfer_graph"):
                 self.transfer_graph = build_transfer_graph()
 
-            snippet_lookup = {}
-            if hasattr(self, 'snippets_manager') and self.snippets_manager:
-                for snippet in self.snippets_manager.get_all_snippets():
+            graph = self.transfer_graph
+
+            try:
+                all_related_paths = get_all_related_paths_multiple(video_files, graph=graph)
+            except Exception as e:
+                print(f"[WARNING] Failed to compute related paths: {e}")
+                return
+            
+            snippets_by_file = {}
+
+            if hasattr(self, "snippets_manager") and self.snippets_manager:
+                for path in all_related_paths:
                     try:
-                        start_s = float(snippet.get("Start Time (s)", 0))
-                        end_s = float(snippet.get("End Time (s)", 0))
-                        notes = snippet.get("Notes", "")
-                        key = (round(start_s, 2), round(end_s, 2))
-                        if notes:
-                            snippet_lookup[key] = notes
-                    except (ValueError, TypeError):
+                        snippets = self.snippets_manager.get_snippets_by_original_file(path)
+                        if snippets:
+                            snippets_by_file[path] = snippets
+                    except Exception:
                         continue
 
             for f in video_files:
@@ -724,29 +732,39 @@ class MediaPlayerApp(tk.Toplevel):
                     continue
 
                 segments = []
-                related_paths = get_all_related_paths(f, graph=self.transfer_graph)
+                metadata = {}
+
+                try:
+                    related_paths = get_all_related_paths(f, graph=graph)
+                except Exception:
+                    related_paths = [f]
 
                 for rp in related_paths:
                     if rp in self.trimmed_segments:
                         segments.extend(self.trimmed_segments[rp])
+
+                        rp_meta = self.trimmed_segments_metadata.get(rp, {})
+                        metadata.update(rp_meta)
                         continue
 
-                    snippets = self.snippets_manager.get_snippets_by_original_file(rp)
+                    snippets = snippets_by_file.get(rp, [])
                     for snippet in snippets:
                         try:
                             start = float(snippet["Start Time (s)"])
                             end = float(snippet["End Time (s)"])
-                            segments.append((start, end))
+                            notes = snippet.get("Notes", "")
+
+                            seg = (start, end)
+                            segments.append(seg)
+
+                            if notes:
+                                metadata[seg] = {"notes": notes}
                         except Exception:
                             continue
 
+                segments = sorted(set(segments))
+
                 self.trimmed_segments[f] = segments
-                
-                metadata = {}
-                for start, end in segments:
-                    key = (round(start, 2), round(end, 2))
-                    if key in snippet_lookup:
-                        metadata[(start, end)] = {"notes": snippet_lookup[key]}
                 self.trimmed_segments_metadata[f] = metadata
 
             if hasattr(self, "current_file") and hasattr(self, 'progress_bar') and self.winfo_exists():
@@ -780,7 +798,7 @@ class MediaPlayerApp(tk.Toplevel):
     def slow_playback_speed(self, event=None):
         """Slows down playback to the next lower speed."""
         if self.playing_video:
-            speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]  # full range
+            speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
             current_speed = self.media_player.get_rate()
             lower_speeds = [s for s in speeds if s < current_speed]
             if lower_speeds:
@@ -1109,6 +1127,7 @@ class MediaPlayerApp(tk.Toplevel):
                     
                 if os.path.exists(self.current_file):
                     title = f"[{self.video_files.index(self.current_file) + 1} / {len(self.video_files)}] " + self.current_file.split("\\")[-1]
+                    self.current_fingerprint = self.fingerprint_manager.get_index_hash_by_path(self.current_file)
                     self._release_current_media()
                     media = self.instance.media_new(self.current_file)
                     self.current_media = media
@@ -1118,7 +1137,7 @@ class MediaPlayerApp(tk.Toplevel):
                     self.total_duration = int(self.media_player.get_length()) or 0
                     self.last_looped_file = self.current_file
                     self.previous_title = title
-                    self.last_pos_seconds = self.parse_last_position()
+                    # self.last_pos_seconds = self.parse_last_position()
                     self.after(0, lambda: self._on_video_loaded(title))
                     self.after(220, lambda: self.redraw_progress_bar(self.total_duration))
                     # print(self.watch_history_logger.get_last_position(self.current_file))
@@ -1306,9 +1325,9 @@ class MediaPlayerApp(tk.Toplevel):
             self._release_current_media()
             self._total_play_time = 0
             
-            fingerprint = None
-            if hasattr(self, 'fingerprint_manager'):
-                fingerprint = self.fingerprint_manager.get_index_hash_by_path(self.current_file)
+            fingerprint = self.current_fingerprint
+            # if hasattr(self, 'fingerprint_manager'):
+            #     fingerprint = self.fingerprint_manager.get_index_hash_by_path(self.current_file)
 
             self.watch_history_logger.log_watch_history(
                 self.current_file, total_duration, duration_watched, last_position, fingerprint
@@ -1773,7 +1792,6 @@ class MediaPlayerApp(tk.Toplevel):
     
 
 if __name__ == "__main__":
-    # for testing purposes
     import sys
     import tkinter as tk
     dummy_video_files = ["sample1.mp4", "sample2.mkv", "sample3.avi"]
