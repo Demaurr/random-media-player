@@ -9,7 +9,7 @@ from player_constants import (
     VIDEO_STATS_CSV,
     ALL_MEDIA_CSV
 )
-from static_methods import build_transfer_graph, normalise_path, get_all_related_paths, parse_duration_to_seconds
+from static_methods import build_transfer_graph, get_all_identity_paths, normalise_path, get_all_related_paths, parse_duration_to_seconds
 from deletion_manager import DeletionManager
 
 class MediaPathsCollector:
@@ -150,7 +150,8 @@ class MediaPathsCollector:
             all_paths = list(self.file_data.keys())
 
             for path in all_paths:
-                related = get_all_related_paths(path, graph)
+                # related = get_all_related_paths(path, graph)
+                related = get_all_identity_paths(path, graph, self.fingerprint_manager)
 
                 best_size = None
                 best_duration = None
@@ -228,7 +229,7 @@ class MediaPathsCollector:
             else:
                 seen_index_hashes[index_hash] = file_path
 
-            added = manager.add_fingerprint(file_path, str(duration), str(size), force_partial=force_partial)
+            added = manager.add_fingerprint(normalise_path(file_path), str(duration), str(size), force_partial=force_partial)
             if added:
                 print(f"[FINGERPRINT CREATED] {file_path}")
             else:
@@ -236,12 +237,14 @@ class MediaPathsCollector:
         manager.flush()
 
     def create_fingerprints_parallel(self, workers: int = 4):
-        manager = MediaFingerprintManager()
+        # manager = MediaFingerprintManager()
+        manager = self.fingerprint_manager
         created, skipped = 0, 0
         tasks = []
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             for file_path, meta in self.file_data.items():
+                file_path = normalise_path(file_path)
                 duration = meta.get("duration")
                 size = meta.get("size")
                 if not duration or not size or size in (0, "0", None, ""):
