@@ -7,11 +7,13 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from typing import Optional
+from typing import Dict, List, Optional
 from PIL import Image
 import tracemalloc
+from pprint import pprint
+from __development_const import *
 
-from tqdm import tqdm
+# from tqdm import tqdm
 # from associations_manager import FileAssociator
 from player_constants import (
     ALL_MEDIA_CSV,
@@ -29,6 +31,7 @@ from logs_writer import LogManager
 from collections import defaultdict, deque
 
 logger = LogManager(LOG_PATH)
+# PRINT_TIME = False
 
 def create_csv_file(headers=None, filename="New_CSV.csv"):
     if os.path.exists(filename):
@@ -176,6 +179,54 @@ def compare_folders(filepath, folderpath):
         # print(f"Folder path: {folderpath}")
         return False
     
+def measure_time(
+    *,
+    logger=None,
+    threshold=None,
+    print_time=False,
+    prefix="[TIME] "
+):
+    """
+    Measure execution time of a synchronous function.
+
+    Args:
+        logger (LogManager): Your LogManager instance
+        threshold (float): Warn if execution time exceeds this (seconds)
+        print_time (bool): Print timing to console
+        prefix (str): Prefix for log / print messages
+    """
+
+    def decorator(func):
+        import time, functools
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                elapsed = time.perf_counter() - start
+                _handle_logging(func, elapsed)
+
+        def _handle_logging(func, elapsed):
+            message = f"{prefix} | {func.__name__} took {elapsed:.6f}s"
+
+            if print_time:
+                print(message)
+
+            if logger:
+                logger.update_logs("EXEC_TIME", message)
+
+                if threshold is not None and elapsed > threshold:
+                    logger.error_logs(
+                        f"{func.__name__} exceeded threshold "
+                        f"({elapsed:.6f}s > {threshold:.2f}s)"
+                    )
+
+        return wrapper
+
+    return decorator
+
 def gather_all_media(refresh=False):
     try:
         LOG_FOLDERS_CSV = FOLDER_LOGS
@@ -577,7 +628,7 @@ def build_transfer_graph():
                 graph[dst].add(src)
     return graph
 
-
+@measure_time(print_time=PRINT_TIME)
 def get_all_related_paths(target_path, graph=None):
     """
     Return all related file paths connected to target_path in the transfer graph.
@@ -631,7 +682,7 @@ def get_all_connected_paths(target_path, graph):
 
     return sorted(related_paths)
 
-
+@measure_time(print_time=PRINT_TIME)
 def get_all_related_paths_multiple(file_paths, graph=None):
     """
     Return all related file paths connected to any file in file_paths.
@@ -662,8 +713,6 @@ def build_path_to_fingerprint_map(fingerprint_manager, graph=None):
     to its fingerprint (index_hash).
     """
 
-    # --- 1. Build direct map from fingerprint_manager ---
-    # path → fingerprint
     path_to_index = {}
 
     for index_hash, paths in fingerprint_manager.paths.items():
@@ -671,44 +720,34 @@ def build_path_to_fingerprint_map(fingerprint_manager, graph=None):
             norm = normalise_path(p["file_path"])
             path_to_index[norm] = index_hash
 
-    # --- 2. Build transfer graph ---
     graph = graph or build_transfer_graph()
 
-    # Ensure graph contains keys for paths from fingerprint manager
     for p in path_to_index.keys():
         graph.setdefault(p, set())
 
     final_map = {}
     visited_groups = set()
-
-    # --- 3. For each group of related paths, assign a single fingerprint ---
     for path in graph.keys():
 
         if path in visited_groups:
             continue
 
-        # Get all paths linked to this one
         related_paths = get_all_related_paths(path, graph)
         visited_groups.update(related_paths)
 
-        # Determine the fingerprint for the group
         fingerprint = None
 
-        # Priority 1: direct fingerprint
         for p in related_paths:
             if p in path_to_index:
                 fingerprint = path_to_index[p]
                 break
 
-        # Priority 2: if none found, skip (unknown fingerprint)
         if not fingerprint:
             continue
 
-        # Assign to all paths in the group
         for p in related_paths:
             final_map[p] = fingerprint
 
-    # --- 4. Add paths that were not in graph but exist in fingerprint_manager ---
     for p, f in path_to_index.items():
         if p not in final_map:
             final_map[p] = f
@@ -1141,13 +1180,10 @@ def plot_fingerprint_analysis(csv_file, key_column="File Name", value_column="Fi
         df = pd.read_csv(csv_file)
         df.columns = [c.strip() for c in df.columns]
 
-        # Normalize keys if needed
         df[key_column] = df[key_column].astype(str).apply(normalise_path)
 
-        # Flag missing fingerprints
         df["Has_Fingerprint"] = df[value_column].notna() & (df[value_column].astype(str).str.strip() != "")
 
-        # Summary counts
         summary = df["Has_Fingerprint"].value_counts().rename({True: "Has Fingerprint", False: "Missing Fingerprint"})
 
         # Plotting
@@ -1181,20 +1217,169 @@ def format_seconds_to_str(time_duration):
     time_str = str(timedelta(seconds=time_duration))[:-3]
     return time_str
 
-if __name__ == "__main__":
-    # print("Static methods module loaded successfully.")
-    # filepath_to_search = r"sample.mp4"
-    # all_paths = get_all_related_paths(filepath_to_search)
+def auto_reconcile_external_moves(file_manager, file_paths: List[str]) -> Dict[str, str]:
+    """
+    High-level function to auto-detect and reconcile externally-moved files.
+    
+    Should be called during:
+    - on_enter_pressed (when loading a folder)
+    - on_refresh_pressed (when refreshing)
+    - show_all_media (when gathering all media)
+    
+    Args:
+        file_manager: FileManager instance
+        file_paths: List of discovered file paths
+    
+    Returns:
+        dict: Mapping of recovered paths
+    """
+    if not file_paths:
+        return {}
+    
+    return file_manager.auto_reconcile_on_refresh(file_paths)
 
-    # print("All known paths for the file:")
-    # for p in all_paths:
-    #     print(p)
-    # get_video_and_screenshots_map()
-    # graph = build_transfer_graph()
-    # print(assoc)
-    # print(len(assoc))
-    # print(parse_duration_to_seconds("00:06.3"))
-    from player_constants import WATCHED_HISTORY_LOG_PATH
-    plot_fingerprint_analysis(WATCHED_HISTORY_LOG_PATH, "File Name", "Fingerprint")
-    # print(get_all_related_paths(r"C:\Users\dever\From D Drive\New folder\Youtube Downloaded\Departure Lane X Wishes X Afsos - Talha Anjum Ft. Anuv Jain & AP Dhillon ｜ DJ Sumit Rajwanshi [JuXuakMtsMQ].webm"))
+@measure_time(print_time=PRINT_TIME)
+def get_all_identity_paths(
+    target_path: str,
+    graph=None,
+    fingerprint_manager=None
+):
+    """
+    Return all paths that represent the same logical media file.
+    Combines:
+      - transfer log relationships (causal)
+      - fingerprint relationships (identity)
+
+    Allows you get the paths related to a file even if it was moved external to the app
+    """
+    target_path = normalise_path(target_path)
+
+    transfer_paths = set(
+        get_all_related_paths(target_path, graph)
+    )
+
+    fingerprint_paths = set()
+    if fingerprint_manager:
+        index_hash = fingerprint_manager.get_index_hash_by_path(target_path)
+        if index_hash:
+            fingerprint_paths.update(
+                normalise_path(p)
+                for p in fingerprint_manager.get_paths_by_hash(index_hash)
+            )
+
+    return sorted(transfer_paths | fingerprint_paths)
+
+@measure_time(print_time=PRINT_TIME)
+def get_all_identity_paths_multi(
+    target_paths,
+    graph=None,
+    fingerprint_manager=None
+):
+    """
+    Optimized multi-path identity resolution.
+    """
+
+    if not target_paths:
+        return []
+
+    target_paths = {normalise_path(p) for p in target_paths}
+
+    visited_paths = set()
+    result = set()
+    queue = deque(target_paths)
+
+    expanded_transfer_roots = set()
+    expanded_fingerprint_hashes = set()
+
+    while queue:
+        path = queue.popleft()
+        if path in visited_paths:
+            continue
+
+        visited_paths.add(path)
+        result.add(path)
+
+        if path not in expanded_transfer_roots:
+            expanded_transfer_roots.add(path)
+
+            for p in get_all_related_paths(path, graph):
+                if p not in visited_paths:
+                    queue.append(p)
+
+        if fingerprint_manager:
+            index_hash = fingerprint_manager.get_index_hash_by_path(path)
+            if index_hash and index_hash not in expanded_fingerprint_hashes:
+                expanded_fingerprint_hashes.add(index_hash)
+
+                for p in fingerprint_manager.get_paths_by_hash(index_hash):
+                    p = normalise_path(p)
+                    if p not in visited_paths:
+                        queue.append(p)
+
+    return sorted(result)
+
+@measure_time(print_time=PRINT_TIME)
+def get_all_identity_paths_multi_optimized(paths, graph, fingerprint_manager, sort=True):
+    if not paths:
+        return []
+
+    paths = {normalise_path(p) for p in paths}
+
+    all_transfer_paths = set(get_all_related_paths_multiple(paths, graph))
+
+    visited = set(all_transfer_paths)
+    result = set(all_transfer_paths)
+
+    expanded_hashes = set()
+    for path in all_transfer_paths:
+        if fingerprint_manager:
+            index_hash = fingerprint_manager.get_index_hash_by_path(path)
+            if index_hash and index_hash not in expanded_hashes:
+                expanded_hashes.add(index_hash)
+                for p in fingerprint_manager.get_paths_by_hash(index_hash):
+                    p = normalise_path(p)
+                    if p not in visited:
+                        visited.add(p)
+                        result.add(p)
+    if sort:
+        return sorted(result)
+
+    return result
+
+def build_identity_groups(paths, graph, fingerprint_manager):
+    paths = {normalise_path(p) for p in paths}
+    unvisited = set(paths)
+    groups = []
+
+    while unvisited:
+        start = unvisited.pop()
+
+        group = set(
+            get_all_identity_paths_multi_optimized(
+                [start],
+                graph,
+                fingerprint_manager
+            )
+        )
+
+        groups.append(group)
+        unvisited -= group
+
+    return groups
+
+
+
+if __name__ == "__main__":
+    from fingerprint_manager import MediaFingerprintManager
+    fingerprint_manager = MediaFingerprintManager()
+    graph = build_transfer_graph()
+    file_path = r""
+    file_path2 = r""
+    file_path3 = r""
+    file_path4 = r""
+    pprint(get_all_identity_paths(target_path=file_path, graph=graph, fingerprint_manager=fingerprint_manager))
+    pprint(get_all_related_paths(file_path, graph=graph))
+    pprint(get_all_related_paths_multiple([file_path, file_path2, file_path3, file_path4], graph=graph))
+    pprint(get_all_identity_paths_multi_optimized([file_path, file_path2, file_path3, file_path4], graph=graph, fingerprint_manager=fingerprint_manager  ))
+    pprint(build_identity_groups([file_path, file_path2, file_path3, file_path4], graph, fingerprint_manager))
     pass
