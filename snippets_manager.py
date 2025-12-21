@@ -1,27 +1,31 @@
 import csv
 import os
+from pprint import pprint
 import time
 from deletion_manager import DeletionManager
+from fingerprint_manager import MediaFingerprintManager
 from player_constants import SNIPPETS_HISTORY_CSV, LOG_PATH
-from static_methods import create_csv_file, get_all_related_paths
+from static_methods import create_csv_file, get_all_identity_paths, get_all_related_paths, measure_time
 from logs_writer import LogManager
 from associations_manager import FileAssociator
 
 
 class SnippetsManager:
-    def __init__(self, csv_path=SNIPPETS_HISTORY_CSV, logger=None, deletion_manager=None, association_manager=None):
+    def __init__(self, csv_path=SNIPPETS_HISTORY_CSV, logger=None, deletion_manager=None, association_manager=None,
+                 fingerprint_manager=None):
         self.csv_path = csv_path
         self.headers = [
             "Timestamp", "Original File", "Original File Size", "Output File",
             "Start Time (s)", "End Time (s)", "Trim Mode",
-            "Total Duration (s)", "Resolution", "File Size (MB)",
-            "Video Format", "Notes"
+            "Total Duration (s)", "Resolution", "File Size (MB)", "File Size (Bytes)",
+            "Video Format", "Notes", "Original Fingerprint", "Snippet Fingerprint"
         ]
         create_csv_file(self.headers, self.csv_path)
         self.snippets = []
         self.deletion_manager = deletion_manager or DeletionManager()
         # self.associator = association_manager or FileAssociator()
         self.logger = logger or LogManager(LOG_PATH)
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         self._load_snippets()
         self.refactor_csv()
 
@@ -41,7 +45,7 @@ class SnippetsManager:
 
     def record_trim(self, original, output, start_s, end_s, mode,
                 total_duration_s, resolution="Unknown",
-                file_size=None, video_format="mp4", notes=""):
+                file_size=None, video_format="mp4", notes="", original_fingerprint=""):
         """
         Records a snippet trim into the CSV and caches sizes efficiently.
         - original: original video file path
@@ -72,6 +76,9 @@ class SnippetsManager:
                 file_size = None
 
         size_mb = round(file_size / (1024 * 1024), 2) if file_size else "Unknown"
+        size_bytes = file_size if file_size else "Unknown"
+        if original_fingerprint == "":
+            original_fingerprint = self.fingerprint_manager.get_index_hash_by_path(original)
 
         row = {
             "Timestamp": timestamp,
@@ -84,8 +91,11 @@ class SnippetsManager:
             "Total Duration (s)": round(total_duration_s, 2),
             "Resolution": resolution,
             "File Size (MB)": size_mb,
+            "File Size (Bytes)": size_bytes,
             "Video Format": video_format,
-            "Notes": notes
+            "Notes": notes,
+            "Original Fingerprint": original_fingerprint,
+            "Snippet Fingerprint": ""
         }
 
         self.snippets.append(row)
@@ -97,18 +107,20 @@ class SnippetsManager:
     def get_all_snippets(self):
         return self.snippets
 
-    def get_snippets_by_original_file(self, original_file, related_paths=False):
+    def get_snippets_by_original_file(self, original_file, related_paths=False, graph=None):
         """
         Get all snippets related to a specific original file.
 
         Args:
             original_file (str): Path or name of the original file.
+            related_paths (bool): get the snippets for all the related paths of the original file
+            graph: transfer graph to pass for getting related paths
 
         Returns:
             list: A list of snippet dicts (can be empty if none found).
         """
         if related_paths:
-            related_paths = get_all_related_paths(original_file)
+            related_paths = get_all_related_paths(original_file, graph=graph)
             return [s for s in self.snippets if s["Original File"] in related_paths]
         return [s for s in self.snippets if s["Original File"] == original_file]
 
@@ -277,6 +289,89 @@ class SnippetsManager:
 
         return results
     
+    # @measure_time(print_time=True)
+    def get_complete_snippet_info(self, 
+                                  original_file: str, 
+                                  related_paths: bool = True, 
+                                  graph=None,
+                                  original_hash: str = "") -> dict:
+        """
+        Return a complete dictionary of all snippets and related info for a given original file.
+
+        Args:
+            original_file (str): Path of the original file.
+            related_paths (bool): Whether to include snippets for all related file paths.
+            graph: Optional transfer graph for resolving related paths.
+
+        Returns:
+            dict: {
+                'original_file': str,
+                'related_files': [list of related paths],
+                'snippets': [list of snippet dicts with file existence info],
+                'available_snippets': [existing snippet outputs],
+                'missing_snippets': [snippet outputs that don't exist],
+                'total_snippets': int,
+                'available_count': int,
+                'missing_count': int,
+            }
+        """
+        if related_paths:
+            files_to_check = get_all_identity_paths(original_file, graph=graph, fingerprint_manager=self.fingerprint_manager)
+        else:
+            files_to_check = [original_file]
+
+        relevant_snippets = [s for s in self.snippets if s["Original File"] in files_to_check]
+        complete_snippets_info = []
+        available_snippets = []
+        missing_snippets = []
+
+        for s in relevant_snippets:
+            output_file = s["Output File"]
+            exists = os.path.exists(output_file)
+            snippet_info = {**s, "exists": exists}
+            complete_snippets_info.append(snippet_info)
+
+            if exists:
+                available_snippets.append(output_file)
+            else:
+                missing_snippets.append(output_file)
+
+        info = {
+            "original_file": original_file,
+            "related_files": files_to_check,
+            "snippets": complete_snippets_info,
+            "available_snippets": available_snippets,
+            "missing_snippets": missing_snippets,
+            "total_snippets": len(relevant_snippets),
+            "available_count": len(available_snippets),
+            "missing_count": len(missing_snippets)
+        }
+
+        return info
+
+    def fill_missing_snippet_fingerprints(self):
+        """
+        Check all snippets, and fill in missing 'Snippet Fingerprint' using the fingerprint manager.
+        Useful if snippet files were not available at record time.
+        """
+        updated = 0
+        for snippet in self.snippets:
+            out_file = snippet.get("Output File")
+            if not snippet.get("Snippet Fingerprint") and os.path.exists(out_file):
+                duration = snippet.get("Total Duration (s)", "")
+                size_bytes = snippet.get("File Size (Bytes)")
+                if not size_bytes or not isinstance(size_bytes, int):
+                    continue 
+                self.fingerprint_manager.add_fingerprint(out_file, str(duration), str(size_bytes))
+                index_hash = self.fingerprint_manager.get_index_hash_by_path(out_file)
+                snippet["Snippet Fingerprint"] = index_hash
+                updated += 1
+
+        if updated:
+            self._save_snippets()
+            self.fingerprint_manager.flush()
+            print(f"Filled {updated} missing snippet fingerprints.")
+    
     def build_all_associations(self, association_type="related"):
         """
         Add associations for all snippets with their original files.
@@ -306,8 +401,118 @@ class SnippetsManager:
         self.logger.update_logs("[ASSOCIATION BUILDER]",
                                 f"Built {added} new associations (type='{association_type}').")
         return added
+
+    def integrate_fingerprints(self, force_recompute=False):
+        """
+        Add fingerprints from MediaFingerprintManager for both the original and snippet files.
+        Columns added: 'Original Fingerprint', 'Snippet Fingerprint'.
+
+        Args:
+            force_recompute (bool): if True, recompute fingerprints even if already present
+        """
+        fingerprint_manager = self.fingerprint_manager
+        if "Original Fingerprint" not in self.headers:
+            self.headers.append("Original Fingerprint")
+        if "Snippet Fingerprint" not in self.headers:
+            self.headers.append("Snippet Fingerprint")
+
+        if not self.snippets:
+            self._load_snippets()
+
+        for snippet in self.snippets:
+            orig_file = snippet.get("Original File")
+            out_file = snippet.get("Output File")
+
+            if force_recompute or not snippet.get("Original Fingerprint"):
+                index_hash = fingerprint_manager.get_index_hash_by_path(orig_file)
+                if not index_hash and os.path.exists(orig_file):
+                    duration = snippet.get("Total Duration (s)", "")
+                    size_bytes = snippet.get("File Size (Bytes)")
+                    if not size_bytes or not isinstance(size_bytes, int):
+                        continue 
+                    self.fingerprint_manager.add_fingerprint(out_file, str(duration), str(size_bytes))
+                    index_hash = fingerprint_manager.get_index_hash_by_path(orig_file)
+                snippet["Original Fingerprint"] = index_hash
+
+            if force_recompute or not snippet.get("Snippet Fingerprint"):
+                index_hash = fingerprint_manager.get_index_hash_by_path(out_file)
+                if not index_hash and os.path.exists(out_file):
+                    duration = snippet.get("Total Duration (s)", "")
+                    size_bytes = snippet.get("File Size (Bytes)")
+                    if not size_bytes or not isinstance(size_bytes, int):
+                        continue
+                    self.fingerprint_manager.add_fingerprint(out_file, str(duration), str(size_bytes))
+                    index_hash = fingerprint_manager.get_index_hash_by_path(out_file)
+                snippet["Snippet Fingerprint"] = index_hash
+
+        self._save_snippets()
+        fingerprint_manager.flush()
+        print("CSV updated: Added/Updated 'Original Fingerprint' and 'Snippet Fingerprint' columns.")
+
+    def populate_file_size_bytes(self):
+        """
+        Populate the 'File Size (Bytes)' column for all snippets.
+        - First tries to get the accurate size from VideoStatsManager.
+        - If not available, falls back to converting 'File Size (MB)'.
+        """
+        updated = 0
+        try:
+            from stats_manager import VideoStatsManager
+            stats_manager = VideoStatsManager()
+        except ImportError:
+            stats_manager = None
+
+        for snippet in self.snippets:
+            if "File Size (Bytes)" in snippet and snippet["File Size (Bytes)"]:
+                continue
+
+            out_file = snippet.get("Output File")
+            size_bytes = None
+
+            if stats_manager and out_file:
+                size_bytes = stats_manager.get_file_size_bytes(out_file)
+
+            if size_bytes is None:
+                mb = snippet.get("File Size (MB)", 0)
+                try:
+                    size_bytes = int(float(mb) * 1024 * 1024)
+                except Exception:
+                    size_bytes = 0
+
+            snippet["File Size (Bytes)"] = size_bytes
+            updated += 1
+
+        if updated:
+            self._save_snippets()
+            print(f"Updated 'File Size (Bytes)' for {updated} snippets.")
+
+
+    def get_snippets_by_original_fingerprint(
+        self,
+        original_fingerprint: str
+    ) -> list[dict]:
+        """
+        Return all snippets associated with a given original fingerprint.
+
+        Args:
+            original_fingerprint (str): Fingerprint of the original media file.
+
+        Returns:
+            list[dict]: List of snippet rows (can be empty).
+        """
+        if not original_fingerprint:
+            return []
+
+        return [
+            s for s in self.snippets
+            if s.get("Original Fingerprint") == original_fingerprint
+        ]
+
     
 if __name__ == "__main__":
     sm = SnippetsManager()
-    sm.build_all_associations()
-
+    pprint(sm.get_snippets_by_original_fingerprint("c227c88949826f0f9fd0b8199d24ab89"), sort_dicts=False)
+    sm.fill_missing_snippet_fingerprints()
+    # sm.build_all_associations()
+    # sm.integrate_fingerprints()
+    # sm.populate_file_size_bytes()
