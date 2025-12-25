@@ -89,6 +89,8 @@ class ImageViewer:
         self.master.bind("<S>", self.toggle_shuffle)
         self.master.bind("<Delete>", self.set_to_delete)
         self.master.bind("<BackSpace>", self.remove_from_delete)
+        self.master.bind("<Control-c>", self.copy_image_path)
+        self.master.bind("<Control-C>", self.copy_image_path)
 
     def close_window(self, event=None):
         self.master.destroy()
@@ -259,6 +261,20 @@ class ImageViewer:
         image_path = self.image_files[self.current_index]
         self.deletion_manager.remove_from_deletion(image_path)
         self.show_status(f"Removed from deletion: {os.path.basename(image_path)}")
+
+    def copy_image_path(self, event=None):
+        try:
+            image_path = self.image_files[self.current_index]
+            abs_path = os.path.abspath(image_path)
+
+            self.master.clipboard_clear()
+            self.master.clipboard_append(abs_path)
+            self.master.update()
+
+            self.show_status("📋 Absolute path copied")
+        except Exception as e:
+            showerror(self.master, "Error", f"Failed to copy path: {e}")
+
 
     # def add_to_favorites(self, event=None):
         # image_path = self.image_files[self.current_index]
