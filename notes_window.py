@@ -10,7 +10,7 @@ from snippets_manager import SnippetsManager
 
 class NotesManagerGUI:
     def __init__(self, notes_manager=None, snippets_manager=None, 
-                 parent=None, file_path=None, minimal=False):
+                 parent=None, file_path=None, file_hash=None, minimal=False):
         self.notes_manager = notes_manager or NotesManager()
         self.root = tk.Toplevel(parent) if parent else tk.Toplevel()
         self.root.title("File Notes Manager")
@@ -42,11 +42,19 @@ class NotesManagerGUI:
         self.setup_styles()
         self.snippets_manager = snippets_manager or SnippetsManager()
         
-        self.current_video_key = tk.StringVar()
+        # file_path display and index_hash internally stored
+        self.current_file_path = tk.StringVar()
+        self.current_index_hash = None
         if file_path:
-            self.current_video_key.set(file_path)
+            self.current_file_path.set(file_path)
+            self.current_index_hash = self.notes_manager._resolve_key(file_path)
+        elif file_hash:
+            self.current_index_hash = file_hash
+        
         self.search_var = tk.StringVar()
         self.search_var.trace('w', self.on_search_change)
+        
+        self.current_notes_list = []
         
         self.apply_theme()
         self.setup_ui()
@@ -68,12 +76,10 @@ class NotesManagerGUI:
         self.style.theme_use('clam')
         self.style.configure('Dark.TFrame', 
                            background=Colors.PLAIN_BLACK,
-#  background=Colors.PLAIN_BLACK,
                            borderwidth=0)
         
         self.style.configure('Card.TFrame', 
                            background=Colors.PLAIN_BLACK,
-                        # background=Colors.PLAIN_BLACK,
                            borderwidth=0,
                            relief='solid')
         self.style.configure('Dark.TLabel', 
@@ -96,7 +102,6 @@ class NotesManagerGUI:
                            foreground=self.colors['fg_secondary'],
                            font=('Segoe UI', 9))
         self.style.configure('Dark.TButton',
-                        #    background=self.colors['button_bg'],
                             background=Colors.PLAIN_BLACK,
                            foreground=Colors.PLAIN_WHITE,
                            borderwidth=0,
@@ -108,7 +113,6 @@ class NotesManagerGUI:
                                 ('pressed', Colors.PLAIN_RED)])
         
         self.style.configure('Accent.TButton',
-                        #    background=Colors.PLAIN_RED,
                             background=Colors.PLAIN_BLACK,
                            foreground=Colors.PLAIN_RED,
                            borderwidth=0,
@@ -228,7 +232,7 @@ class NotesManagerGUI:
 
         self.video_key_entry = ttk.Entry(
             file_path_frame,
-            textvariable=self.current_video_key,
+            textvariable=self.current_file_path,
             width=30,
             background="#1a1a1a",
             state="readonly",
@@ -327,30 +331,11 @@ class NotesManagerGUI:
             btn.bind("<Enter>", lambda e: e.widget.configure(cursor="hand2"))
             btn.bind("<Leave>", lambda e: e.widget.configure(cursor=""))
 
-        # Currently Not being used
         bottom_frame = ttk.Frame(main_frame, style='Dark.TFrame')
         bottom_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(15, 0))
         bottom_frame.columnconfigure(0, weight=1)
         
-        # stats_frame = ttk.Frame(bottom_frame, style='Card.TFrame', padding="8")
-        # stats_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        
-        # # self.stats_var = tk.StringVar()
-        # ttk.Label(stats_frame, textvariable=self.stats_var, style='Info.TLabel').grid(row=0, column=0, sticky=tk.W)
-        
-        # # # Status bar
         self.status_var = tk.StringVar()
-        # self.status_var.set("Ready")
-        # status_bar = tk.Label(bottom_frame, textvariable=self.status_var, 
-        #                     bg=Colors.PLAIN_BLACK, 
-        #                     fg=self.colors['fg_secondary'],
-        #                     relief=tk.SUNKEN, 
-        #                     anchor=tk.W,
-        #                     font=('Segoe UI', 9),
-        #                     padx=8, pady=4)
-        # status_bar.grid(row=1, column=0, sticky=(tk.W, tk.E))
-        
-        # self.update_stats()
     
     def on_search_change(self, *args):
         """Handle search input changes."""
@@ -362,13 +347,27 @@ class NotesManagerGUI:
             self.show_all_notes()
     
     def populate_listbox(self, notes_list):
-        """Populate the listbox with only file paths for visual clarity."""
+        """
+        Populate the listbox with file paths for visual clarity.
+        Store internal mapping of index_hash -> note_data for later lookup.
+        
+        Args:
+            notes_list: List of (index_hash, note_data) tuples from notes_manager
+        """
         self.notes_listbox.delete(0, tk.END)
-        for video_key, _ in notes_list:
-            display_name = os.path.basename(video_key)
-            self.notes_listbox.insert(tk.END, display_name)
-        self.current_notes_data = notes_list
-        # self.status_var.set(f"Found {len(notes_list)} notes")
+        self.current_notes_list = []
+        
+        for index_hash, note_data in notes_list:
+            file_paths = note_data.get("file_paths", set())
+            
+            if file_paths:
+                for file_path in sorted(file_paths):
+                    display_name = os.path.basename(file_path)
+                    self.notes_listbox.insert(tk.END, display_name)
+                    self.current_notes_list.append((index_hash, note_data, file_path))
+            else:
+                self.notes_listbox.insert(tk.END, f"[Hash: {index_hash[:8]}...]")
+                self.current_notes_list.append((index_hash, note_data, None))
     
     def on_note_select(self, event):
         pass
@@ -382,34 +381,40 @@ class NotesManagerGUI:
             else:
                 index = widget.index(tk.ACTIVE)
 
-            if hasattr(self, 'current_notes_data') and index < len(self.current_notes_data):
-                video_key, note_data = self.current_notes_data[index]
-
-                if not self.is_snippet_file(video_key):
+            if index < len(self.current_notes_list):
+                index_hash, note_data, file_path = self.current_notes_list[index]
+                
+                if not self.is_snippet_file(file_hash=index_hash):
                     self.enable_all_fields()
-                self.current_video_key.set(video_key)
+                
+                if file_path:
+                    self.current_file_path.set(file_path)
+                self.current_index_hash = index_hash
                 self.load_note_data(note_data)
         except Exception as e:
             showerror(self.root, "Error", f"Failed to load notes: {e}")
 
     
     def load_note(self):
-        video_key = self.current_video_key.get().strip()
-        if not video_key:
-            messagebox.showwarning("Warning", "Please enter a file path.")
+        """Load note for the current file path."""
+        file_path = self.current_file_path.get().strip()
+        file_hash = self.current_index_hash
+        if not file_path:
+            messagebox.showwarning("Warning", "Please select a file or enter a file path.")
             return
 
-        is_snippet = self.is_snippet_file(video_key)
+        is_snippet = self.is_snippet_file(file_hash=file_hash)
         
         if is_snippet:
             self.disable_non_snippet_fields()
-            snippet = self.snippets_manager.get_snippet_by_output_file(video_key)
+            snippet = self.snippets_manager.get_snippet_by_output_file(file_path)
             self.note_text.delete(1.0, tk.END)
             self.note_text.insert(1.0, snippet.get("Notes", ""))
         else:
             self.enable_all_fields()
-            note_data = self.notes_manager.get_note(video_key)
+            note_data = self.notes_manager.get_note(file_path)
             if note_data:
+                self.current_index_hash = self.notes_manager._resolve_key(file_path)
                 self.load_note_data(note_data)
             else:
                 self.clear_form()
@@ -436,23 +441,24 @@ class NotesManagerGUI:
 
     
     def save_note(self, event=None):
-        video_key = self.current_video_key.get().strip()
+        """Save note using file path (internally resolved to hash)."""
+        file_path = self.current_file_path.get().strip()
+        file_hash = self.current_index_hash
         note = self.note_text.get(1.0, tk.END).strip()
 
-        if not video_key:
-            showwarning(self.root, "Warning", "Please enter a file path.")
+        if not file_path:
+            showwarning(self.root, "Warning", "Please select or enter a file path.")
             return None
         if note == "":
             showwarning(self.root, "Warning", "Note cannot be empty.")
             return None
 
-        confirm = askyesno(self.root, "Confirm Save", f"Are you sure you want to save the note for:\n{video_key}?")
+        confirm = askyesno(self.root, "Confirm Save", f"Are you sure you want to save the note for:\n{os.path.basename(file_path)}?")
         if not confirm:
             return None
 
-        if self.is_snippet_file(video_key):
-            snippet = self.snippets_manager.get_snippet_by_output_file(video_key)
-            success = self.snippets_manager.update_snippet(video_key, Notes=note)
+        if self.is_snippet_file(file_hash=file_hash):
+            success = self.snippets_manager.update_snippet(file_path, Notes=note)
             if not success:
                 showerror(self.root, "Error", "Failed to update snippet note.")
                 return None
@@ -469,13 +475,13 @@ class NotesManagerGUI:
             try:
                 rating_value = float(rating)
             except ValueError:
-                showerror("Error", "Rating must be a number.")
+                showerror(self.root, "Error", "Rating must be a number.")
                 return None
 
         tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []
 
         self.notes_manager.set_note(
-            file_key=video_key,
+            file_key=file_path,
             note=note,
             rating=rating_value,
             tags=tags_list,
@@ -487,39 +493,43 @@ class NotesManagerGUI:
         self.update_stats()
         self.load_note()
 
-    def is_snippet_file(self, file_path):
-        return self.snippets_manager.get_snippet_by_output_file(file_path) is not None
+    def is_snippet_file(self, file_hash=None):
+        if not file_hash:
+            return False
+        return self.snippets_manager.is_snippet(file_hash)
     
     def disable_non_snippet_fields(self):
+        """Disable metadata fields for snippet files."""
         self.rating_entry.config(state=tk.DISABLED)
         self.tags_entry.config(state=tk.DISABLED)
         self.mood_entry.config(state=tk.DISABLED)
         self.context_entry.config(state=tk.DISABLED)
 
     def enable_all_fields(self):
+        """Enable all metadata fields."""
         self.rating_entry.config(state=tk.NORMAL)
         self.tags_entry.config(state=tk.NORMAL)
         self.mood_entry.config(state=tk.NORMAL)
         self.context_entry.config(state=tk.NORMAL)
     
     def delete_note(self):
-        """Delete the current note."""
-        video_key = self.current_video_key.get().strip()
+        """Delete the current note using file path."""
+        file_path = self.current_file_path.get().strip()
+        file_hash =  self.current_index_hash
 
-        if self.is_snippet_file(video_key):
+        if self.is_snippet_file(file_hash=file_hash):
             showwarning(self.root, "Not Allowed", "Cannot delete note for a snippet file.")
             return
     
-        if not video_key:
-            showwarning(self.root, "Warning", "Please enter a file path.")
+        if not file_path:
+            showwarning(self.root, "Warning", "Please select or enter a file path.")
             return
         
-        if askyesno(self.root, "Confirm Delete", f"Are you sure you want to delete the note for:\n{video_key}?"):
-            self.notes_manager.delete_note(video_key)
+        if askyesno(self.root, "Confirm Delete", f"Are you sure you want to delete the note for:\n{os.path.basename(file_path)}?"):
+            self.notes_manager.delete_note(file_path)
             self.clear_form()
             self.refresh_notes_list()
             self.update_stats()
-            # self.status_var.set(f"Deleted note for: {os.path.basename(video_key)}")
     
     def clear_form(self):
         """Clear all form fields."""
@@ -547,7 +557,7 @@ class NotesManagerGUI:
         self.search_var.set("")
     
     def show_high_rated(self):
-        """Show highly rated notes (rating >= 4)."""
+        """Show highly rated notes (rating >= 7)."""
         notes_list = self.notes_manager.get_notes_by_rating(7)
         self.populate_listbox(notes_list)
         self.search_var.set("")
@@ -560,7 +570,6 @@ class NotesManagerGUI:
         tagged_notes = sum(1 for _, data in self.notes_manager.list_notes() if data.get('tags'))
         
         stats_text = f"Total Notes: {total_notes} | Rated: {rated_notes} | Tagged: {tagged_notes}"
-        # self.stats_var.set(stats_text)
 
     def center_window(self):
         """Center the window on the screen."""
@@ -579,17 +588,17 @@ def open_notes_manager_gui(notes_manager, parent=None, file_path=None):
     Args:
         notes_manager: Instance of NotesManager
         parent: Optional parent Tkinter window
+        file_path: Optional initial file path to load
     """
-    gui = NotesManagerGUI(notes_manager, parent, file_path=file_path)
+    gui = NotesManagerGUI(notes_manager, parent=parent, file_path=file_path)
     return gui
 
 if __name__ == "__main__":
     from notes_manager import NotesManager
-
 
     notes_manager = NotesManager()
     gui = open_notes_manager_gui(notes_manager, file_path="sample_3.mp4")
 
     gui.root.mainloop()
     
-    print("This is Testing Notes Manager GUI.")
+    print("Testing Notes Manager GUI.")
