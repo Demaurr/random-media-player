@@ -95,7 +95,7 @@ class PropertiesWindow(tk.Toplevel):
                 deleted_notice = False
                 file_size = os.path.getsize(self.file_path)
 
-            self.file_key = (os.path.basename(self.file_path), str(file_size))
+            self.file_key = (os.path.basename(self.file_path), str(file_size), self.file_path)
             graph = build_transfer_graph()
             targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
             related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
@@ -302,6 +302,80 @@ class PropertiesWindow(tk.Toplevel):
                 anchor="w"
             )
             index_hash_label.pack(fill="x")
+
+        self._create_header_context_menu(header_frame, content_frame, info_frame, path_label, name_label, path_info)
+
+    def _create_header_context_menu(self, header_frame, content_frame, info_frame, path_label, name_label, path_info):
+        """Create a context menu for the header section with useful actions."""
+        self.header_context_menu = tk.Menu(
+            self, tearoff=0, 
+            bg=self.colors['bg_card'], 
+            fg=self.colors['text_primary'],
+            activebackground=self.colors['accent'],
+            activeforeground=self.colors['text_primary']
+        )
+        
+        self.header_context_menu.add_command(
+            label="📋 Copy File Path",
+            command=self._copy_file_path_from_menu
+        )
+        self.header_context_menu.add_command(
+            label="📄 Copy File Name",
+            command=self._copy_file_name_from_menu
+        )
+        self.header_context_menu.add_command(
+            label="📁 Copy Directory Path",
+            command=self._copy_directory_path
+        )
+        self.header_context_menu.add_command(
+            label="📁 Copy Index Hash",
+            command=lambda: self._copy_index_hash(path_info)
+        )
+        self.header_context_menu.add_separator()
+        
+        self.header_context_menu.add_command(
+            label="Open in Explorer",
+            command=self._open_in_explorer
+        )
+        
+        for widget in [header_frame, content_frame, info_frame, path_label, name_label]:
+            widget.bind("<Button-3>", self._show_header_context_menu)
+
+    def _show_header_context_menu(self, event):
+        """Display the header context menu at cursor position."""
+        try:
+            self.header_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.header_context_menu.grab_release()
+
+    def _copy_file_path_from_menu(self):
+        """Copy full file path to clipboard."""
+        self.clipboard_clear()
+        self.clipboard_append(self.file_path)
+        self.update()
+        messagebox.showinfo("Copied", f"Path copied:\n{self.file_path}")
+
+    def _copy_file_name_from_menu(self):
+        """Copy just the file name to clipboard."""
+        file_name = os.path.basename(self.file_path)
+        self.clipboard_clear()
+        self.clipboard_append(file_name)
+        self.update()
+        messagebox.showinfo("Copied", f"Filename copied:\n{file_name}")
+
+    def _copy_directory_path(self):
+        """Copy directory path to clipboard."""
+        dir_path = os.path.dirname(self.file_path)
+        self.clipboard_clear()
+        self.clipboard_append(dir_path)
+        self.update()
+        messagebox.showinfo("Copied", f"Directory path copied:\n{dir_path}")
+
+    def _copy_index_hash(self, path_info):
+        self.clipboard_clear()
+        self.clipboard_append(path_info.get("index_hash"))
+        self.update()
+        messagebox.showinfo("Copied", f"Index Hash {path_info.get("index_hash")}")
 
     def _create_thumbnail(self, parent, screenshots):
         thumb_container = tk.Frame(parent, bg=self.colors['bg_secondary'], relief="flat", bd=0)
@@ -807,7 +881,7 @@ class PropertiesWindow(tk.Toplevel):
                                     viewer_win.focus_force()
                                     viewer_win.grab_set()
                                     parent.grab_release()
-                                    ImageViewer(viewer_win, valid_files, index=img_idx, width=1000, height=600)
+                                    ImageViewer(viewer_win, valid_files, index=img_idx, width=1000, height=600, deletion_manager=self.deletion_manager)
                                 except Exception as ex:
                                     messagebox.showerror("Error", f"Could not open image viewer:\n{ex}")
 
@@ -1054,11 +1128,33 @@ class PropertiesWindow(tk.Toplevel):
         """Bind window events for better UX"""
         # ESC key to close
         self.bind('<Escape>', lambda e: self._close_window())
+
+        self.bind('<Control-c>', self._copy_file_path)
+        self.bind('<Control-C>', self._copy_file_path)
+
+        self.bind('<Control-e>', self._open_in_explorer)
+        self.bind('<Control-E>', self._open_in_explorer)
+
         self.focus_set()
+
+    def _copy_file_path(self, event=None):
+        """Copy full file path to clipboard"""
+        # self.clipboard_clear()
+        self.clipboard_append(self.file_path)
+        self.update()
+        messagebox.showinfo("Copied", f"Path copied:\n{self.file_path}")
+
+    def _open_in_explorer(self, event=None):
+        """Open file location in Windows Explorer"""
+        import subprocess
+        try:
+            subprocess.Popen(f'explorer /select,"{self.file_path}"')
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open explorer:\n{e}")
 
     def _get_video_stats(self):
         try:
-            stats = self.stats_manager.get_stat(self.file_key[0], self.file_key[1])
+            stats = self.stats_manager.get_stat(self.file_key[2], self.file_key[1])
             if stats:
                 return stats
             else:
