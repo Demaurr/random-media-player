@@ -5,7 +5,7 @@ import time
 from deletion_manager import DeletionManager
 from fingerprint_manager import MediaFingerprintManager
 from player_constants import SNIPPETS_HISTORY_CSV, LOG_PATH
-from static_methods import create_csv_file, get_all_identity_paths, get_all_related_paths, measure_time
+from static_methods import _atomic_save_csv, create_csv_file, get_all_identity_paths, get_all_related_paths, measure_time
 from logs_writer import LogManager
 from associations_manager import FileAssociator
 
@@ -26,8 +26,11 @@ class SnippetsManager:
         # self.associator = association_manager or FileAssociator()
         self.logger = logger or LogManager(LOG_PATH)
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self._snippet_fingerprint_index = set()
+        self._snippet_path_index = set()
         self._load_snippets()
-        self.refactor_csv()
+        # self.refactor_csv()
+        self._build_indexes()
 
     def _load_snippets(self):
         self.snippets.clear()
@@ -38,10 +41,11 @@ class SnippetsManager:
                 self.snippets = list(reader)
 
     def _save_snippets(self):
-        with open(self.csv_path, "w", encoding="utf-8", newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=self.headers)
-            writer.writeheader()
-            writer.writerows(self.snippets)
+        _atomic_save_csv(
+            file_path=self.csv_path,
+            fieldnames=self.headers,
+            rows=self.snippets
+        )
 
     def record_trim(self, original, output, start_s, end_s, mode,
                 total_duration_s, resolution="Unknown",
@@ -102,7 +106,25 @@ class SnippetsManager:
         self._save_snippets()
         self.logger.update_logs("[SNIPPET RECORDED]",
                                 f"Recorded snippet: {output} from {original}")
+        if row["Snippet Fingerprint"]:
+            self._snippet_fingerprint_index.add(row["Snippet Fingerprint"])
 
+        self._snippet_path_index.add(row["Output File"])
+
+    
+    def _build_indexes(self):
+        self._snippet_fingerprint_index.clear()
+        self._snippet_path_index.clear()
+
+        for s in self.snippets:
+            fp = s.get("Snippet Fingerprint")
+            path = s.get("Output File")
+
+            if fp:
+                self._snippet_fingerprint_index.add(fp)
+
+            if path:
+                self._snippet_path_index.add(path)
 
     def get_all_snippets(self):
         return self.snippets
@@ -507,6 +529,28 @@ class SnippetsManager:
             s for s in self.snippets
             if s.get("Original Fingerprint") == original_fingerprint
         ]
+    
+    def is_snippet(self, snippet_fingerprint: str = None, snippet_path: str = None) -> bool:
+        """
+        Check if a given fingerprint or file path corresponds to a recorded snippet.
+
+        Args:
+            snippet_fingerprint (str): Fingerprint of the snippet file.
+            snippet_path (str): Path of the snippet file.
+        Returns:
+            bool: True if it's a recorded snippet, False otherwise.
+        """
+        if snippet_fingerprint:
+            for s in self.snippets:
+                if s.get("Snippet Fingerprint") == snippet_fingerprint:
+                    return True
+
+        if snippet_path:
+            for s in self.snippets:
+                if s.get("Output File") == snippet_path:
+                    return True
+
+        return False
 
     
 if __name__ == "__main__":

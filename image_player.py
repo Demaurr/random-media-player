@@ -109,7 +109,6 @@ class ImageViewer:
         # height = self.master.winfo_height()
         width=width
         height=height
-        print(width, height)
         x_offset = (self.master.winfo_screenwidth() - width) // 2
         y_offset = (self.master.winfo_screenheight() - height) // 2
         self.master.geometry(f"{width}x{height}+{x_offset}+{y_offset}")

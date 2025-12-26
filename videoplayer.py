@@ -87,6 +87,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.fast_trim = tk.BooleanVar(value=True)
         self._play_start_time = None
         self._total_play_time = 0
+        self.trimmed = False
         # self.input_path = None
 
         self.random_select = random_select
@@ -124,6 +125,8 @@ class MediaPlayerApp(tk.Toplevel):
             return
         self.session_end = timeit.default_timer()
         self.stop()
+        if self.trimmed:
+            self.snippets_manager.fill_missing_snippet_fingerprints()
         # tk.Tk.quit(self)
         self.show_session_stats(self.get_stats())
         # if hasattr(self, 'media_player'):
@@ -1639,6 +1642,7 @@ class MediaPlayerApp(tk.Toplevel):
             showerror(self, "Trim Error", f"Unexpected error:\n{e}")
         finally:
             self.active_trims -= 1
+            self.trimmed = True
 
     def increase_sub_delay(self, event=None):
         self.subtitle_delay += 50_000  # 0.05 seconds

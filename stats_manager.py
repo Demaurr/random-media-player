@@ -179,6 +179,28 @@ class VideoStatsManager:
                     horizontal.append(check_set[os.path.basename(row["File Path"])])
         return horizontal
 
+    def get_file_size_bytes(self, file_path: str) -> int | None:
+        """
+        Return file size in bytes using stats if available,
+        otherwise fallback to filesystem or deletion manager.
+        """
+        file_path = normalise_path(file_path)
+
+        for (path, size), row in self.stats.items():
+            if normalise_path(path) == file_path:
+                try:
+                    return int(row["File Size"])
+                except (KeyError, ValueError, TypeError):
+                    pass
+
+        if os.path.exists(file_path):
+            try:
+                return os.path.getsize(file_path)
+            except Exception:
+                pass
+            
+        return self.deletion_manager.get_deleted_file_size(file_path)
+
     def refresh_stats(self, file_path, file_size=None):
         """
         Refresh the stats for a given file_path (and optional file_size).

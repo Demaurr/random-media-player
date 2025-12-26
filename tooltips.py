@@ -63,8 +63,9 @@ class ToolTip:
                 text_widget.insert("end", t, (tag_name,))
                 text_widget.tag_configure(tag_name, **style)
 
-            lines = int(text_widget.index("end-1c").split(".")[0])
-            text_widget.configure(height=min(lines, 15))
+            # lines = int(text_widget.index("end-1c").split(".")[0])
+            # text_widget.configure(height=min(lines, 15))
+            text_widget.configure(height=5)
             text_widget.configure(state="disabled")
 
         tw.update_idletasks()
