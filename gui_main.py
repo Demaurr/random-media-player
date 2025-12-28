@@ -5,6 +5,7 @@ import importlib
 import os
 from datetime import datetime, timedelta
 
+from pprint import pprint
 import sys
 import tempfile
 import threading
@@ -24,7 +25,6 @@ from properties_window import PropertiesWindow
 from stats_manager import VideoStatsManager
 from file_loader import VideoFileLoader
 from file_manager import FileManager
-from get_aspects import VideoProcessor
 from image_player import ImageViewer
 from logs_writer import LogManager
 from tooltips import ToolTip
@@ -107,6 +107,7 @@ class FileExplorerApp:
         self.categories = []
         self.category_names = []
         self.trimmed_segments = {}
+        self.trimmed_segments_metadata = {}
 
         ensure_folder_exists(FILES_FOLDER)
         ensure_folder_exists(SCREENSHOTS_FOLDER)
@@ -119,6 +120,7 @@ class FileExplorerApp:
         create_csv_file(["Source Path","Destination Path","Status","Date"], FILE_TRANSFER_LOG)
         self.root.after(0, self._show_loading_message)
         self.task_manager = TaskManager(self.root)
+        self.logger = LogManager(LOG_PATH)
         self.task_manager.add_task(self._init_managers_background, threaded=True)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
@@ -129,19 +131,18 @@ class FileExplorerApp:
         self.loading_label.pack(pady=40)
 
     def _init_managers_background(self):
-        self.fav_manager = FavoritesManager()
-        self.deletion_manager = DeletionManager(fav_manager=self.fav_manager, gui_parent=self.root)
-        self.logger = LogManager(LOG_PATH)
-        # self.video_processor = VideoProcessor
-        self.category_manager = CategoryManager()
-        self.snippets_manager = SnippetsManager(deletion_manager=self.deletion_manager)
-        self.video_stats_manager = VideoStatsManager(snippets_manager=self.snippets_manager, deletion_manager=self.deletion_manager)
-        self.notes_manager = NotesManager()
-        self.deletion_manager.set_parent_window(self.root)
-        self.backup_manager = BackupManager({})
         self.fingerprint_manager = MediaFingerprintManager()
+        self.fav_manager = FavoritesManager(fingerprint_manager=self.fingerprint_manager)
+        self.backup_manager = BackupManager({})
+        self.notes_manager = NotesManager(fingerprint_manager=self.fingerprint_manager)
+        self.category_manager = CategoryManager(fingerprint_manager=self.fingerprint_manager)
+        self.deletion_manager = DeletionManager(fav_manager=self.fav_manager, gui_parent=self.root)
+        # self.video_processor = VideoProcessor
+        self.snippets_manager = SnippetsManager(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
+        self.video_stats_manager = VideoStatsManager(snippets_manager=self.snippets_manager, deletion_manager=self.deletion_manager)
+        self.deletion_manager.set_parent_window(self.root)
         self.associations_manager = FileAssociator(csv_path=ASSOCIATIONS_CSV, deletion_manager=self.deletion_manager)
-        self.description_manager = DescriptionManager(association_manager=self.associations_manager)
+        self.description_manager = DescriptionManager(association_manager=self.associations_manager, deletion_manager=self.deletion_manager)
         # self.media_collector = MediaPathsCollector(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.root.after(0, self._on_managers_ready)
 
@@ -337,7 +338,7 @@ class FileExplorerApp:
             showinfo(self.root, "No Selection", "Select a File To Add-To Favs.")
             return
         
-        confirm = askyesno(self.root, "Confirm Deletion", f"Are you sure you want to add {len(selected_items)} file(s) to Favorites?")
+        confirm = askyesno(self.root, "Confirm Favorite", f"Are you sure you want to add {len(selected_items)} file(s) to Favorites?")
         if not confirm:
             return
         
@@ -2291,7 +2292,9 @@ class FileExplorerApp:
                 snippets_manager=self.snippets_manager,
                 trimmed_segments=self.trimmed_segments,
                 associations_manager=self.associations_manager,
-                deletion_manager=self.deletion_manager
+                deletion_manager=self.deletion_manager,
+                fingerprint_manager=self.fingerprint_manager,
+                trimmed_segments_metadata=self.trimmed_segments_metadata
             )
             app.update_video_progress()
             print(len(self.trimmed_segments))
@@ -2368,7 +2371,9 @@ class FileExplorerApp:
                                  snippets_manager=self.snippets_manager,
                                  parent=self.root,
                                  trimmed_segments=self.trimmed_segments,
-                                 deletion_manager=self.deletion_manager
+                                 deletion_manager=self.deletion_manager,
+                                 fingerprint_manager=self.fingerprint_manager,
+                                 trimmed_segments_metadata=self.trimmed_segments_metadata
                                  )
             app.update_video_progress()
             # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))
@@ -2568,7 +2573,7 @@ class FileExplorerApp:
             file_path = self.file_table.item(item, "values")[2]
             selected_files.append(file_path)
 
-        category_window = CategoryWindow(self.root, selected_files)
+        category_window = CategoryWindow(self.root, selected_files, category_manager=self.category_manager, fingerprint_manager=self.fingerprint_manager)
         category_window.lift()
         category_window.focus_force()
         self.root.wait_window(category_window)
