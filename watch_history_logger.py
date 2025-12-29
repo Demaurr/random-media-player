@@ -121,6 +121,31 @@ class WatchHistoryLogger:
             print(f"Error while fetching fingerprint: {e}")
         return None
 
+    def build_fingerprint_index(self):
+        """Build an in-memory index: fingerprint -> list of rows."""
+        self._fingerprint_index = {}
+        try:
+            with open(self.csv_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    fp = row.get('Fingerprint', '').strip()
+                    if not fp:
+                        continue
+                    self._fingerprint_index.setdefault(fp, []).append(row)
+        except Exception as e:
+            print(f"Error building fingerprint index: {e}")
+            self._fingerprint_index = {}
+
+    def clear_fingerprint_index(self):
+        """
+        Clear the in-memory fingerprint index to free memory.
+        Safe to call multiple times.
+        """
+        if hasattr(self, "_fingerprint_index"):
+            self._fingerprint_index.clear()
+            del self._fingerprint_index
+
+
     def update_fingerprint_for_file(self, file_name, fingerprint):
         """Update fingerprint in watch history for a file."""
         try:
@@ -147,6 +172,21 @@ class WatchHistoryLogger:
             print(f"Error while updating fingerprint: {e}")
             self.logger.error_logs(f"Error updating fingerprint for {file_name}: {e}")
             return False
+        
+    def get_watch_history_by_fingerprint(self, fingerprint, sort_result=True):
+        if not fingerprint:
+            return []
+
+        if not hasattr(self, "_fingerprint_index"):
+            self.build_fingerprint_index()
+
+        entries = self._fingerprint_index.get(fingerprint, [])
+
+        if sort_result:
+            entries = sorted(entries, key=lambda x: x.get('Date Watched', ''), reverse=True)
+
+        return entries
+
         
     def fix_missing_fingerprints_by_name_and_duration(self):
         """
@@ -231,5 +271,6 @@ class WatchHistoryLogger:
 if __name__ == "__main__":
     logger = WatchHistoryLogger()
     # run the following for the updates till 10/12/2025
-    logger.refresh_csv_if_needed()
-    logger.fix_missing_fingerprints_by_name_and_duration()
+    # logger.refresh_csv_if_needed()
+    # logger.fix_missing_fingerprints_by_name_and_duration()
+    logger.get_watch_history_by_fingerprint("c227c88949826f0f9fd0b8199d24ab89")
