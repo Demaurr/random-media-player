@@ -295,12 +295,17 @@ class NotesManager:
             if index_hash not in resolved_hashes:
                 continue
 
+            note_text = data.get("note") or ""
+            mood_text = data.get("mood") or ""
+            context_text = data.get("context") or ""
+            tags_list = data.get("tags") or []
+            
             combined_text = " ".join([
-                data.get("note", ""),
-                " ".join(data.get("tags", [])),
-                data.get("mood", ""),
-                data.get("context", ""),
-                index_hash
+                note_text,
+                " ".join(str(tag) for tag in tags_list if tag),
+                mood_text,
+                context_text,
+                index_hash or ""
             ]).lower()
 
             match_count = sum(word in combined_text for word in query_words)
@@ -308,12 +313,19 @@ class NotesManager:
 
             if match_ratio >= match_threshold:
                 if return_paths:
-                    results.update(data.get("file_paths", []))
+                    file_paths = data.get("file_paths") or set()
+                    results.update(file_paths)
                 else:
                     results.append(index_hash)
 
         return list(results) if return_paths else results
-
+    
+    def get_nones_in_key(self, key="file_paths"):
+        hashes = []
+        for key, data in self.notes.items():
+            if data.get(key) is None:
+                hashes.append(key)
+        return hashes
 
     def get_note_by_hash(self, index_hash: str) -> dict | None:
         """
@@ -660,5 +672,6 @@ class NotesManager:
 if __name__ == "__main__":
     fingerprint_manager = MediaFingerprintManager()
     notes_manager = NotesManager(fingerprint_manager)
-    notes_manager.search_notes_by_keys(query="Proud", allowed_keys=[])
+    # notes_manager.search_notes_by_keys(query="Proud", allowed_keys=[])
+    # print(notes_manager.get_none_paths())
     # notes_manager.migrate_notes_add_index_hash(fingerprint_manager=fingerprint_manager)
