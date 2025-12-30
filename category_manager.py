@@ -305,6 +305,42 @@ class CategoryManager:
         """Get sorted categories for a file."""
         return sorted(self.file_to_categories.get(normalise_path(file_path), []))
 
+    def get_categories_by_hash(self, index_hash: str) -> list[str]:
+        """
+        Get all categories that contain any file with a given fingerprint.
+        Categories are derived from file associations (no duplicated state).
+        """
+        if not index_hash:
+            return []
+
+        return sorted({
+            category
+            for file_path in self.hash_to_files.get(index_hash, ())
+            for category in self.file_to_categories.get(file_path, ())
+        })
+
+    def remap_index_hash(self, old_hash: str, new_hash: str):
+        """
+        Update categories when a fingerprint hash changes
+        (e.g., after fingerprint merge or regeneration).
+        """
+        if old_hash == new_hash:
+            return
+
+        files = self.hash_to_files.pop(old_hash, set())
+        if not files:
+            return
+
+        self.hash_to_files[new_hash].update(files)
+
+        for file_path in files:
+            self.file_to_hash[file_path] = new_hash
+            for row in self.entries:
+                if row[1] == file_path:
+                    row[2] = new_hash
+
+        self._write_entries()
+
     def update_file_path(self, old_path: str, new_path: str) -> bool:
         """
         Update a file path in categories (e.g., after moving a file).
