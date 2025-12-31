@@ -21,10 +21,10 @@ pause
 
     shutil.copy(batch_path, shortcut_path)
 
-    print("✅ Batch file created successfully:")
-    print(f"   {batch_path}")
-    print("📂 A desktop shortcut has also been created for easy access:")
-    print(f"   {shortcut_path}")
+    print("Batch file created successfully:")
+    print(f"----> {batch_path}")
+    print("A desktop shortcut has also been created for easy access:")
+    print(f"----> {shortcut_path}")
     print("\nYou can now double-click the desktop shortcut to launch the player instantly!")
 
 if __name__ == "__main__":
