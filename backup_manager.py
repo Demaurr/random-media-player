@@ -18,6 +18,7 @@ from player_constants import (
     FINGERPRINTS_CSV,
     FINGERPRINTS_PATHS_CSV,
     ASSOCIATIONS_CSV,
+    ANNOTATIONS_CSV,
     CATEGORIES_OPERATIONS_FILE,
     CATEGORIES_USAGE_FILE,
     CATEGORIES_INTERACTION_FILE
@@ -41,7 +42,8 @@ class BackupManager:
             "FAV_FILES": FAV_FILES,
             "ASSOCIATIONS_CSV": ASSOCIATIONS_CSV,
             "FINGERPRINTS_CSV": FINGERPRINTS_CSV,
-            "FINGERPRINTS_PATHS_CSV": FINGERPRINTS_PATHS_CSV
+            "FINGERPRINTS_PATHS_CSV": FINGERPRINTS_PATHS_CSV,
+            "ANNOTATIONS_CSV": ANNOTATIONS_CSV
         }
         self.backup_folder = BACKUP_FOLDER
         ensure_folder_exists(self.backup_folder)
