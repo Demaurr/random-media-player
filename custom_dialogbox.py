@@ -3,7 +3,7 @@ from custom_messagebox import showerror, showinfo, showwarning
 from static_methods import add_hover_effect, center_window
 
 class MultiFieldDialog(tk.Toplevel):
-    def __init__(self, parent, title="Input Dialog", max_height=500, header_height=40, main_bg="black", window_width=520):
+    def __init__(self, parent, title="Input Dialog", max_height=500, header_height=40, main_bg="black", window_width=520, window_height=400):
         super().__init__(parent)
         self.parent = parent
         self.title(title)
@@ -19,6 +19,7 @@ class MultiFieldDialog(tk.Toplevel):
         self.result = None
         self.max_height = max_height
         self.window_width = window_width
+        self.window_height = window_height
         self.wraplength = window_width - 0.1*window_width
         self.main_bg = main_bg
 
@@ -65,6 +66,9 @@ class MultiFieldDialog(tk.Toplevel):
         )
         hint_label.pack(anchor="center")
         self._keybindings()
+        self.update_idletasks()
+        self.geometry(f"{self.window_width}x{min(self.window_height, self.max_height)}")
+
 
     def _keybindings(self):
         """Set up keybindings for the dialog."""
@@ -76,6 +80,7 @@ class MultiFieldDialog(tk.Toplevel):
         """Resize the canvas window to match canvas width"""
         self.canvas.itemconfig(self.canvas_frame, width=event.width)
         # self.canvas.itemconfig(self.canvas_frame, width=450)
+        # self.canvas.itemconfig(self.canvas_frame, width=self.window_width)
 
     def add_buttons(self, buttons, sticky_bottom=False, position="right"):
         """
@@ -129,83 +134,156 @@ class MultiFieldDialog(tk.Toplevel):
         info_label.pack(fill="x", pady=(2, 5))
         return info_label
 
-    def _add_field_ui(self, field_name, display_name, field_type=str, required=False, 
-                  multiline=False, readonly=False, value=None, default_value:str=None,
-                  input_bg="#f5f5f5", fg_color="#333333"):
+    def _add_field_ui(
+        self,
+        field_name,
+        display_name,
+        field_type=str,
+        required=False,
+        multiline=False,
+        readonly=False,
+        value=None,
+        default_value: str = None,
+        layout="stacked",
+        input_bg="#f5f5f5",
+        fg_color="#333333",
+        field_font_size=11,
+        input_font_size=11
+    ):
         """
         Internal method to create field UI.
-        default_value: string value for the field if no value is provided.
+        layout: "stacked" for label above input, "inline" for label left, input right
         """
-        if default_value:
+        if default_value is not None:
             value = default_value
 
-        row_frame = tk.Frame(self.scrollable_frame, bg="#000000", pady=2)
+        row_frame = tk.Frame(self.scrollable_frame, bg=self.main_bg, pady=2)
         row_frame.pack(fill="x", pady=3)
 
         label_text = f"{display_name}"
-        label = tk.Label(row_frame, text=label_text, fg="#cccccc", bg="#000000",
-                        font=("Segoe UI", 11, "bold"), anchor="w")
-        label.pack(side="top", anchor="w", pady=(0, 1))
-        
-        if required:
-            req_label = tk.Label(row_frame, text="*", fg="#e53935", bg="#000000",
-                                font=("Segoe UI", 12, "bold"))
-            req_label.place(x=label.winfo_reqwidth() + 2, y=0)
+        label = tk.Label(
+            row_frame,
+            text=label_text,
+            fg="#cccccc",
+            bg=self.main_bg,
+            font=("Segoe UI", field_font_size, "bold"),
+            anchor="w",
+        )
 
-        # input_bg = "#f5f5f5"
-        # fg_color = "#333333"
-        
+        if layout == "stacked":
+            label.pack(side="top", anchor="w", pady=(0, 1))
+        elif layout == "inline":
+            label.pack(side="left", padx=(0, 10))
+
+        if required:
+            field_font_size+=1
+            req_label = tk.Label(
+                row_frame,
+                text="*",
+                fg="#e53935",
+                bg=self.main_bg,
+                font=("Segoe UI", field_font_size, "bold"),
+            )
+            if layout == "stacked":
+                req_label.place(x=label.winfo_reqwidth() + 2, y=0)
+            elif layout == "inline":
+                req_label.pack(side="left")
+
         if readonly:
             input_bg = "#2a2a2a"
             fg_color = "#ffffff"
         elif multiline:
             input_bg = "white"
-        # else:
-        #     input_bg = "white"
 
         if readonly:
             lbl_frame = tk.Frame(row_frame, bg="#2a2a2a", height=28)
-            lbl_frame.pack(fill="x", pady=1)
+            if layout == "stacked":
+                lbl_frame.pack(fill="x", pady=1)
+            elif layout == "inline":
+                lbl_frame.pack(side="left", fill="x", expand=True, pady=1)
             lbl_frame.pack_propagate(False)
-            
-            lbl = tk.Label(lbl_frame, text=str(value), font=("Segoe UI", 11, "italic"), 
-                        fg=fg_color, bg=input_bg, anchor="w", padx=8)
+
+            lbl = tk.Label(
+                lbl_frame,
+                text=str(value),
+                font=("Segoe UI", input_font_size, "italic"),
+                fg=fg_color,
+                bg=input_bg,
+                anchor="w",
+                padx=8,
+            )
             lbl.pack(fill="both", expand=True)
             self.entries[field_name] = lbl
+
         elif multiline:
             text_frame = tk.Frame(row_frame, bg="white", relief="flat", bd=1)
-            text_frame.pack(fill="both", expand=True, pady=1)
-            
-            text_widget = tk.Text(text_frame, height=5, font=("Segoe UI", 11, "bold"), 
-                                fg=fg_color, bg=input_bg, wrap="word", 
-                                relief="flat", bd=0, padx=8, pady=6)
+            if layout == "stacked":
+                text_frame.pack(fill="both", expand=True, pady=1)
+            elif layout == "inline":
+                text_frame.pack(side="left", fill="both", expand=True, pady=1)
+
+            text_widget = tk.Text(
+                text_frame,
+                height=5,
+                font=("Segoe UI", 11, "bold"),
+                fg=fg_color,
+                bg=input_bg,
+                wrap="word",
+                relief="flat",
+                bd=0,
+                padx=8,
+                pady=6,
+            )
             text_widget.pack(fill="both", expand=True)
             if value:
                 text_widget.insert("1.0", str(value))
             self.entries[field_name] = text_widget
+
         else:
             entry_frame = tk.Frame(row_frame, bg="white", relief="flat", bd=1)
-            entry_frame.pack(fill="x", pady=1)
-            
+            if layout == "stacked":
+                entry_frame.pack(fill="x", pady=1)
+            elif layout == "inline":
+                entry_frame.pack(side="left", fill="x", expand=True, pady=1)
+
             entry_var = tk.StringVar(value=str(value) if value else "")
-            entry = tk.Entry(entry_frame, textvariable=entry_var, fg=fg_color, bg=input_bg,
-                            font=("Segoe UI", 11, "bold"), relief="flat", bd=0, 
-                            insertbackground="black", selectbackground="#e53935")
+            entry = tk.Entry(
+                entry_frame,
+                textvariable=entry_var,
+                fg=fg_color,
+                bg=input_bg,
+                font=("Segoe UI", 11, "bold"),
+                relief="flat",
+                bd=0,
+                insertbackground="black",
+                selectbackground="#e53935",
+            )
             entry.pack(fill="both", expand=True, padx=8, pady=6)
             entry.focus_set()
             self.entries[field_name] = entry_var
 
-        self.fields.append({
-            "name": field_name,
-            "type": field_type,
-            "required": required,
-            "multiline": multiline,
-            "readonly": readonly
-        })
+        self.fields.append(
+            {
+                "name": field_name,
+                "type": field_type,
+                "required": required,
+                "multiline": multiline,
+                "readonly": readonly,
+                "layout": layout,
+            }
+        )
 
         self.update_idletasks()
-        new_height = min(250 + len(self.fields) * 60, self.max_height)
+        new_height = min(self.window_height + len(self.fields) * 60, self.max_height)
         center_window(self, width=self.window_width, height=new_height)
+
+
+    def add_field(self, field_name, display_name, field_type=str, required=False, multiline=False, default_value=None, layout="stacked", field_font_size=11):
+        self._add_field_ui(field_name, display_name, field_type, required, multiline, readonly=False, default_value=default_value, layout=layout, field_font_size=field_font_size)
+
+    def add_readonly_field(self, field_name, display_name, value, default_value=None, layout="stacked", field_font_size=11):
+        self._add_field_ui(field_name, display_name, type(value), required=False, multiline=False, readonly=True, value=value, default_value=default_value, layout=layout, field_font_size=field_font_size)
+
 
     def _toggle_pill(self, frame, var, active_bg, inactive_bg, label):
         def toggle(_=None):
@@ -229,12 +307,10 @@ class MultiFieldDialog(tk.Toplevel):
         active_bg="#e53935",
         inactive_bg="#1e1e1e",
         required=False,
-        min_selected=1
+        min_selected=1,
+        columns=3 
     ):
         default = set(default or [])
-        # self.selections[name] = {}
-        default = set(default or [])
-
         self.selections[name] = {
             "_vars": {},
             "_required": required,
@@ -258,20 +334,16 @@ class MultiFieldDialog(tk.Toplevel):
         pills_frame = tk.Frame(container, bg="#000000")
         pills_frame.pack(fill="x")
 
-        ACTIVE_BG = active_bg
-        INACTIVE_BG = inactive_bg
-
         col = 0
         row = 0
 
         for key, text in options:
             var = tk.BooleanVar(value=key in default)
-            # self.selections[name][key] = var
             self.selections[name]["_vars"][key] = var
 
             pill = tk.Frame(
                 pills_frame,
-                bg=ACTIVE_BG if var.get() else INACTIVE_BG,
+                bg=active_bg if var.get() else inactive_bg,
                 padx=10,
                 pady=6,
                 highlightthickness=1,
@@ -291,27 +363,33 @@ class MultiFieldDialog(tk.Toplevel):
 
             pill.grid(row=row, column=col, padx=2, pady=2, sticky="w")
 
-            self._toggle_pill(pill, var, ACTIVE_BG, INACTIVE_BG, lbl)
+            def on_enter(event, pill=pill, lbl=lbl):
+                pill.configure(bg="gray")
+                lbl.configure(bg="gray", fg="white")
+
+            def on_leave(event, pill=pill, lbl=lbl, var=var):
+                pill.configure(bg=active_bg if var.get() else inactive_bg)
+                lbl.configure(fg="white" if var.get() else "#cccccc", bg=pill["bg"])
+
+            pill.bind("<Enter>", on_enter)
+            pill.bind("<Leave>", on_leave)
+            lbl.bind("<Enter>", on_enter)
+            lbl.bind("<Leave>", on_leave)
+
+            self._toggle_pill(pill, var, active_bg, inactive_bg, lbl)
 
             col += 1
-            if col >= 3:
+            if col >= columns:
                 col = 0
                 row += 1
 
         self.update_idletasks()
         new_height = min(
-            260 + (len(self.fields) * 60) + (len(options) * 28),
+            self.window_height + (len(self.fields) * 60) + (len(options) * 28),
             self.max_height
         )
-        center_window(self, width=520, height=new_height)
+        center_window(self, width=self.window_width, height=new_height)
 
-
-    def add_field(self, field_name, display_name, field_type=str, required=False, multiline=False, default_value=None):
-        self._add_field_ui(field_name, display_name, field_type, required, multiline, readonly=False, default_value=default_value)
-
-    def add_readonly_field(self, field_name, display_name, value, default_value=None):
-        self._add_field_ui(field_name, display_name, type(value), required=False, 
-                        multiline=False, readonly=True, value=value, default_value=default_value)
 
     def on_ok(self):
         results = {}
@@ -367,7 +445,7 @@ class MultiFieldDialog(tk.Toplevel):
         self.destroy()
 
 def ask_user_info():
-    dialog = MultiFieldDialog(root, "User Information")
+    dialog = MultiFieldDialog(root, "User Information", window_width=600, window_height=100)
     dialog.add_readonly_field("user_id", "User ID", 12345)
     dialog.add_field("name", "Full Name", str, required=True)
     dialog.add_field("age", "Age", int, required=True)
@@ -375,6 +453,8 @@ def ask_user_info():
     dialog.add_field("bio", "Biography", str, multiline=True)
     dialog.add_field("subscribe", "Newsletter Subscription", bool)
     dialog.add_readonly_field("created", "Account Created", "2024-01-15")
+    dialog.add_field("new_email", "Email", str, layout="inline")
+    dialog.add_readonly_field("new_user_id", "User ID", 12345, layout="inline", field_font_size=20)
     def custom_save():
         print("Custom Save action!")
         dialog.on_ok()
@@ -396,14 +476,16 @@ def ask_user_info():
             ("email_notifications", "Email notifications"),
             ("sms_alerts", "SMS alerts"),
             ("dark_mode", "Enable dark mode"),
+            ("bright_mode", "Enable dark mode"),
+            ("light_mode", "Enable dark mode"),
         ],
         default=["dark_mode"],
         required=True,
         min_selected=1,
         active_bg="red",
-        inactive_bg="black"
+        inactive_bg="black",
+        columns=4
     )
-
 
     root.wait_window(dialog)
     
