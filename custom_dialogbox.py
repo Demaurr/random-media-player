@@ -3,7 +3,7 @@ from custom_messagebox import showerror, showinfo, showwarning
 from static_methods import add_hover_effect, center_window
 
 class MultiFieldDialog(tk.Toplevel):
-    def __init__(self, parent, title="Input Dialog", max_height=500, header_height=40):
+    def __init__(self, parent, title="Input Dialog", max_height=500, header_height=40, main_bg="black", window_width=520):
         super().__init__(parent)
         self.parent = parent
         self.title(title)
@@ -15,8 +15,12 @@ class MultiFieldDialog(tk.Toplevel):
         
         self.fields = []
         self.entries = {}
+        self.selections = {}
         self.result = None
         self.max_height = max_height
+        self.window_width = window_width
+        self.wraplength = window_width - 0.1*window_width
+        self.main_bg = main_bg
 
         header_frame = tk.Frame(self, bg="#000000", height=header_height)
         header_frame.pack(fill="x", pady=(0, 10))
@@ -88,7 +92,6 @@ class MultiFieldDialog(tk.Toplevel):
                 self.btn_frame = tk.Frame(self.scrollable_frame, bg="#000000")
                 self.btn_frame.pack(fill="x", pady=(0, 3))
         for btn_text, callback, bg_color, hover_color in buttons:
-            print(btn_text)
             btn = tk.Button(
                 self.btn_frame,
                 text=btn_text,
@@ -121,13 +124,14 @@ class MultiFieldDialog(tk.Toplevel):
             bg="#000000",
             anchor="w",
             justify="left",
-            wraplength=460
+            wraplength=self.wraplength
         )
         info_label.pack(fill="x", pady=(2, 5))
         return info_label
 
     def _add_field_ui(self, field_name, display_name, field_type=str, required=False, 
-                  multiline=False, readonly=False, value=None, default_value:str=None):
+                  multiline=False, readonly=False, value=None, default_value:str=None,
+                  input_bg="#f5f5f5", fg_color="#333333"):
         """
         Internal method to create field UI.
         default_value: string value for the field if no value is provided.
@@ -148,16 +152,16 @@ class MultiFieldDialog(tk.Toplevel):
                                 font=("Segoe UI", 12, "bold"))
             req_label.place(x=label.winfo_reqwidth() + 2, y=0)
 
-        input_bg = "#f5f5f5"
-        fg_color = "#333333"
+        # input_bg = "#f5f5f5"
+        # fg_color = "#333333"
         
         if readonly:
             input_bg = "#2a2a2a"
             fg_color = "#ffffff"
         elif multiline:
             input_bg = "white"
-        else:
-            input_bg = "white"
+        # else:
+        #     input_bg = "white"
 
         if readonly:
             lbl_frame = tk.Frame(row_frame, bg="#2a2a2a", height=28)
@@ -201,6 +205,104 @@ class MultiFieldDialog(tk.Toplevel):
 
         self.update_idletasks()
         new_height = min(250 + len(self.fields) * 60, self.max_height)
+        center_window(self, width=self.window_width, height=new_height)
+
+    def _toggle_pill(self, frame, var, active_bg, inactive_bg, label):
+        def toggle(_=None):
+            var.set(not var.get())
+            if var.get():
+                frame.configure(bg=active_bg)
+                label.configure(bg=active_bg, fg="white")
+            else:
+                frame.configure(bg=inactive_bg)
+                label.configure(bg=inactive_bg, fg="#cccccc")
+
+        frame.bind("<Button-1>", toggle)
+        label.bind("<Button-1>", toggle)
+
+    def add_selections(
+        self,
+        name: str,
+        title: str,
+        options,
+        default=None,
+        active_bg="#e53935",
+        inactive_bg="#1e1e1e",
+        required=False,
+        min_selected=1
+    ):
+        default = set(default or [])
+        # self.selections[name] = {}
+        default = set(default or [])
+
+        self.selections[name] = {
+            "_vars": {},
+            "_required": required,
+            "_min": max(1, min_selected),
+            "_title": title
+        }
+
+        container = tk.Frame(self.scrollable_frame, bg=self.main_bg, pady=6)
+        container.pack(fill="x", pady=(6, 10))
+
+        title_lbl = tk.Label(
+            container,
+            text=title,
+            fg="#cccccc",
+            bg="#000000",
+            font=("Segoe UI", 11, "bold"),
+            anchor="w"
+        )
+        title_lbl.pack(anchor="w", pady=(0, 6))
+
+        pills_frame = tk.Frame(container, bg="#000000")
+        pills_frame.pack(fill="x")
+
+        ACTIVE_BG = active_bg
+        INACTIVE_BG = inactive_bg
+
+        col = 0
+        row = 0
+
+        for key, text in options:
+            var = tk.BooleanVar(value=key in default)
+            # self.selections[name][key] = var
+            self.selections[name]["_vars"][key] = var
+
+            pill = tk.Frame(
+                pills_frame,
+                bg=ACTIVE_BG if var.get() else INACTIVE_BG,
+                padx=10,
+                pady=6,
+                highlightthickness=1,
+                highlightbackground="#333333",
+                bd=0
+            )
+
+            lbl = tk.Label(
+                pill,
+                text=text,
+                font=("Segoe UI", 10, "bold"),
+                fg="white" if var.get() else "#cccccc",
+                bg=pill["bg"],
+                cursor="hand2"
+            )
+            lbl.pack()
+
+            pill.grid(row=row, column=col, padx=2, pady=2, sticky="w")
+
+            self._toggle_pill(pill, var, ACTIVE_BG, INACTIVE_BG, lbl)
+
+            col += 1
+            if col >= 3:
+                col = 0
+                row += 1
+
+        self.update_idletasks()
+        new_height = min(
+            260 + (len(self.fields) * 60) + (len(options) * 28),
+            self.max_height
+        )
         center_window(self, width=520, height=new_height)
 
 
@@ -240,6 +342,21 @@ class MultiFieldDialog(tk.Toplevel):
 
                 results[name] = value
 
+            for group_name, meta in self.selections.items():
+                vars_map = meta["_vars"]
+                selected = {k: v.get() for k, v in vars_map.items()}
+                count = sum(selected.values())
+
+                if meta["_required"] and count < meta["_min"]:
+                    showerror(
+                        self.parent,
+                        "Selection Required",
+                        f"Please select at least {meta['_min']} option(s) in '{meta['_title']}'."
+                    )
+                    return
+
+                results[group_name] = selected
+
             self.result = results
             self.destroy()
         except ValueError as e:
@@ -269,8 +386,24 @@ def ask_user_info():
     dialog.add_buttons([
         ("Save", custom_save, "#e53935", "#b71c1c"),
         ("Cancel", custom_cancel, "#424242", "#616161"),
-        ("Info", lambda: print("Clicked Info!"), "#2196f3", "#1976d2")
-    ])
+        ("Info", lambda: print("Clicked Info!"), "#2196f3", "#1976d2"),
+    ], sticky_bottom=False)
+
+    dialog.add_selections(
+        name="preferences",
+        title="Preferences",
+        options=[
+            ("email_notifications", "Email notifications"),
+            ("sms_alerts", "SMS alerts"),
+            ("dark_mode", "Enable dark mode"),
+        ],
+        default=["dark_mode"],
+        required=True,
+        min_selected=1,
+        active_bg="red",
+        inactive_bg="black"
+    )
+
 
     root.wait_window(dialog)
     
