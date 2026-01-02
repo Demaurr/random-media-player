@@ -3,7 +3,15 @@ import tkinter as tk
 from tkinter import ttk
 import os
 
-from static_methods import are_paths_same, build_transfer_graph, get_all_related_paths, normalise_path, sort_treeview_column
+from fingerprint_manager import MediaFingerprintManager
+from static_methods import (
+    are_paths_same, 
+    build_transfer_graph, 
+    get_all_related_paths, 
+    normalise_path, 
+    sort_treeview_column,
+    get_all_identity_paths_multi_optimized
+)
 from player_constants import ALL_MEDIA_CSV, Colors, ASSOCIATIONS_CSV
 from custom_messagebox import showinfo, showwarning, showerror, askyesno
 from associations_manager import FileAssociator
@@ -11,7 +19,7 @@ from tooltips import ToolTip
 
 
 class FileAssociationWindow:
-    def __init__(self, root, source_file=None, associator=None, graph=None):
+    def __init__(self, root, source_file=None, associator=None, graph=None, fingerprint_manager=None):
         self.root = root
         self.root.title("File Associations Manager")
         self.root.geometry("1000x600")
@@ -19,6 +27,12 @@ class FileAssociationWindow:
         self.root.configure(bg=Colors.PLAIN_BLACK)
 
         self.source_file = normalise_path(source_file) if source_file else None
+        self.source_hash = None
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        
+        if self.source_file and self.fingerprint_manager:
+            self.source_hash = self.fingerprint_manager.get_index_hash_by_path(self.source_file)
+        
         title = "File Associations Manager"
         if self.source_file:
             title += f" - {os.path.basename(self.source_file)}"
@@ -27,16 +41,32 @@ class FileAssociationWindow:
 
         self.root.bind("<Escape>", self.on_closing)
 
-        self.associator = associator or FileAssociator(csv_path=ASSOCIATIONS_CSV)
+        self.associator = associator or FileAssociator(csv_path=ASSOCIATIONS_CSV, fingerprint_manager=self.fingerprint_manager)
+        
         self.transfer_graph = graph or build_transfer_graph()
         self.root.withdraw()
         self.root.deiconify()
+
+        self.related_hashes = set()
+        if self.source_hash and self.fingerprint_manager:
+            self._build_related_hashes_cache()
 
         self._setup_styles()
         self._load_all_media()
         self._create_widgets()
         self.center_window()
 
+    def _build_related_hashes_cache(self):
+        """Build cache of all hashes related to source file through transfer graph."""
+        if not self.source_file:
+            return
+        
+        related_paths = get_all_related_paths(self.source_file, self.transfer_graph)
+        
+        for path in related_paths:
+            file_hash = self.fingerprint_manager.get_index_hash_by_path(path)
+            if file_hash:
+                self.related_hashes.add(file_hash)
 
     def _setup_styles(self):
         style = ttk.Style()
@@ -109,7 +139,7 @@ class FileAssociationWindow:
 
         self.assoc_tree = ttk.Treeview(
             self.left_frame,
-            columns=("Source", "Target", "Type", "Date"),
+            columns=("Source", "Target", "Type", "Date", "Hidden"),
             show="headings",
             style="Association.Treeview"
         )
@@ -127,6 +157,7 @@ class FileAssociationWindow:
         self.assoc_tree.column("Target", width=150)
         self.assoc_tree.column("Type", width=80)
         self.assoc_tree.column("Date", width=80)
+        self.assoc_tree.column("Hidden", width=0, stretch=False)
 
         self.assoc_tree.pack(fill=tk.BOTH, expand=True)
         self.assoc_tree.tag_configure("has_assoc", foreground=Colors.PLAIN_RED, font=("Segoe UI", 10, "bold"))
@@ -309,10 +340,17 @@ class FileAssociationWindow:
         except Exception as e:
             showerror(self.root, "Error", f"Error searching ALL_MEDIA_CSV: {e}")
 
+    def _is_related_to_source(self, source_hash, target_hash):
+        """Check if an association is related to the source file via hash."""
+        if not self.source_hash:
+            return False
+        
+        return (source_hash in self.related_hashes or 
+                target_hash in self.related_hashes)
+
     def _load_associations(self):
-        """Load existing associations into the left treeview."""
+        """Load existing associations into the left treeview using hash-based lookups."""
         self.assoc_tree.delete(*self.assoc_tree.get_children())
-        related_paths = get_all_related_paths(self.source_file, self.transfer_graph) if self.source_file else set()
 
         try:
             all_assocs = self.associator.get_all_associations()
@@ -321,20 +359,24 @@ class FileAssociationWindow:
             other_assocs = []
 
             total_assocs = len(all_assocs)
-            unique_sources = len({normalise_path(a["source_file"]) for a in all_assocs})
+            
+            if self.fingerprint_manager:
+                unique_sources = len({a.get("source_hash") for a in all_assocs if a.get("source_hash")})
+            else:
+                unique_sources = len({normalise_path(a["source_file"]) for a in all_assocs})
+            
             self.stats_label.config(text=f"Associations: {total_assocs} | Unique Sources: {unique_sources}")
 
             for assoc in all_assocs:
-                src = normalise_path(assoc['source_file'])
-                tgt = normalise_path(assoc['target_file'])
-
-                # if self.source_file and (are_paths_same(src, self.source_file) or are_paths_same(tgt, self.source_file)):
-                if self.source_file and (src in related_paths or tgt in related_paths):
+                src_hash = assoc.get('source_hash', '')
+                tgt_hash = assoc.get('target_hash', '')
+                
+                if self.source_file and self._is_related_to_source(src_hash, tgt_hash):
                     priority_assocs.append(assoc)
                 else:
                     other_assocs.append(assoc)
 
-            other_assocs.sort(key=lambda a: a['association_date'])
+            other_assocs.sort(key=lambda a: a.get('association_date', ''))
 
             sorted_assocs = priority_assocs + other_assocs
 
@@ -342,33 +384,35 @@ class FileAssociationWindow:
                 source = os.path.basename(assoc['source_file'])
                 target = os.path.basename(assoc['target_file'])
                 assoc_type = assoc['association_type']
-                date = assoc['association_date']
+                date = assoc.get('association_date', '')
+                
+                src_hash = assoc.get('source_hash', '')
+                tgt_hash = assoc.get('target_hash', '')
 
                 tags = ()
                 if self.source_file:
-                    # if are_paths_same(assoc['source_file'], self.source_file):
-                    #     tags += ("has_assoc",)
-                    # if are_paths_same(assoc['target_file'], self.source_file):
-                    #     tags += ("is_assoc",)
-                    if normalise_path(assoc['source_file']) in related_paths:
+                    if src_hash in self.related_hashes:
                         tags += ("has_assoc",)
-                    if normalise_path(assoc['target_file']) in related_paths:
+                    if tgt_hash in self.related_hashes:
                         tags += ("is_assoc",)
 
-                self.assoc_tree.insert("", "end", values=(source, target, assoc_type, date), tags=tags)
+                hidden_data = f"{src_hash}|{tgt_hash}|{assoc['source_file']}|{assoc['target_file']}"
+                self.assoc_tree.insert("", "end", 
+                                      values=(source, target, assoc_type, date, hidden_data), 
+                                      tags=tags)
 
         except Exception as e:
             showerror(self.root, "Error", f"Error loading associations: {e}")
 
     def _update_association(self):
-        """Update the type of the selected association."""
+        """Update the type of the selected association using hash-based lookup."""
         selected = self.assoc_tree.selection()
         if not selected:
             showwarning(self.root, "Warning", "Please select an association to update.")
             return
 
         item = self.assoc_tree.item(selected[0], "values")
-        source, target, old_type, date = item
+        source_display, target_display, old_type, date, hidden_data = item
 
         new_type = self.type_var.get()
         if new_type == old_type:
@@ -376,24 +420,39 @@ class FileAssociationWindow:
             return
 
         try:
+            if not hidden_data:
+                showerror(self.root, "Error", "Unable to retrieve association data.")
+                return
+            
+            parts = hidden_data.split("|")
+            if len(parts) < 4:
+                showerror(self.root, "Error", "Invalid association data format.")
+                return
+            
+            src_hash, tgt_hash, src_path, tgt_path = parts[0], parts[1], parts[2], parts[3]
+
+            found = False
             for assoc in self.associator.get_all_associations():
-                if (os.path.basename(assoc["source_file"]) == source and
-                    os.path.basename(assoc["target_file"]) == target and
+                if (assoc.get("source_hash") == src_hash and
+                    assoc.get("target_hash") == tgt_hash and
                     assoc["association_type"] == old_type):
                     
                     self.associator.update_association_type(
                         assoc["source_file"], assoc["target_file"], old_type, new_type
                     )
+                    found = True
                     break
 
-            showinfo(self.root, "Success", f"Association updated to type '{new_type}'.")
-            self._load_associations()
+            if found:
+                showinfo(self.root, "Success", f"Association updated to type '{new_type}'.")
+                self._load_associations()
+            else:
+                showerror(self.root, "Error", "Association not found.")
         except Exception as e:
             showerror(self.root, "Error", f"Failed to update association: {e}")
 
-
     def _save_association(self, event=None):
-        """Save the association using FileAssociator."""
+        """Save the association using FileAssociator with fingerprint support."""
         if not self.source_file:
             showwarning(self.root, "Warning", "No source file selected")
             return
@@ -404,44 +463,73 @@ class FileAssociationWindow:
             return
 
         target = self.results_tree.item(selected[0], "values")[1]
+        
         if are_paths_same(self.source_file, target):
             showwarning(self.root, "Warning", "Cannot associate a file with itself.")
             return
+        
+        target_hash = self.fingerprint_manager.get_index_hash_by_path(normalise_path(target))
+        if self.source_hash and target_hash == self.source_hash:
+            showwarning(self.root, "Warning", "Cannot associate a file with itself (same content detected).")
+            return
+        
         target_size = self.results_tree.item(selected[0], "values")[2]
         assoc_type = self.type_var.get()
 
         try:
             self.associator.add_association(self.source_file, target, assoc_type, target_size=target_size)
             showinfo(self.root, "Success", "Association saved successfully!")
+            
+            self._build_related_hashes_cache()
+            
             self._load_associations()
+        except ValueError as ve:
+            showwarning(self.root, "Warning", str(ve))
         except Exception as e:
             showerror(self.root, "Error", f"Failed to save association: {e}")
 
     def _delete_association(self):
-        """Delete the selected association from the left table."""
+        """Delete the selected association using hash-based lookup."""
         selected = self.assoc_tree.selection()
         if not selected:
             showwarning(self.root, "Warning", "Please select an association to delete.")
             return
 
         item = self.assoc_tree.item(selected[0], "values")
-        source, target, assoc_type, date = item
+        source_display, target_display, assoc_type, date, hidden_data = item
 
-        if not askyesno(self.root, "Confirm Delete", f"Remove association:\n{source} -> {target}?"):
+        if not askyesno(self.root, "Confirm Delete", f"Remove association:\n{source_display} -> {target_display}?"):
             return
 
         try:
+            if not hidden_data:
+                showerror(self.root, "Error", "Unable to retrieve association data.")
+                return
+            
+            parts = hidden_data.split("|")
+            if len(parts) < 4:
+                showerror(self.root, "Error", "Invalid association data format.")
+                return
+            
+            src_hash, tgt_hash, src_path, tgt_path = parts[0], parts[1], parts[2], parts[3]
+            
+            found = False
             for assoc in self.associator.get_all_associations():
-                if (os.path.basename(assoc["source_file"]) == source and
-                    os.path.basename(assoc["target_file"]) == target and
+                if (assoc.get("source_hash") == src_hash and
+                    assoc.get("target_hash") == tgt_hash and
                     assoc["association_type"] == assoc_type):
+                    
                     self.associator.remove_association(
                         assoc["source_file"], assoc["target_file"], assoc["association_type"]
                     )
+                    found = True
                     break
 
-            showinfo(self.root, "Success", "Association removed successfully!")
-            self._load_associations()
+            if found:
+                showinfo(self.root, "Success", "Association removed successfully!")
+                self._load_associations()
+            else:
+                showerror(self.root, "Error", "Association not found.")
         except Exception as e:
             showerror(self.root, "Error", f"Failed to remove association: {e}")
 
