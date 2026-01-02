@@ -15,18 +15,7 @@ from __development_const import *
 
 # from tqdm import tqdm
 # from associations_manager import FileAssociator
-from player_constants import (
-    ALL_MEDIA_CSV,
-    ASSOCIATIONS_CSV, 
-    DELETE_FILES_CSV,
-    FILE_TRANSFER_LOG, 
-    FILES_FOLDER, 
-    FOLDER_LOGS, LOG_PATH,
-    SCREENSHOTS_FOLDER,
-    SCREENSHOTS_COMPRESSED_FOLDER,
-    SNIPPETS_HISTORY_CSV, 
-    WATCHED_HISTORY_LOG_PATH
-)
+from player_constants import *
 from logs_writer import LogManager
 from collections import defaultdict, deque
 
@@ -226,6 +215,130 @@ def measure_time(
         return wrapper
 
     return decorator
+
+def measure_memory(
+    *,
+    logger=None,
+    threshold=None,
+    print_memory=False,
+    prefix="[MEMORY] "
+):
+    """
+    Measure memory usage of a synchronous function using tracemalloc.
+
+    Args:
+        logger (LogManager): Your LogManager instance
+        threshold (float): Warn if peak memory exceeds this (in MB)
+        print_memory (bool): Print memory usage to console
+        prefix (str): Prefix for log / print messages
+    """
+
+    def decorator(func):
+        import functools
+        import tracemalloc
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            tracemalloc.start()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+
+                current_mb = current / (1024 * 1024)
+                peak_mb = peak / (1024 * 1024)
+
+                _handle_logging(func, current_mb, peak_mb)
+
+        def _handle_logging(func, current_mb, peak_mb):
+            message = (
+                f"{prefix} | {func.__name__} "
+                f"used {current_mb:.3f} MB (peak {peak_mb:.3f} MB)"
+            )
+
+            if print_memory:
+                print(message)
+
+            if logger:
+                logger.update_logs("MEMORY_USAGE", message)
+
+                if threshold is not None and peak_mb > threshold:
+                    logger.error_logs(
+                        f"{func.__name__} exceeded memory threshold "
+                        f"({peak_mb:.3f} MB > {threshold:.2f} MB)"
+                    )
+
+        return wrapper
+
+    return decorator
+
+import functools
+import tracemalloc
+
+def measure_class_memory(
+    *,
+    logger=None,
+    threshold=None,
+    print_memory=False,
+    prefix="[CLASS MEMORY] "
+):
+    """
+    Measure memory usage of a class by wrapping its methods and measuring
+    instance memory after __init__.
+
+    Args:
+        logger: LogManager instance
+        threshold: Warn if peak memory exceeds this (in MB)
+        print_memory: Print memory usage
+        prefix: Prefix for logs
+    """
+    def class_decorator(cls):
+        original_init = cls.__init__
+
+        @functools.wraps(cls.__init__)
+        def new_init(self, *args, **kwargs):
+            tracemalloc.start()
+            try:
+                original_init(self, *args, **kwargs)
+            finally:
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+
+                current_mb = current / (1024 * 1024)
+                peak_mb = peak / (1024 * 1024)
+
+                message = (
+                    f"{prefix} | {cls.__name__} instance "
+                    f"used {current_mb:.3f} MB (peak {peak_mb:.3f} MB)"
+                )
+
+                if print_memory:
+                    print(message)
+
+                if logger:
+                    logger.update_logs("MEMORY_USAGE", message)
+                    if threshold is not None and peak_mb > threshold:
+                        logger.error_logs(
+                            f"{cls.__name__} instance exceeded memory threshold "
+                            f"({peak_mb:.3f} MB > {threshold:.2f} MB)"
+                        )
+
+        cls.__init__ = new_init
+
+        for attr_name, attr_value in cls.__dict__.items():
+            if callable(attr_value) and attr_name != "__init__":
+                setattr(cls, attr_name, measure_memory(
+                    logger=logger,
+                    threshold=threshold,
+                    print_memory=print_memory,
+                    prefix=prefix
+                )(attr_value))
+
+        return cls
+
+    return class_decorator
+
 
 def gather_all_media(refresh=False):
     try:
@@ -912,7 +1025,15 @@ def _convert_single(file_path, output_dir, quality=80, delete_original=False):
         print(f"Failed {file_path}: {e}")
         return None, "failed"
 
-
+def add_hover_effect(btn, bg_color, hover_color):
+    def on_enter(e):
+        btn['background'] = bg_color
+        btn['foreground'] = hover_color
+    def on_leave(e):
+        btn['background'] = bg_color
+        btn['foreground'] = 'white'
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
 
 def convert_png_to_jpg(files=None, output_dir=SCREENSHOTS_FOLDER,
                        quality=80, max_workers=None, delete_original=False):
@@ -1320,8 +1441,24 @@ def get_all_identity_paths_multi(
 
 @measure_time(print_time=PRINT_TIME)
 def get_all_identity_paths_multi_optimized(paths, graph, fingerprint_manager, sort=True):
+    """
+    Takes a set of paths and returns all paths related to it.
+    Includes both internal transfer relationsips and fingerprint-based relationships.
+
+    Args:
+        paths (set | list | str): one or more file paths
+        graph (dict): transfer graph
+        fingerprint_manager (FingerprintManager): fingerprint manager instance
+        sort (bool): whether to return sorted list
+    Returns:
+        list: all related paths
+    """
+
     if not paths:
         return []
+    
+    if isinstance(paths, str):
+        paths = [paths]
 
     paths = {normalise_path(p) for p in paths}
 
@@ -1370,16 +1507,4 @@ def build_identity_groups(paths, graph, fingerprint_manager):
 
 
 if __name__ == "__main__":
-    from fingerprint_manager import MediaFingerprintManager
-    fingerprint_manager = MediaFingerprintManager()
-    graph = build_transfer_graph()
-    file_path = r""
-    file_path2 = r""
-    file_path3 = r""
-    file_path4 = r""
-    pprint(get_all_identity_paths(target_path=file_path, graph=graph, fingerprint_manager=fingerprint_manager))
-    pprint(get_all_related_paths(file_path, graph=graph))
-    pprint(get_all_related_paths_multiple([file_path, file_path2, file_path3, file_path4], graph=graph))
-    pprint(get_all_identity_paths_multi_optimized([file_path, file_path2, file_path3, file_path4], graph=graph, fingerprint_manager=fingerprint_manager  ))
-    pprint(build_identity_groups([file_path, file_path2, file_path3, file_path4], graph, fingerprint_manager))
     pass
