@@ -12,8 +12,10 @@ import vlc
 
 from category_manager import CategoryManager
 from category_window import CategoryWindow
+from custom_dialogbox import MultiFieldDialog
 from deletion_manager import DeletionManager
 from favorites_manager import FavoritesManager
+from annotations_manager import AnnotationsManager
 from logs_writer import LogManager
 from notes_window import NotesManagerGUI
 from player_constants import (
@@ -25,7 +27,7 @@ from player_constants import (
     VIDEO_SNIPPETS_FOLDER, 
     Colors
     )
-from static_methods import build_transfer_graph, get_all_related_paths, get_all_related_paths_multiple, normalise_path, measure_time
+from static_methods import build_transfer_graph, get_all_related_paths, get_all_related_paths_multiple, normalise_path, measure_time, measure_class_memory
 from video_progress_bar import VideoProgressBar
 from video_stats import VideoStatsApp
 from volume_bar import VolumeBar
@@ -38,12 +40,11 @@ from fingerprint_manager import MediaFingerprintManager
 from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno
 from tooltips import ToolTip
 
-
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None,
-                  associations_manager=None, fingerprint_manager=None, trimmed_segments_metadata=None):
+                  associations_manager=None, fingerprint_manager=None, trimmed_segments_metadata=None, annotations_manager=None):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
@@ -57,6 +58,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
         self.associations_manager = associations_manager or FileAssociator()
+        self.annotations_manager = annotations_manager or AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
         self.trimmed_segments_metadata = trimmed_segments_metadata if trimmed_segments_metadata is not None else {}
@@ -127,6 +129,7 @@ class MediaPlayerApp(tk.Toplevel):
         self.stop()
         if self.trimmed:
             self.snippets_manager.fill_missing_snippet_fingerprints()
+            self.associations_manager.update_missing_fingerprints()
         # tk.Tk.quit(self)
         self.show_session_stats(self.get_stats())
         # if hasattr(self, 'media_player'):
@@ -216,7 +219,222 @@ class MediaPlayerApp(tk.Toplevel):
             print(f"Error during looping: {e}")
             # self.loop_video = False
             self.loop_var.set(False)
+        
+    def _get_nearest_annotation(self, timestamp, tolerance=2.0):
+        annotations = self.annotations_manager.get_annotations_for_file(self.current_file)
+        nearest, min_dist = None, tolerance
 
+        for ann in annotations:
+            dist = abs(ann["timestamp_seconds"] - timestamp)
+            if dist < min_dist:
+                nearest, min_dist = ann, dist
+
+        return nearest
+
+    def update_annotation_at_time(self, event=None, check_existing=True, nearest=None):
+        """Update or delete annotation near the current playback time."""
+        if not self.current_file or not self.annotations_manager:
+            showinfo(self, "No File", "No video is currently playing.")
+            return
+
+        was_topmost = self.attributes("-topmost")
+        was_playing = not self.video_paused
+
+        if was_playing:
+            self.pause_video()
+        if was_topmost:
+            self.attributes("-topmost", False)
+
+        try:
+            if check_existing:
+                timestamp = self.media_player.get_time() / 1000
+                nearest = self._get_nearest_annotation(timestamp, tolerance=2.0)
+                if not nearest:
+                    showinfo(self, "Not Found", "No annotation found near current position.")
+                    return
+
+            dialog = MultiFieldDialog(
+                self,
+                title="Update Video Annotation",
+                max_height=550,
+                header_height=30,
+                window_height=250
+            )
+
+            dialog.add_info(
+                f'Created at: {nearest["created_at"]}\t Modified at: {nearest["modified_at"]}',
+                italic=True,
+                fg=Colors.PLAIN_ORANGE
+            )
+
+            dialog.add_readonly_field("file_path", "File Path", self.current_file)
+            dialog.add_readonly_field("timestamp", "Timestamp", self._format_time(nearest["timestamp_seconds"]))
+
+            dialog.add_field(
+                "annotation_text",
+                "Annotation Text",
+                str,
+                required=True,
+                multiline=True,
+                default_value=nearest["annotation_text"]
+            )
+
+            def on_delete():
+                confirm = askyesno(self,
+                    "Confirm Delete",
+                    "Are you sure you want to delete this annotation?"
+                )
+                if confirm:
+                    self.annotations_manager.delete_annotation(nearest["annotation_id"])
+                    self.show_marquee("Annotation deleted")
+                    self.progress_bar.redraw()
+                    dialog.result = None
+                    dialog.destroy()
+
+            def on_update():
+                dialog.destroy()
+
+            dialog.update_idletasks()  
+            dialog.add_buttons([
+                ("Delete", on_delete, Colors.PLAIN_GRAY, Colors.PLAIN_RED),
+            ], sticky_bottom=True, position="right")
+
+            self.wait_window(dialog)
+
+            if not dialog.result:
+                return
+
+            new_text = dialog.result.get("annotation_text", "").strip()
+            if not new_text:
+                showinfo(self, "Invalid", "Annotation text cannot be empty.")
+                return
+
+            self.annotations_manager.update_annotation(
+                annotation_id=nearest["annotation_id"],
+                annotation_text=new_text
+            )
+
+            self.show_marquee("Annotation updated")
+            self.progress_bar.redraw()
+
+        except Exception as e:
+            showerror(self, "Error", f"An error occurred: {e}")
+            self.logger.error_logs(f"Error updating annotation: {e}")
+
+        finally:
+            if was_playing:
+                self.pause_video()
+            if was_topmost:
+                self.attributes("-topmost", True)
+
+
+    def add_annotation(self, event=None, timestamp_seconds=None):
+        """Open dialog to add an annotation at given timestamp."""
+        if not self.current_file:
+            showwarning(self, "No File", "No video is currently playing.")
+            return
+        
+        if timestamp_seconds is None:
+            timestamp_seconds = self.media_player.get_time() / 1000
+        
+        nearest = self._get_nearest_annotation(timestamp_seconds, tolerance=2.0)
+
+        if nearest:
+            self.update_annotation_at_time(event=None, check_existing=False, nearest=nearest)
+            return
+        
+        was_topmost = self.attributes("-topmost")
+        was_playing = not self.video_paused
+
+        if was_playing:
+            self.pause_video()
+        if was_topmost:
+            self.attributes("-topmost", False)
+        
+        try:
+            dialog = MultiFieldDialog(
+                self,
+                title="Add Video Annotation",
+                max_height=500,
+                window_height=225
+            )
+
+            dialog.add_readonly_field(
+                "file_path",
+                "File Path",
+                f"{self.current_file}")
+
+            dialog.add_readonly_field(
+                "timestamp",
+                "Timestamp",
+                self._format_time(timestamp_seconds)
+            )
+
+            dialog.add_field(
+                "annotation_text",
+                "Annotation Text",
+                str,
+                required=True,
+                multiline=True
+            )
+
+            self.wait_window(dialog)
+
+            if not dialog.result:
+                return
+
+            text = dialog.result.get("annotation_text", "").strip()
+            if not text:
+                print("Annotation text is empty. Not saving.")
+                return
+
+            self.annotations_manager.add_annotation(
+                self.current_file,
+                timestamp_seconds,
+                text
+            )
+
+            self.show_marquee(
+                f"Annotation added at {self._format_time(timestamp_seconds)}"
+            )
+        finally:
+            if was_playing:
+                self.pause_video()
+            if was_topmost:
+                self.attributes("-topmost", True)
+
+
+    def _format_time(self, seconds):
+        """Format seconds to HH:MM:SS."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def delete_annotation_at_time(self, event=None):
+        """Delete annotation at current time."""
+        if not self.current_file or not self.annotations_manager:
+            return
+        
+        timestamp = self.media_player.get_time() / 1000
+        annotations = self.annotations_manager.get_annotations_for_file(self.current_file)
+        
+        nearest = None
+        min_distance = 2.0  # Within 2 seconds
+        
+        for ann in annotations:
+            distance = abs(ann["timestamp_seconds"] - timestamp)
+            if distance < min_distance:
+                nearest = ann
+                min_distance = distance
+        
+        if nearest:
+            if askyesno("Delete", f"Delete annotation: {nearest['annotation_text'][:50]}...?"):
+                self.annotations_manager.delete_annotation(nearest["annotation_id"])
+                self.show_marquee("Annotation deleted")
+                self.progress_bar.redraw()
+        else:
+            showinfo(self, "Not Found", "No annotation found near current position.")
 
     def _create_widgets(self):
         """Creates the GUI elements for the media player with improved style and responsiveness."""
@@ -331,7 +549,8 @@ class MediaPlayerApp(tk.Toplevel):
 
         self.progress_bar = VideoProgressBar(
             self, self.set_video_position, bg=self.bg_color, highlightthickness=0,
-            trimmed_segments=self._get_trimmed_segments()
+            trimmed_segments=self._get_trimmed_segments(),
+            annotations_manager=self.annotations_manager
         )
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=0)
 
@@ -485,6 +704,7 @@ class MediaPlayerApp(tk.Toplevel):
         subs_menu.add_command(label="Add Subtitle File...", command=self.add_subtitle)
         self.context_menu.add_command(label="Add Notes", command=self.show_notes, accelerator="Shift + N")
         self.context_menu.add_command(label="Add to Category", command=self.open_category_manager, accelerator="Shift + A")
+        self.context_menu.add_command(label="Add Annotation", command=self.add_annotation, accelerator="Shift + C")
         self.context_menu.add_separator()
 
         self.context_menu.add_cascade(label="Audio Stereo", menu=audio_channel_menu)
@@ -638,7 +858,10 @@ class MediaPlayerApp(tk.Toplevel):
             ("<Escape>", self._on_close),
             ("<KeyPress-q>", self.toggle_fast_trim),
             ("<KeyPress-Q>", self.toggle_fast_trim),
-            ("<Return>", self.display_name)
+            ("<Return>", self.display_name),
+            ("<Shift-KeyPress-c>", self.add_annotation),
+            ("<Shift-KeyPress-C>", self.add_annotation),
+            ("<Control-Delete>", self.delete_annotation_at_time),
         ]
 
         for seq, func in self._bindings:
@@ -928,10 +1151,9 @@ class MediaPlayerApp(tk.Toplevel):
     def volume_increase(self, event):
         """Increases the volume."""
         current_volume = self.media_player.audio_get_volume()
-        new_volume = min(current_volume + 5, 200)  # Increase volume by 5%, up to 200%
+        new_volume = min(current_volume + 5, 200)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
-        # self.volume_bar.set(new_volume)  # Update volume bar
         self.volume_bar.update_volume(new_volume)
 
     def volume_decrease(self, event):
@@ -940,7 +1162,6 @@ class MediaPlayerApp(tk.Toplevel):
         new_volume = max(current_volume - 5, 0)
         self.media_player.audio_set_volume(int(new_volume))
         self.show_marquee(f"Volume: {new_volume}")
-        # self.volume_bar.set(new_volume) 
         self.volume_bar.update_volume(new_volume)
 
 
@@ -1504,7 +1725,10 @@ class MediaPlayerApp(tk.Toplevel):
             self.attributes("-topmost", False)
 
         try:
-            category_window = CategoryWindow(self, self.current_file, category_manager=self.category_manager)
+            category_window = CategoryWindow(self, 
+                                             self.current_file, 
+                                             category_manager=self.category_manager, 
+                                             fingerprint_manager=self.fingerprint_manager)
             category_window.lift()
             category_window.focus_force()
             self.wait_window(category_window)
@@ -1798,9 +2022,9 @@ class MediaPlayerApp(tk.Toplevel):
 if __name__ == "__main__":
     import sys
     import tkinter as tk
-    dummy_video_files = ["sample1.mp4", "sample2.mkv", "sample3.avi"]
-    app = MediaPlayerApp(video_files=dummy_video_files, random_select=False)
-    app.play_video = lambda: None
+    dummy_video_files = ["/sample1.mp4", "/sample2.mkv", "/sample3.avi"]
+    app = MediaPlayerApp(current_file="/sample1.mp4", video_files=dummy_video_files, random_select=False)
+    # app.play_video = "sample.mp4"
     # app.update_video_progress = lambda: None
     app.update_video_progress()
     app.mainloop()

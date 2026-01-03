@@ -5,11 +5,13 @@ from intervaltree import Interval, IntervalTree
 from static_methods import format_seconds_to_str
 
 class VideoProgressBar(tk.Canvas):
-    def __init__(self, parent, set_position_callback, bg="#222", trimmed_segments=None, height=20, highlightthickness=0):
+    def __init__(self, parent, set_position_callback, bg="#222", trimmed_segments=None, 
+                 height=20, highlightthickness=0, annotations_manager=None):
         super().__init__(parent, bg=bg, highlightthickness=highlightthickness, height=height, cursor="arrow")
         self.parent = parent
         self.set_position_callback = set_position_callback
         self.trimmed_segments = trimmed_segments or []
+        self.annotations_manager = annotations_manager
 
         self.handle = None
         self.dragging = False
@@ -22,6 +24,8 @@ class VideoProgressBar(tk.Canvas):
         self._segment_rects = {}
         self._interval_tree = IntervalTree()
         self._hovered_rect = None
+        self._annotation_rects = {}
+        self._hovered_annotation = None
 
         self.bind("<Button-1>", self.on_click)
         self.bind("<B1-Motion>", self.on_drag)
@@ -40,19 +44,27 @@ class VideoProgressBar(tk.Canvas):
         self._interval_tree = IntervalTree()
         for start, end in self.trimmed_segments:
             note = self._segment_metadata.get((start, end), {}).get("notes", "")
-            # self._interval_tree[start:end] = f"[{format_seconds_to_str(start)} - {format_seconds_to_str(end)}]\n{note}"
             self._interval_tree[start:end] = note
 
         self.redraw(total_duration=total_duration)
 
+    def set_annotations_manager(self, annotations_manager):
+        """Set the annotations manager for displaying annotations."""
+        self.annotations_manager = annotations_manager
+        self.redraw()
+
     def redraw(self, total_duration=None):
         self.delete("all")
         self._segment_rects.clear()
+        self._annotation_rects.clear()
         self._hovered_rect = None
+        self._hovered_annotation = None
+        
         width = max(1, self.winfo_width())
         bar_y1, bar_y2 = 5, 11
 
         self.create_rectangle(0, bar_y1, width, bar_y2, fill="#444444", outline="")
+        
         if not total_duration and hasattr(self.parent, "media_player") and self.parent.media_player:
             total_duration = self.parent.media_player.get_length() / 1000
 
@@ -70,41 +82,37 @@ class VideoProgressBar(tk.Canvas):
                 self.create_line(x1, bar_y1, x1, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
                 self.create_line(x2, bar_y1, x2, bar_y2, fill=Colors.WARNING_ORANGE, width=2)
 
+        if total_duration and self.annotations_manager:
+            current_file = getattr(self.parent, "current_file", None)
+            if current_file:
+                annotations = self.annotations_manager.get_annotations_for_file(current_file)
+                for annotation in annotations:
+                    timestamp = annotation["timestamp_seconds"]
+                    x = int((timestamp / total_duration) * width)
+                    
+                    marker_height = 4
+                    color = annotation.get("annotation_color", "#FF9800")
+                    
+                    marker_id = self.create_line(
+                        x, bar_y1 - marker_height,
+                        x, bar_y1,
+                        fill=color,
+                        width=2
+                    )
+                    self._annotation_rects[marker_id] = annotation
+                    
+                    circle_size = 3
+                    self.create_oval(
+                        x - circle_size, bar_y1 - marker_height - circle_size,
+                        x + circle_size, bar_y1 - marker_height + circle_size,
+                        fill=color,
+                        outline=color
+                    )
+
         if total_duration:
             handle_x = int((self.current_time / total_duration) * width)
             self.handle = self.create_line(handle_x, bar_y1 - 3, handle_x, bar_y2 + 3,
                                            fill=Colors.PLAIN_RED, width=3)
-            # self.draw_last_position(total_duration, width, bar_y1, bar_y2)
-
-    def draw_last_position(self, total_duration, width, bar_y1, bar_y2):
-        current_file = getattr(self.parent, "current_file", None)
-        if not current_file or not total_duration:
-            return
-
-        if current_file in self._last_position_cache:
-            last_seconds = self._last_position_cache[current_file]
-        else:
-            last_pos_str = ""
-            if hasattr(self.parent, "watch_history_logger"):
-                last_pos_str = self.parent.watch_history_logger.get_last_position(current_file)
-            last_seconds = None
-            if last_pos_str:
-                try:
-                    parts = [int(float(x)) for x in last_pos_str.split(":")]
-                    if len(parts) == 2:
-                        h, m, s = 0, parts[0], parts[1]
-                    elif len(parts) == 3:
-                        h, m, s = parts
-                    else:
-                        raise ValueError(f"Unexpected time format: {last_pos_str}")
-                    last_seconds = h * 3600 + m * 60 + s
-                    self._last_position_cache[current_file] = last_seconds
-                except Exception as e:
-                    print(f"Error parsing last position '{last_pos_str}': {e}")
-
-        if last_seconds and 0 < last_seconds < total_duration:
-            last_x = int((last_seconds / total_duration) * width)
-            self.create_line(last_x, bar_y1, last_x, bar_y2, fill=Colors.PLAIN_BLACK, width=2)
 
     def update_progress(self, total_duration=None):
         if hasattr(self.parent, "media_player") and self.parent.media_player:
@@ -125,9 +133,14 @@ class VideoProgressBar(tk.Canvas):
                 segment_content = self._get_segment_at_time(hovered_time)
 
                 self._highlight_segment(hovered_time)
+                self._highlight_annotation(event.x)
 
                 if segment_content:
                     self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, segment_content)
+                elif self._hovered_annotation:
+                    ann = self._hovered_annotation
+                    tooltip_text = f"[{format_seconds_to_str(ann['timestamp_seconds'])}]\n{ann['annotation_text']}"
+                    self.tooltip.show_tooltip(event.x_root + 20, event.y_root - 10, tooltip_text)
                 else:
                     hours, remainder = divmod(int(hovered_time), 3600)
                     mins, secs = divmod(remainder, 60)
@@ -153,6 +166,20 @@ class VideoProgressBar(tk.Canvas):
                         self._hovered_rect = rect_id
                         return
 
+    def _highlight_annotation(self, x_pos):
+        """Highlight annotation marker on hover."""
+        if self._hovered_annotation:
+            self._hovered_annotation = None
+        
+        tolerance = 2
+        for rect_id, annotation in self._annotation_rects.items():
+            coords = self.coords(rect_id)
+            if coords and len(coords) >= 2:
+                marker_x = (coords[0] + coords[2]) / 2
+                if abs(x_pos - marker_x) <= tolerance:
+                    self._hovered_annotation = annotation
+                    return
+
     def _get_segment_at_time(self, time_seconds):
         intervals = self._interval_tree[time_seconds]
         if intervals:
@@ -170,6 +197,7 @@ class VideoProgressBar(tk.Canvas):
         if self._hovered_rect:
             self.itemconfig(self._hovered_rect, fill=Colors.WARNING_ORANGE)
             self._hovered_rect = None
+        self._hovered_annotation = None
         self.tooltip.hide_tooltip()
 
     def move_handle(self, x):
