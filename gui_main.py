@@ -15,6 +15,7 @@ import tracemalloc
 
 import psutil
 
+from annotations_manager import AnnotationsManager
 from associations_window import FileAssociationWindow
 from custom_messagebox import askdirectory, askyesno, showerror, showinfo
 import file_loader
@@ -132,8 +133,9 @@ class FileExplorerApp:
 
     def _init_managers_background(self):
         self.fingerprint_manager = MediaFingerprintManager()
-        self.fav_manager = FavoritesManager(fingerprint_manager=self.fingerprint_manager)
         self.backup_manager = BackupManager({})
+        self.fav_manager = FavoritesManager(fingerprint_manager=self.fingerprint_manager)
+        self.annotations_manager = AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
         self.notes_manager = NotesManager(fingerprint_manager=self.fingerprint_manager)
         self.category_manager = CategoryManager(fingerprint_manager=self.fingerprint_manager)
         self.deletion_manager = DeletionManager(fav_manager=self.fav_manager, gui_parent=self.root)
@@ -141,7 +143,7 @@ class FileExplorerApp:
         self.snippets_manager = SnippetsManager(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.video_stats_manager = VideoStatsManager(snippets_manager=self.snippets_manager, deletion_manager=self.deletion_manager)
         self.deletion_manager.set_parent_window(self.root)
-        self.associations_manager = FileAssociator(csv_path=ASSOCIATIONS_CSV, deletion_manager=self.deletion_manager)
+        self.associations_manager = FileAssociator(csv_path=ASSOCIATIONS_CSV, deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.description_manager = DescriptionManager(association_manager=self.associations_manager, deletion_manager=self.deletion_manager)
         # self.media_collector = MediaPathsCollector(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.root.after(0, self._on_managers_ready)
@@ -215,7 +217,7 @@ class FileExplorerApp:
         #     return
             
         window = tk.Toplevel(self.root)
-        FileAssociationWindow(window, source_file=file_path, associator=self.associations_manager)
+        FileAssociationWindow(window, source_file=file_path, associator=self.associations_manager, fingerprint_manager=self.fingerprint_manager)
         window.focus_force()
 
     def on_close(self):
@@ -234,8 +236,8 @@ class FileExplorerApp:
         self.file_table.bind("<Button-3>", self.on_right_click)
 
         self.file_table.bind('<Return>', self.on_double_click)
-        self.entry.bind("<Control-Return>", self.random_play)
-        self.search_entry.bind("<Control-Return>", self.random_play)
+        # self.entry.bind("<Control-Return>", self.random_play)
+        # self.search_entry.bind("<Control-Return>", self.random_play)
     
         self.file_table.bind('<Delete>', lambda event: self.delete_selected_files(direct_delete=False, event=event))
         self.file_table.bind('<Control-m>', self.move_selected_files)
@@ -522,7 +524,9 @@ class FileExplorerApp:
                     trimmed_segments=self.trimmed_segments,
                     snippets_manager=self.snippets_manager,
                     association_manager=self.associations_manager,
-                    fingerprint_manager=self.fingerprint_manager
+                    fingerprint_manager=self.fingerprint_manager,
+                    favorites_manager=self.fav_manager,
+                    annotations_manager=self.annotations_manager
                 )
                 
                 success = props_window.preload_properties()
@@ -840,7 +844,7 @@ class FileExplorerApp:
             importlib.reload(file_loader)
             self.deletion_manager = DeletionManager()
             self.deletion_manager.set_parent_window(self.root)
-            self.fav_manager = FavoritesManager()
+            self.fav_manager = FavoritesManager(self.fingerprint_manager)
             self.logger = LogManager(LOG_PATH)
         SettingsWindow(self.root, 
                        backup_manager=self.backup_manager, 
@@ -2288,6 +2292,7 @@ class FileExplorerApp:
                 parent=self.root,
                 category_manager=self.category_manager,
                 favorites_manager=self.fav_manager,
+                annotations_manager=self.annotations_manager,
                 notes_manager=self.notes_manager,
                 snippets_manager=self.snippets_manager,
                 trimmed_segments=self.trimmed_segments,
@@ -2359,7 +2364,7 @@ class FileExplorerApp:
         )
 
     def random_play(self, event=None):
-        self.on_enter_pressed()
+        # self.on_enter_pressed()
         self.files = sorted(self.get_files_from_table())
         if self.files:
             # self.root.wm_attributes("-disabled", True)
@@ -2373,6 +2378,7 @@ class FileExplorerApp:
                                  trimmed_segments=self.trimmed_segments,
                                  deletion_manager=self.deletion_manager,
                                  fingerprint_manager=self.fingerprint_manager,
+                                 annotations_manager=self.annotations_manager,
                                  trimmed_segments_metadata=self.trimmed_segments_metadata
                                  )
             app.update_video_progress()
@@ -2380,7 +2386,7 @@ class FileExplorerApp:
             app.mainloop()
             self.deletion_manager.set_parent_window(self.root)
         else:
-            print("No video files found in the specified folder path(s).")
+            print("No files found in the specified folder path(s).")
 
     def show_deletes(self, deleted=False):
         self.clean_memory(["categories", "category_names", "image_files"])

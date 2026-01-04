@@ -3,6 +3,7 @@ import csv
 import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
+from annotations_manager import AnnotationsManager
 from associations_manager import FileAssociator
 from custom_messagebox import showerror
 from player_constants import (
@@ -21,7 +22,9 @@ from static_methods import (
     normalise_path, 
     seconds_to_hhmmss,
     get_watch_stats_for_filenames,
-    get_all_related_paths
+    get_all_related_paths,
+    get_all_identity_paths_multi_optimized,
+    measure_class_memory
 )
 import threading
 from image_player import ImageViewer
@@ -35,26 +38,31 @@ from snippets_manager import SnippetsManager
 from fingerprint_manager import MediaFingerprintManager
 from deletion_manager import DeletionManager
 
-
+# @measure_class_memory(print_memory=True)
 class PropertiesWindow(tk.Toplevel):
     def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, 
                  description_manager=None, deletion_manager=None, snippets_manager=None,
                  stats_manager=None, trimmed_segments=None,
-                 association_manager=None, fingerprint_manager=None):
+                 association_manager=None, fingerprint_manager=None, annotations_manager=None):
         super().__init__(parent)
         self.withdraw()
         self.parent = parent
-        self.file_path = file_path
-        self.category_manager = category_manager or CategoryManager()
-        self.favorites_manager = favorites_manager or FavoritesManager()
-        self.notes_manager = notes_manager or NotesManager()
-        self.description_manager = description_manager or DescriptionManager()
-        self.deletion_manager = deletion_manager or DeletionManager()
-        self.stats_manager = stats_manager or VideoStatsManager()
-        self.snippets_manager = snippets_manager or SnippetsManager()
-        self.association_manager = association_manager or FileAssociator(deletion_manager=self.deletion_manager)
+        self.file_path = normalise_path(file_path)
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-
+        self.category_manager = category_manager or CategoryManager(fingerprint_manager=self.fingerprint_manager)
+        self.favorites_manager = favorites_manager or FavoritesManager(fingerprint_manager=self.fingerprint_manager)
+        self.notes_manager = notes_manager or NotesManager(fingerprint_manager=self.fingerprint_manager)
+        self.deletion_manager = deletion_manager or DeletionManager(fav_manager=self.favorites_manager)
+        self.association_manager = association_manager or FileAssociator(deletion_manager=self.deletion_manager,
+                                                                         fingerprint_manager=self.fingerprint_manager)
+        self.description_manager = description_manager or DescriptionManager(association_manager=self.association_manager,
+                                                                           fingerprint_manager=self.fingerprint_manager)
+        self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager,
+                                                                    association_manager=self.association_manager,
+                                                                    fingerprint_manager=self.fingerprint_manager)
+        self.stats_manager = stats_manager or VideoStatsManager(snippets_manager=self.snippets_manager,
+                                                                deletion_manager=self.deletion_manager)
+        self.annotations_manager = annotations_manager or AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
         self.trimmed_segments = trimmed_segments or {}
         self._setup_styles()
         self.title(f"Properties - {os.path.basename(self.file_path)}")
@@ -106,9 +114,15 @@ class PropertiesWindow(tk.Toplevel):
             is_favorite = self.favorites_manager.check_favorites(self.file_path)
             watch_stats = get_watch_stats_for_filenames(related_paths)
             note_data = self.notes_manager.get_note(self.file_path)
+            # issue that get_all_related_descriptions wont have descriptions for files associated as duplicates/descriptions nor for the files which are moved externally
+            # to rectify this, we may need to enhance the description manager to use the fingerprint manager for it's single source of truth
             related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
             current_desc = self.description_manager.get_description(self.file_path)
             path_info = self.fingerprint_manager.get_path_info_by_file(self.file_path)
+
+            annotations = self.annotations_manager.get_annotations_for_file(self.file_path)
+            index_hash = self.fingerprint_manager.get_index_hash_by_path(self.file_path)
+            associations = self.association_manager.get_associations_by_hash(index_hash) if index_hash else []
 
             self.properties_data = {
                 'deleted_notice': deleted_notice,
@@ -122,7 +136,9 @@ class PropertiesWindow(tk.Toplevel):
                 'note_data': note_data,
                 'related_descs': related_descs,
                 'current_desc': current_desc,
-                'path_info': path_info
+                'path_info': path_info,
+                'annotations': annotations,
+                'associations': associations
             }
             
             return True
@@ -152,12 +168,12 @@ class PropertiesWindow(tk.Toplevel):
                     deleted_notice = False
                     file_size = os.path.getsize(self.file_path)
 
-                self.file_key = (os.path.basename(self.file_path), str(file_size))
+                self.file_key = (os.path.basename(self.file_path), str(file_size), self.file_path)
                 graph = build_transfer_graph()
                 targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
                 related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
                 stats = self._get_video_stats()
-                screenshots = self._get_screenshots(related_paths) 
+                screenshots = self._get_screenshots(related_paths)
                 snippets = self._get_video_snippets(related_paths)
                 categories = self.category_manager.get_file_categories(self.file_path)
                 is_favorite = self.favorites_manager.check_favorites(self.file_path)
@@ -166,12 +182,15 @@ class PropertiesWindow(tk.Toplevel):
                 related_descs = self.description_manager.get_all_related_descriptions(self.file_path)
                 current_desc = self.description_manager.get_description(self.file_path)
                 path_info = self.fingerprint_manager.get_path_info_by_file(self.file_path)
-
+                annotations = self.annotations_manager.get_annotations_for_file(self.file_path)
+                index_hash = self.fingerprint_manager.get_index_hash_by_path(self.file_path)
+                associations = self.association_manager.get_associations_by_hash(index_hash) if index_hash else []
 
                 if self.winfo_exists():
-                    self.after(0, lambda: self._build_ui( deleted_notice, stats, screenshots, snippets,
+                    self.after(0, lambda: self._build_ui(deleted_notice, stats, screenshots, snippets,
                         categories, is_favorite, related_paths, watch_stats,
-                        note_data, related_descs, current_desc, path_info
+                        note_data, related_descs, current_desc, path_info,
+                        annotations, associations
                     ))
             except Exception as e:
                 if self.winfo_exists():
@@ -185,8 +204,9 @@ class PropertiesWindow(tk.Toplevel):
         self._close_window()
 
     def _build_ui(self, deleted_notice, stats, screenshots, snippets,
-                categories, is_favorite, related_paths, watch_stats,
-                note_data, related_descs, current_desc, path_info):
+            categories, is_favorite, related_paths, watch_stats,
+            note_data, related_descs, current_desc, path_info,
+            annotations=None, associations=None):
 
         main_container = tk.Frame(self, bg=self.colors['bg_primary'])
         main_container.pack(fill="both", expand=True, padx=20, pady=20)
@@ -206,7 +226,7 @@ class PropertiesWindow(tk.Toplevel):
         self._create_scrollable_content(
             main_container, stats, screenshots, snippets, categories,
             is_favorite, related_paths, watch_stats, note_data,
-            related_descs, current_desc
+            related_descs, current_desc, annotations, associations
         )
         self._bind_window_events()
 
@@ -417,7 +437,7 @@ class PropertiesWindow(tk.Toplevel):
             fg=self.colors['text_muted']
         ).pack(expand=True)
 
-    def _create_scrollable_content(self, parent, stats, screenshots, snippets, categories, is_favorite, related_paths, watch_stats, note_data, related_descs, current_desc):
+    def _create_scrollable_content(self, parent, stats, screenshots, snippets, categories, is_favorite, related_paths, watch_stats, note_data, related_descs, current_desc, annotations=None, associations=None):
         canvas_frame = tk.Frame(parent, bg=self.colors['bg_primary'])
         canvas_frame.pack(fill="both", expand=True, pady=(0, 20))
 
@@ -455,6 +475,8 @@ class PropertiesWindow(tk.Toplevel):
         self._create_categories_section(left_frame, categories, is_favorite)
         self._create_watch_stats_section(left_frame, related_paths, watch_stats)
         self._create_stats_section(left_frame, stats)
+        self._create_annotations_section(left_frame, annotations)
+        self._create_associations_section(left_frame, associations)
         self._create_description_section(right_frame, related_descs, current_desc, stats.get("File Size", 0))
         self._create_notes_section(right_frame, note_data)
         self._create_screenshots_section(right_frame, screenshots)
@@ -1070,8 +1092,6 @@ class PropertiesWindow(tk.Toplevel):
         loading_label.pack(anchor="w")
 
         def update_stats():
-            # related_paths = get_all_related_paths(self.file_path)
-            # stats = get_watch_stats_for_filenames(related_paths)
             def update_ui():
                 if not content_frame.winfo_exists():
                     return
@@ -1124,9 +1144,124 @@ class PropertiesWindow(tk.Toplevel):
 
         threading.Thread(target=update_stats, daemon=True).start()
 
+    def _create_annotations_section(self, parent, annotations):
+        """Display annotations for the current video file."""
+        if not annotations:
+            return
+        
+        content_frame = self._create_section_card(parent, f"Annotations ({len(annotations)})", "📌")
+        
+        annotations_container = tk.Frame(content_frame, bg=self.colors['bg_card'])
+        annotations_container.pack(fill="both", expand=True, padx=3, pady=3)
+        
+        for annotation in annotations:
+            annotation_frame = tk.Frame(annotations_container, bg=self.colors['bg_secondary'], relief="flat", bd=1)
+            annotation_frame.pack(fill="x", pady=3, padx=3)
+            
+            header_frame = tk.Frame(annotation_frame, bg=self.colors['bg_secondary'])
+            header_frame.pack(fill="x", padx=3, pady=(5, 2))
+            
+            timestamp = annotation.get("timestamp_seconds", 0)
+            timestamp_str = seconds_to_hhmmss(int(timestamp))
+            
+            tk.Label(
+                header_frame,
+                text=f"⏱ {timestamp_str}",
+                font=("Segoe UI", 9, "bold"),
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['accent']
+            ).pack(side="left", padx=(0, 5))
+            
+            tk.Label(
+                header_frame,
+                text=annotation.get("created_at", ""),
+                font=("Segoe UI", 7),
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['text_muted']
+            ).pack(side="right")
+            
+            text_frame = tk.Frame(annotation_frame, bg=self.colors['bg_secondary'])
+            text_frame.pack(fill="both", expand=True, padx=0, pady=0)
+            
+            tk.Label(
+                text_frame,
+                text=annotation.get("annotation_text", ""),
+                font=("Segoe UI", 10),
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['text_secondary'],
+                wraplength=250,
+                justify="left",
+                anchor="w"
+            ).pack(fill="both", expand=True)
+
+    def _create_associations_section(self, parent, associations):
+        """Display file associations (links to related files)."""
+        if not associations:
+            return
+        
+        content_frame = self._create_section_card(parent, f"Associations ({len(associations)})", "🔗")
+        
+        associations_container = tk.Frame(content_frame, bg=self.colors['bg_card'])
+        associations_container.pack(fill="both", expand=True, padx=3, pady=2)
+        
+        for assoc in associations:
+            assoc_frame = tk.Frame(associations_container, bg=self.colors['bg_secondary'], relief="flat", bd=1)
+            assoc_frame.pack(fill="x", pady=2, padx=3)
+            
+            header_frame = tk.Frame(assoc_frame, bg=self.colors['bg_secondary'])
+            header_frame.pack(fill="x", padx=3, pady=(3, 2))
+            
+            role = assoc.get("role", "unknown")
+            assoc_type = assoc.get("association_type", "")
+            
+            role_icon = "->" if role == "source" else "<-"
+            role_text = f"{role.upper()}"
+            
+            tk.Label(
+                header_frame,
+                text=f"{role_icon} {assoc_type.upper()} ({role_text})",
+                font=("Segoe UI", 10, "bold"),
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['accent']
+            ).pack(side="left")
+            
+            content_subframe = tk.Frame(assoc_frame, bg=self.colors['bg_secondary'])
+            content_subframe.pack(fill="both", expand=True, padx=0, pady=0)
+            
+            if role == "source":
+                file_info = assoc.get("target", {})
+                file_label = "Target:"
+            else:
+                file_info = assoc.get("source", {})
+                file_label = "Source:"
+            
+            file_path = file_info.get("file", "")
+            file_name = os.path.basename(file_path)
+            file_size = file_info.get("size", 0)
+            
+            tk.Label(
+                content_subframe,
+                text=f"{file_label} {file_name}",
+                font=("Segoe UI", 10),
+                bg=self.colors['bg_secondary'],
+                fg=self.colors['text_primary'],
+                wraplength=250,
+                justify="left",
+                anchor="w"
+            ).pack(fill="x", pady=0)
+            
+            if file_size:
+                size_str = convert_bytes(file_size)
+                tk.Label(
+                    content_subframe,
+                    text=f"Size: {size_str}",
+                    font=("Segoe UI", 8),
+                    bg=self.colors['bg_secondary'],
+                    fg=self.colors['text_muted']
+                ).pack(fill="x")
+
     def _bind_window_events(self):
         """Bind window events for better UX"""
-        # ESC key to close
         self.bind('<Escape>', lambda e: self._close_window())
 
         self.bind('<Control-c>', self._copy_file_path)

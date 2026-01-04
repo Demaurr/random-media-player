@@ -35,6 +35,11 @@ FINGERPRINTS_LOG_PATH = rf"{LOGS_FOLDER}\Media_Fingerprints.log"
 FINGERPRINTS_PATHS_CSV = rf"{CSV_FOLDER}\Fingerprint_Paths.csv"
 SCREENSHOTS_CSV = rf"{CSV_FOLDER}\Screenshots.csv"
 ASSOCIATIONS_CSV = rf"{CSV_FOLDER}\File_Associations.csv"
+MEMBERS_CSV = rf"{CSV_FOLDER}\Members.csv"
+MEDIA_MEMBERS_CSV = rf"{CSV_FOLDER}\Media_Members.csv"
+MEMBERS_LOG_PATH = rf"{LOGS_FOLDER}\Members_Logs.log"
+ANNOTATIONS_CSV = rf"{CSV_FOLDER}\Annotations.csv"
+ANNOTATIONS_LOG_PATH = rf"{LOGS_FOLDER}\Annotations_Logs.log"
 SKIP_FOLDERS = {r"$RECYCLE.BIN", r"._Datasets", r"._Workbooks", r"._text", r".bzr", r".cache", r".env", r".git", r".gitignore", r".hg", r".idea", r".next", r".nuxt", r".pytest_cache", r".svn", r".vs", r".vscode", r"Logs", r"Reports", r"Screenshots", r"Styles", r"System32", r"Video_Snippets", r"Windows", r"__pycache__", r"bin", r"build", r"cache", r"dist", r"env", r"log", r"logs", r"node_modules", r"obj", r"target", r"temp", r"tmp", r"venv", r"venv.bat", r"virtualenv"}
 
 CATEGORIES_FILE = rf"{CSV_FOLDER}\categories.csv"
