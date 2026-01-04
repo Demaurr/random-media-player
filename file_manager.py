@@ -2,6 +2,7 @@ import os
 import shutil
 import csv
 from datetime import datetime
+from typing import Dict, List
 from description_manager import DescriptionManager
 from fingerprint_manager import MediaFingerprintManager
 from player_constants import FILE_TRANSFER_LOG, LOG_PATH
@@ -155,7 +156,7 @@ class FileManager:
         entry = self.fingerprint_manager.get_path_info_by_file(old_src)
         if entry:
             unique_id = entry["unique_id"]
-            self.fingerprint_manager.update_path_info_by_id(unique_id, new_src)
+            self.fingerprint_manager.update_path_info_byid(unique_id, new_src)
 
     def _reload_folder_async(self, old_src, new_src):
         dest_folder = os.path.dirname(new_src)
@@ -214,3 +215,94 @@ class FileManager:
             except Exception as e:
                 self.logger.error_logs(f"Error creating log file: {e}")
                 print(f"Error creating log file: {e}")
+
+    def auto_detect_external_moves(self, discovered_files: List[str]) -> Dict[str, str]:
+        """
+        Unused for now.
+        Auto-detect files that were moved outside the app and add them to transfer_log.
+        
+        Logic:
+        - Takes discovered files that exist (e.g., in dir B after external move)
+        - Gets their fingerprints
+        - Finds all known paths for that fingerprint
+        - If there's a previous path (from dir A) not in transfer log yet
+        - Adds entry: old_path → new_path (AUTO_RECOVERED)
+        - This keeps get_all_related_paths() connected despite external moves
+        
+        Args:
+            discovered_files: List of file paths that currently exist (from file loader)
+        
+        Returns:
+            dict: {old_path: new_path} for files that were auto-recovered
+        """
+        recovered = {}
+        
+        for file_path in discovered_files:
+            file_path = normalise_path(file_path)
+            
+            index_hash = self.fingerprint_manager.get_index_hash_by_path(file_path)
+            if not index_hash:
+                continue
+            all_known_paths = self.fingerprint_manager.get_paths_by_hash(index_hash)
+            
+            alternative_paths = [p for p in all_known_paths if normalise_path(p) != file_path]
+            
+            if not alternative_paths:
+                continue  
+
+            for old_path in alternative_paths:
+                old_path = normalise_path(old_path)
+                
+                if self._is_path_in_transfer_log(old_path):
+                    continue
+                
+                if os.path.exists(old_path):
+                    continue
+
+                self.log_transfer(old_path, file_path, action="AUTO_RECOVERED")
+                recovered[old_path] = file_path
+                self.logger.update_logs("[AUTO_RECOVERED]", 
+                                    f"{old_path} -> {file_path}")
+        
+        self.fingerprint_manager.flush()
+        return recovered
+
+    def _is_path_in_transfer_log(self, file_path: str) -> bool:
+        """
+        Unused for now.
+        Check if a path already exists as Source Path in the transfer log.
+        """
+        file_path = normalise_path(file_path)
+        try:
+            with open(self.log_file, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if normalise_path(row.get('Source Path', '')) == file_path:
+                        return True
+        except FileNotFoundError:
+            pass
+        return False
+
+    def auto_reconcile_on_refresh(self, discovered_files: List[str]) -> Dict[str, str]:
+        """
+        Unused for now.
+        Wrapper method to be called during GUI refresh operations.
+        Combines external move detection with broken link recovery.
+        
+        This runs after file discovery, before displaying results.
+        
+        Args:
+            discovered_files: Files discovered in the current refresh
+        
+        Returns:
+            dict: Summary of auto-recovered files
+        """
+        external_moves = self.auto_detect_external_moves(discovered_files)
+        
+        if external_moves:
+            self.logger.update_logs("[AUTO RECONCILE]", 
+                                f"Auto-recovered {len(external_moves)} externally-moved file(s)")
+            print(f"[AUTO RECONCILE] Recovered {len(external_moves)} files from external moves")
+        
+        return external_moves
+    

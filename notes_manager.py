@@ -196,6 +196,22 @@ class NotesManager:
         # return self.notes.get(index_key)
         return dict(self.notes[index_key]) if index_key in self.notes else None
     
+    def get_notes_for_files(self, file_keys: list) -> dict[str, dict]:
+        """
+        Get notes for multiple files by their paths.
+        Returns: {file_path: note_data | None}
+        """
+        resolved = self._resolve_keys_batch(file_keys)
+        results = {}
+
+        for file_path, index_key in resolved.items():
+            if index_key and index_key in self.notes:
+                results[file_path] = dict(self.notes[index_key])
+            else:
+                results[file_path] = None
+
+        return results
+    
     def has_note(self, file_key):
         """Check if a file has a note."""
         index_key = self.path_to_hash.get(file_key)

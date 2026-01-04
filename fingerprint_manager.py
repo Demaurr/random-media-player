@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 from player_constants import FINGERPRINTS_CSV, FINGERPRINTS_LOG_PATH, FINGERPRINTS_PATHS_CSV
 from logs_writer import LogManager
-from static_methods import _atomic_save_csv, normalise_path, measure_time
+from static_methods import _atomic_save_csv, normalise_path, measure_time, measure_memory, measure_class_memory
 
 class MediaFingerprintManager:
     def __init__(self):
@@ -331,6 +331,7 @@ class MediaFingerprintManager:
     # @measure_time(print_time=True)
     def get_complete_fingerprint_info(self, index_hash: str) -> Optional[Dict]:
         """
+        Deprecated; Use get_fingerprint_info instead.
         Return a complete dictionary of relevant information for a given fingerprint hash.
         
         Returns:
@@ -430,20 +431,6 @@ class MediaFingerprintManager:
                         **p
                     }
         return None
-    
-    # def update_path_info_bypath(self, old_file_path: str, new_file_path: str) -> bool:
-    #     """
-    #     Update the file path for an existing path entry.
-    #     The unique_id and added_at remain unchanged.
-    #     Returns True if updated, False if path not found.
-    #     """
-    #     for entries in self.paths.values():
-    #         for p in entries:
-    #             if p["file_path"] == old_file_path:
-    #                 p["file_path"] = new_file_path
-    #                 # self._save_paths()
-    #                 return True
-    #     return False
 
     def update_path_info_bypath(self, old_file_path, new_file_path):
         old_file_path = normalise_path(old_file_path)
@@ -817,12 +804,26 @@ class MediaFingerprintManager:
             "missing_count": sum(1 for p in enriched_paths if not p["exists"]),
             "has_duplicates": len(enriched_paths) > 1
         }
-    @measure_time(print_time=True)
+    
+    # @measure_memory(print_memory=True)
+    # @measure_time(print_time=True)
     def get_fingerprint_info(
         self,
         index_hash: str,
         stats_manager,
-        snippets_manager=None
+        snippets_manager=None,
+        notes_manager=None,
+        category_manager=None,
+        watch_history_manager=None,
+        association_manager=None,
+        annotations_manager=None,
+        include_snippets=False,
+        include_notes=False,
+        include_categories=False,
+        include_watch_history=False,
+        include_associations=False,
+        include_annotations=False,
+        include_all=False
     ) -> dict | None:
 
         fp = self.get_fingerprint_by_hash(index_hash)
@@ -865,7 +866,7 @@ class MediaFingerprintManager:
         available_snippets = 0
         missing_snippets = 0
 
-        if snippets_manager:
+        if snippets_manager and (include_snippets or include_all):
             snippets = snippets_manager.get_snippets_by_original_fingerprint(index_hash)
             enriched_snippets = []
             for snip in snippets:
@@ -875,26 +876,66 @@ class MediaFingerprintManager:
                 else:
                     enriched_snippets.append({**snip, "exists": False})
                     missing_snippets += 1
+        
+        note_info = None
 
-        # =========================
-        # 3. Final aggregated view
-        # =========================
+        if notes_manager and (include_notes or include_all):
+            note_info = notes_manager.get_note_display_info(index_hash)
+        
+        categories = []
+
+        if category_manager and (include_categories or include_all):
+            categories = category_manager.get_categories_by_hash(index_hash)
+
+        watch_history_entries = []
+        total_watch_count = 0
+        last_watched_date = None
+
+        if watch_history_manager and (include_watch_history or include_all):
+            watch_history_entries = watch_history_manager.get_watch_history_by_fingerprint(index_hash)
+            total_watch_count = len(watch_history_entries)
+            last_watched_date = watch_history_entries[0].get("Date Watched") if watch_history_entries else None
+
+        associations = []
+        if association_manager and (include_associations or include_all):
+            associations = association_manager.get_associations_by_hash(index_hash)
+
+        annotations = []
+        total_annotations = 0
+        if annotations_manager and (include_annotations or include_all):
+            annotations = annotations_manager.get_annotations_for_hash(index_hash)
+            total_annotations = len(annotations)
+
         return {
             "index_hash": index_hash,
             "fingerprint": fp,
 
-            # originals
             "paths": enriched_paths,
             "total_paths": len(enriched_paths),
             "available_count": sum(1 for p in enriched_paths if p["exists"]),
             "missing_count": sum(1 for p in enriched_paths if not p["exists"]),
             "has_duplicates": len(enriched_paths) > 1,
 
-            # snippets
             "snippets": enriched_snippets,
             "total_snippets": len(enriched_snippets),
             "available_snippets": available_snippets,
             "missing_snippets": missing_snippets,
+
+            "notes": note_info,
+            "has_notes": note_info is not None,
+
+            "categories": categories,
+
+            "watch_history": watch_history_entries,
+            "total_watch_count": total_watch_count,
+            "last_watched_date": last_watched_date,
+            "has_watch_history": total_watch_count > 0,
+
+            "associations": associations,
+            "total_associations": len(associations),
+
+            "annotations": annotations,
+            "total_annotations": total_annotations
         }
 
 
@@ -902,11 +943,30 @@ class MediaFingerprintManager:
 if __name__ == "__main__":
     from stats_manager import VideoStatsManager
     from snippets_manager import SnippetsManager
+    from notes_manager import NotesManager
+    from category_manager import CategoryManager
+    from watch_history_logger import WatchHistoryLogger
+    from deletion_manager import DeletionManager
+    from associations_manager import FileAssociator
+    from annotations_manager import AnnotationsManager
     manager = MediaFingerprintManager()
-    stats_manager = VideoStatsManager()
-    pprint(manager.get_complete_fingerprint_info("49ac4db00025e2ce77907c1021b5e008"))
-    pprint(manager.get_fingerprint_with_stats("49ac4db00025e2ce77907c1021b5e008", stats_manager))
-    # pprint(manager.get_fingerprint_info("c227c88949826f0f9fd0b8199d24ab89", stats_manager, snippets_manager), sort_dicts=False)
+    deletion_manager = DeletionManager()
+    snippets_manager = SnippetsManager(fingerprint_manager=manager, deletion_manager=deletion_manager)
+    stats_manager = VideoStatsManager(deletion_manager=deletion_manager, snippets_manager=snippets_manager)
+    notes_manager = NotesManager(fingerprint_manager=manager)
+    category_manager = CategoryManager(fingerprint_manager=manager)
+    watch_manager = WatchHistoryLogger(fingerprint_manager=manager)
+    association_manager = FileAssociator(deletion_manager=deletion_manager, fingerprint_manager=manager)
+    annotations_manager = AnnotationsManager(fingerprint_manager=manager)
+    watch_manager.build_fingerprint_index()
+    # pprint(manager.get_complete_fingerprint_info("49ac4db00025e2ce77907c1021b5e008"))
+    # pprint(manager.get_fingerprint_with_stats("49ac4db00025e2ce77907c1021b5e008", stats_manager))
+    pprint(manager.get_fingerprint_info("13d0129b2422cd7db2bf154832c25e00", stats_manager, snippets_manager, 
+                                          notes_manager, category_manager, watch_history_manager=watch_manager, association_manager=association_manager, 
+                                          annotations_manager=annotations_manager, include_all=True), sort_dicts=False)
+    # watch_manager.clear_fingerprint_index()
+    pprint(manager.get_fingerprint_info("c227c88949826f0f9fd0b8199d24ab89", stats_manager, snippets_manager, notes_manager, category_manager, watch_history_manager=watch_manager, association_manager=association_manager, annotations_manager=annotations_manager, include_all=True), sort_dicts=False)
+
     # same_collision = manager.find_same_filenames_across_fingerprints()
     # same_collision = manager.find_merge_candidates()
     # pprint(same_collision)
