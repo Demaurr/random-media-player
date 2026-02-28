@@ -2646,7 +2646,7 @@ def check_if_already_running():
             with open(LOCKFILE, "r") as f:
                 pid = int(f.read())
             if psutil.pid_exists(pid):
-                print("Another instance is already running.")
+                print(f"Another instance is already running. {pid}")
                 return True
             else:
                 print("Found stale lock, removing.")

@@ -1840,6 +1840,7 @@ class MediaPlayerApp(tk.Toplevel):
                 out_path
             )
             self.category_manager.add_to_category("Trimmed Videos", out_path)
+            self.category_manager._write_entries()
             self.snippets_manager.record_trim(
                 original=self.current_file,
                 output=out_path,

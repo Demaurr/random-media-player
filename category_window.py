@@ -361,6 +361,9 @@ class CategoryWindow(tk.Toplevel):
             elif already_exists_count > 0:
                 showinfo(self, "Info", f"All {already_exists_count} files already exist in this category.")
         
+        if added_count > 0:
+            self.category_manager._write_entries()
+        
         self.new_category_entry.delete(0, tk.END)
         self.refresh_categories(select_recent=True)
 

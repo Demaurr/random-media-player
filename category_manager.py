@@ -156,7 +156,7 @@ class CategoryManager:
             self.entries.append([category_name, file_path, index_hash, now])
             self.category_to_files[category_name].add(file_path)
             self.file_to_categories[file_path].add(category_name)
-            self._write_entries()
+            # self._write_entries()
             self.logger.update_logs('[CATEGORY ADDED]', f"'{file_path}' (hash: {index_hash[:8] if index_hash else 'N/A'}) to '{category_name}'")
             return True
 
