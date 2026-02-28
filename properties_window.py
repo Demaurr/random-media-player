@@ -13,11 +13,13 @@ from player_constants import (
 )
 from static_methods import (
     build_transfer_graph,
+    build_screenshot_index,
     convert_bytes,
     get_all_related_paths_multiple, 
     get_file_transfer_history,
     get_related_targets, 
     get_screenshots_for_file,
+    get_screenshots_for_file_from_index,
     natural_sort_iterables,
     normalise_path, 
     seconds_to_hhmmss,
@@ -105,10 +107,11 @@ class PropertiesWindow(tk.Toplevel):
 
             self.file_key = (os.path.basename(self.file_path), str(file_size), self.file_path)
             graph = build_transfer_graph()
+            screenshot_index = build_screenshot_index()
             targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
             related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
             stats = self._get_video_stats()
-            screenshots = self._get_screenshots(related_paths) 
+            screenshots = self._get_screenshots(related_paths, screenshot_index) 
             snippets = self._get_video_snippets(related_paths)
             categories = self.category_manager.get_file_categories(self.file_path)
             is_favorite = self.favorites_manager.check_favorites(self.file_path)
@@ -170,10 +173,11 @@ class PropertiesWindow(tk.Toplevel):
 
                 self.file_key = (os.path.basename(self.file_path), str(file_size), self.file_path)
                 graph = build_transfer_graph()
+                screenshot_index = build_screenshot_index()
                 targets = get_related_targets(self.file_path, graph=graph, association_type=["screenshots", "related", "snippets", "duplicate"])
                 related_paths = get_all_related_paths_multiple([self.file_path] + targets, graph=graph)
                 stats = self._get_video_stats()
-                screenshots = self._get_screenshots(related_paths)
+                screenshots = self._get_screenshots(related_paths, screenshot_index)
                 snippets = self._get_video_snippets(related_paths)
                 categories = self.category_manager.get_file_categories(self.file_path)
                 is_favorite = self.favorites_manager.check_favorites(self.file_path)
@@ -230,12 +234,12 @@ class PropertiesWindow(tk.Toplevel):
         )
         self._bind_window_events()
 
-    def _get_screenshots(self, file_paths):
+    def _get_screenshots(self, file_paths, index=None):
         "Uses Natural Sort i.e. numbers in the string won't affect the sorting"
         file_names = set(os.path.basename(path) for path in file_paths)
         screenshots = []
         for file_name in file_names:
-            screenshots += get_screenshots_for_file(file_name)
+            screenshots += get_screenshots_for_file_from_index(file_name, index)
         return natural_sort_iterables(screenshots)
 
 

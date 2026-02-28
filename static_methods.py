@@ -20,7 +20,7 @@ from logs_writer import LogManager
 from collections import defaultdict, deque
 
 logger = LogManager(LOG_PATH)
-# PRINT_TIME = False
+# PRINT_TIME = True
 
 def create_csv_file(headers=None, filename="New_CSV.csv"):
     if os.path.exists(filename):
@@ -530,6 +530,7 @@ def sort_treeview_column(treeview, col, reverse):
 
     treeview.heading(col, command=lambda: sort_treeview_column(treeview, col, not reverse))
 
+@measure_time(print_time=PRINT_TIME)
 def get_screenshots_for_file(filename):
     """
     Returns a list of screenshot file paths for the given filename from the screenshots folder.
@@ -554,6 +555,58 @@ def get_screenshots_for_file(filename):
     except Exception as e:
         print(f"Error while getting screenshots for {filename}: {e}")
         return []
+
+@measure_time(print_time=PRINT_TIME)
+def build_screenshot_index():
+    """
+    Builds a mapping:
+    {
+        "filename1": [path1, path2],
+        "filename2": [path3, path4]
+    }
+    """
+    index = defaultdict(list)
+    folder = SCREENSHOTS_FOLDER
+
+    if not os.path.exists(folder):
+        print(f"Screenshots folder does not exist: {folder}")
+        return index
+
+    try:
+        for file in os.listdir(folder):
+            if not (file.endswith(".png") or file.endswith(".jpg")):
+                continue
+
+            # Expected: screenshot_<filename>_<timestamp>.png
+            if not file.startswith("screenshot_"):
+                continue
+
+            parts = file.split("_")
+
+            if len(parts) < 3:
+                continue
+
+            # Extract filename (everything between screenshot_ and timestamp)
+            filename = "_".join(parts[1:-1])
+
+            full_path = os.path.join(folder, file)
+            index[filename].append(full_path)
+
+    except Exception as e:
+        print(f"Error building screenshot index: {e}")
+
+    return index
+
+@measure_time(print_time=PRINT_TIME)
+def get_screenshots_for_file_from_index(filename, index):
+    """
+    Build a screenshot index via static_methods.build_screenshot_index()
+    And pass the index along side the filename
+    """
+    screenshots = index.get(filename, [])
+    if not screenshots:
+            print(f"No screenshots found for file: {filename}")
+    return screenshots
     
 def get_video_snippets_for_file(filename, sorted_list=False):
     """
@@ -1507,4 +1560,5 @@ def build_identity_groups(paths, graph, fingerprint_manager):
 
 
 if __name__ == "__main__":
+    # plot_fingerprint_analysis("dump.csv","file_path", "note")
     pass
