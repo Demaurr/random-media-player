@@ -1311,9 +1311,7 @@ class PropertiesWindow(tk.Toplevel):
                     related_paths
                 )
             )
-
-            for original_file in file_paths:
-                snippets.extend(self.snippets_manager.get_snippets_by_original_file(original_file))
+            snippets.extend(self.snippets_manager.get_snippets_for_files(file_paths))
 
         except Exception as e:
             print(f"Error getting video snippets: {e}")

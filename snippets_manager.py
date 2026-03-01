@@ -1,3 +1,4 @@
+from collections import defaultdict
 import csv
 import os
 from pprint import pprint
@@ -116,15 +117,21 @@ class SnippetsManager:
         self._snippet_fingerprint_index.clear()
         self._snippet_path_index.clear()
 
+        self._original_to_snippets = defaultdict(list)
+
         for s in self.snippets:
             fp = s.get("Snippet Fingerprint")
             path = s.get("Output File")
+            original = s.get("Original File")
 
             if fp:
                 self._snippet_fingerprint_index.add(fp)
 
             if path:
                 self._snippet_path_index.add(path)
+
+            if original:
+                self._original_to_snippets[original].append(s)
 
     def get_all_snippets(self):
         return self.snippets
@@ -145,6 +152,37 @@ class SnippetsManager:
             related_paths = get_all_related_paths(original_file, graph=graph)
             return [s for s in self.snippets if s["Original File"] in related_paths]
         return [s for s in self.snippets if s["Original File"] == original_file]
+
+    def get_snippets_for_files(self, file_paths, related_paths=False, graph=None):
+        """
+        Efficiently fetch snippets for multiple files.
+
+        Args:
+            file_paths (list[str]): list of original file paths
+            related_paths (bool): include related paths
+            graph: graph for related paths
+
+        Returns:
+            list: list of snippet dicts
+        """
+        if not file_paths:
+            return []
+
+        target_files = set()
+
+        if related_paths:
+            for f in file_paths:
+                related = get_all_related_paths(f, graph=graph)
+                target_files.update(related)
+        else:
+            target_files = set(file_paths)
+
+        results = []
+
+        for f in target_files:
+            results.extend(self._original_to_snippets.get(f, []))
+
+        return results
 
     def get_snippet_by_output_file(self, output_file):
         return next((s for s in self.snippets if s["Output File"] == output_file), None)
@@ -556,7 +594,7 @@ class SnippetsManager:
 if __name__ == "__main__":
     sm = SnippetsManager()
     pprint(sm.get_snippets_by_original_fingerprint("c227c88949826f0f9fd0b8199d24ab89"), sort_dicts=False)
-    sm.fill_missing_snippet_fingerprints()
+    # sm.fill_missing_snippet_fingerprints()
     # sm.build_all_associations()
-    # sm.integrate_fingerprints()
+    # sm.integrate_fingerprints(force_recompute=True)
     # sm.populate_file_size_bytes()
