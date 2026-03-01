@@ -48,16 +48,20 @@ from player_constants import (
 from settings_manager import SettingsWindow
 from static_methods import (
     batch_convert_to_mp4,
+    build_screenshot_index,
+    build_transfer_graph,
     center_window,
     convert_png_to_jpg,
     create_csv_file, 
     ensure_folder_exists, 
     gather_all_media,
     get_all_media_files,
-    get_all_related_paths, 
+    get_all_related_paths,
+    get_all_related_paths_multiple, 
     get_file_size,
     get_file_transfer_history, 
     get_screenshots_for_file,
+    get_screenshots_for_file_from_index,
     get_video_snippets_for_file,
     natural_sort_iterables,
     natural_sort_key, 
@@ -506,8 +510,15 @@ class FileExplorerApp:
         if not selected_items:
             showinfo(self.root, "No Selection", "Please select a file to view properties.")
             return
+        
+        is_category_view = self.entry.get().strip().lower() == "show categories"
+        is_multiple_selection = len(selected_items) > 1
+        
+        if is_multiple_selection or is_category_view:
+            return self._show_grouped_properties(selected_items, is_category_view)
+        
         item = selected_items[0]
-        file_path = self.file_table.item(item, "values")[2] if self.entry.get() != "show categories" else self.file_table.item(item, "values")[1]
+        file_path = self.file_table.item(item, "values")[2]
 
         loading_win = self.show_loading_screen(message="Loading properties...")
 
@@ -640,14 +651,34 @@ class FileExplorerApp:
         if not selected_items:
             showinfo(self.root, "No Selection", "Please select file(s) to view screenshots.")
             return
-
-        shown_any = False
-        max_files = 250
-        screenshots = []
-        for idx, item in enumerate(selected_items[:max_files]):
-            file_path = self.file_table.item(item, "values")[2]
-            filename = os.path.basename(file_path)
-            screenshots += get_screenshots_for_file(filename)
+        
+        loading_win = self.show_loading_screen("Loading screenshots...")
+        
+        def worker():
+            screenshots_index = build_screenshot_index()
+            # max_files = 250
+            screenshots = []
+            filename = None
+            
+            if self.entry.get().strip().lower() == "show categories":
+                category_names = [self.file_table.item(item, "values")[1] for item in selected_items]
+                all_files = self._get_category_files(category_names)
+                for file_path in all_files:
+                    filename = os.path.basename(file_path)
+                    screenshots += get_screenshots_for_file_from_index(filename, screenshots_index)
+            else:
+                for idx, item in enumerate(selected_items):
+                    file_path = self.file_table.item(item, "values")[2]
+                    filename = os.path.basename(file_path)
+                    screenshots += get_screenshots_for_file_from_index(filename, screenshots_index)
+            
+            self.root.after(0, self._on_screenshots_loaded, loading_win, screenshots, filename)
+        
+        threading.Thread(target=worker, daemon=True).start()
+    
+    def _on_screenshots_loaded(self, loading_win, screenshots, filename):
+        if loading_win.winfo_exists():
+            loading_win.destroy()
         
         if screenshots:
             viewer_window = tk.Toplevel(self.root)
@@ -661,11 +692,10 @@ class FileExplorerApp:
                 deletion_manager=self.deletion_manager
             )
             viewer_window.focus_force()
-            shown_any = True
         else:
             showinfo(self.root, "No Screenshots", f"No screenshots found for: {filename}")
 
-        if not shown_any:
+        if not screenshots:
             showinfo(self.root, "No Screenshots", "No screenshots found for any of the selected files.")
 
     def get_video_snippets_for_selected(self, files=None, all_files=True, check_deleted=False, on_complete=None, msg="Fetching video snippets..."):
@@ -679,27 +709,99 @@ class FileExplorerApp:
             selected_items = files if all_files else files[:1]
 
         loading = self.show_loading_screen(msg)
+        
+        if self.entry.get().strip().lower() == "show categories":
+            category_names = [self.file_table.item(item, "values")[1] for item in selected_items]
+            file_paths = self._get_category_files(category_names)
+        else:
+            file_paths = [self.file_table.item(item, "values")[2] if not files else item for item in selected_items]
+        
+        transfer_graph = build_transfer_graph()
+        all_related_paths = get_all_related_paths_multiple(file_paths, transfer_graph)
+        all_snippets = [
+            file_path
+            for file_path in all_related_paths
+            if check_deleted and os.path.exists(file_path)
+        ]
+        snippet_set = set(all_snippets)
+
+        all_related_paths = [
+            path for path in all_related_paths
+            if path not in snippet_set
+        ]
 
         def worker():
-            all_snippets = []
             try:
-                for item in selected_items:
-                    file_path = self.file_table.item(item, "values")[2] if not files else item
-                    if check_deleted and os.path.exists(file_path):
-                        all_snippets.append(file_path)
-                        continue
+                snippets = list(all_snippets)
 
-                    all_snippets.extend(natural_sort_iterables(self.get_snippets([file_path])))
+                snippets.extend(
+                    self.get_snippets(all_related_paths, related_paths=False, graph=transfer_graph)
+                )
+
+                snippets = natural_sort_iterables(snippets)
 
                 self.root.after(100, lambda: (
                     loading.destroy(),
-                    on_complete and on_complete(all_snippets)
+                    on_complete and on_complete(snippets)
                 ))
 
             except Exception as e:
+                err_msg = str(e)
                 self.root.after(100, lambda: (
                     loading.destroy(),
-                    showerror(self.root, "Error", f"Failed to fetch snippets: {e}")
+                    showerror(self.root, "Error", f"Failed to fetch snippets: {err_msg}")
+                ))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_grouped_properties(self, selected_items, is_category_view):
+        """Show grouped properties for multiple files or category view."""
+        from grouped_properties import GroupedPropertiesWindow
+        
+        loading_win = self.show_loading_screen(message="Loading grouped properties...")
+        
+        def worker():
+            try:
+                if is_category_view:
+                    category_names = [self.file_table.item(item, "values")[1] for item in selected_items]
+                    file_paths = self._get_category_files(category_names)
+                    category_name = ", ".join(category_names) if len(category_names) <= 3 else f"{len(category_names)} Categories"
+                else:
+                    file_paths = [self.file_table.item(item, "values")[2] for item in selected_items]
+                    category_name = None
+                
+                grouped_window = GroupedPropertiesWindow(
+                    self.root,
+                    file_paths=file_paths,
+                    category_name=category_name,
+                    category_manager=self.category_manager,
+                    favorites_manager=self.fav_manager,
+                    notes_manager=self.notes_manager,
+                    description_manager=self.description_manager,
+                    deletion_manager=self.deletion_manager,
+                    stats_manager=self.video_stats_manager,
+                    snippets_manager=self.snippets_manager,
+                    association_manager=self.associations_manager,
+                    fingerprint_manager=self.fingerprint_manager,
+                    annotations_manager=self.annotations_manager,
+                    trimmed_segments=self.trimmed_segments
+                )
+                
+                if grouped_window.preload_properties():
+                    self.root.after(0, lambda: (
+                        loading_win.destroy(),
+                        grouped_window.show_properties()
+                    ))
+                else:
+                    self.root.after(0, lambda: (
+                        loading_win.destroy(),
+                        showerror(self.root, "Error", "Failed to load grouped properties data.")
+                    ))
+                
+            except Exception as e:
+                self.root.after(0, lambda: (
+                    loading_win.destroy(),
+                    showerror(self.root, "Error", f"Failed to show grouped properties: {e}")
                 ))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -2248,15 +2350,24 @@ class FileExplorerApp:
         except IndexError as e:
             showerror(self.root, "Error", f"{e}")
 
+    def _get_category_files(self, category_names):
+        all_files = []
+        for category_name in category_names:
+            files = self.category_manager.get_category_files(category_name)
+            all_files.extend(files)
+        return all_files
+
     def display_category_files(self, category_names):
         if not category_names:
             self.show_categories()
             return
 
-        all_files = []
-        for category_name in category_names:
-            files = self.category_manager.get_category_files(category_name)
-            all_files.extend(files)
+        # all_files = []
+        # for category_name in category_names:
+        #     files = self.category_manager.get_category_files(category_name)
+        #     all_files.extend(files)
+
+        all_files = self._get_category_files(category_names)
 
         unique_files = list(dict.fromkeys(all_files))
 
@@ -2315,11 +2426,11 @@ class FileExplorerApp:
 
         self.search_size = self.convert_bytes(size)
 
-    def get_snippets(self, file_paths: list = None):
+    def get_snippets(self, file_paths: list = None, related_paths=False, graph=None):
         files = []
-        for file in file_paths:
-            snippets = self.snippets_manager.get_snippets_by_original_file(file, related_paths=True)
-            files += [s["Output File"] for s in snippets if s.get("Output File")]
+        transfer_graph = build_transfer_graph() if not graph else graph
+        snippets = self.snippets_manager.get_snippets_for_files(file_paths, related_paths=related_paths, graph=transfer_graph)
+        files += [s["Output File"] for s in snippets if s.get("Output File")]
         return list(set(files))
 
     def get_verticals(self):
