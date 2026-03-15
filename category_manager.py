@@ -345,7 +345,8 @@ class CategoryManager:
         """
         Update a file path in categories (e.g., after moving a file).
         The fingerprint hash remains unchanged since it's based on content, not location.
-        
+        IMPORTANT: Call category_manager._write_entires() method to save it.
+
         Args:
             old_path: Previous file path
             new_path: New file path
@@ -378,7 +379,7 @@ class CategoryManager:
                     self.category_to_files[row[0]].add(row[1])
                     self.file_to_categories[row[1]].add(row[0])
                 
-                self._write_entries()
+                # self._write_entries()
                 self.logger.update_logs('[CATEGORY PATH UPDATED]', f"{old_path} -> {new_path}")
                 return True
             
@@ -432,16 +433,89 @@ class CategoryManager:
             "files_without_fingerprints": without_hashes,
         }
     
+    def refresh_file_hashes(self, force_refresh: bool = False) -> int:
+        """
+        Refresh fingerprint hashes for files in categories.
+        
+        When a file is moved or fingerprints are regenerated, this method updates
+        the 'Index Hash' column to ensure all files have valid fingerprints.
+        
+        Args:
+            force_refresh (bool): If True, recompute hashes for all files regardless of 
+                                whether they already have a hash. If False, only compute
+                                hashes for files that are missing them.
+        
+        Returns:
+            int: Number of hashes that were updated/added
+        """
+        if not self.fingerprint_manager:
+            self.logger.error_logs("Fingerprint manager not available for refresh")
+            return 0
+        
+        updated_count = 0
+        
+        with self.lock:
+            for row in self.entries:
+                category_name, file_path, current_hash, date_added = row
+                
+                # Skip if hash exists and not forcing refresh
+                if current_hash and not force_refresh:
+                    continue
+                
+                # Try to get hash from fingerprint manager
+                new_hash = self.fingerprint_manager.get_index_hash_by_path(file_path)
+                
+                # If no hash found and file exists, try to compute it
+                if not new_hash and os.path.exists(file_path):
+                    try:
+                        size = os.path.getsize(file_path)
+                        # Optionally add fingerprint if it doesn't exist
+                        # The fingerprint manager will compute the hash
+                        new_hash = self.fingerprint_manager.get_index_hash_by_path(file_path)
+                        if not new_hash:
+                            self.logger.error_logs(f"Could not compute hash for: {file_path}")
+                            continue
+                    except Exception as e:
+                        self.logger.error_logs(f"Error getting size for {file_path}: {e}")
+                        continue
+                
+                # Update the hash if we found one and it's different
+                if new_hash and new_hash != current_hash:
+                    old_hash = current_hash
+                    row[2] = new_hash
+                    
+                    # Update internal indexes
+                    if old_hash:
+                        self.hash_to_files[old_hash].discard(file_path)
+                    
+                    self.file_to_hash[file_path] = new_hash
+                    self.hash_to_files[new_hash].add(file_path)
+                    
+                    updated_count += 1
+                    self.logger.update_logs(
+                        '[CATEGORY HASH REFRESHED]',
+                        f"{file_path} | {old_hash[:8] if old_hash else 'N/A'} -> {new_hash[:8]}"
+                    )
+            
+            # Save changes if any hashes were updated
+            if updated_count > 0:
+                self._write_entries()
+                self.fingerprint_manager.flush()
+        
+        return updated_count
+    
 if __name__ == "__main__":
     # Simple test code
     from fingerprint_manager import MediaFingerprintManager
     fm = MediaFingerprintManager()
     cat_mgr = CategoryManager(fingerprint_manager=fm)
-    cat_mgr._migrate_csv_if_needed()
+    # cat_mgr._migrate_csv_if_needed()
+    updated = cat_mgr.refresh_file_hashes(force_refresh=True)
+    print("Force refreshed {updated} hashes")
     # print(cat_mgr.get_category_stats())
     # print(cat_mgr.get_all_categories())
     # print(cat_mgr.get_all_categories_with_dates())
-    # cat_mgr.add_to_category("Testing", r"C:\Users\dever\From C Drive\Videos\Reddit\RDT_20230521_193934(2).mp4")
+    # cat_mgr.add_to_category("Testing", r"[file_path]")
     # print(cat_mgr.get_category_files("Testing"))
     # success, msg = cat_mgr.rename_category(
     #                 old_name="Testing",

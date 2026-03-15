@@ -127,10 +127,9 @@ class FileManager:
             self.favorites.update_favorite_path(old_src, new_src)
 
     def _update_categories(self, old_src, new_src):
-        categories = self.categories.get_file_categories(old_src)
-        for cat in categories:
-            self.categories.remove_from_category(cat, old_src)
-            self.categories.add_to_category(cat, new_src)
+        success = self.categories.update_file_path(old_src, new_src)
+        if not success:
+            self.logger.error_logs(f"Failed to update categories for: {old_src}")
 
     def _update_stats(self, old_src, new_src):
         old_size = os.path.getsize(new_src)
@@ -186,6 +185,7 @@ class FileManager:
             self.task_manager.add_task(self.file_loader.add_folder_data_csv, folders_to_reload, threaded=True)
             self.task_manager.add_task(self.video_stats_manager.create_stats, threaded=True)
             self.task_manager.add_task(self.fingerprint_manager.flush, threaded=True)
+            self.categories._write_entries()
 
 
     def log_transfer(self, src, dest, action="MOVED"):
