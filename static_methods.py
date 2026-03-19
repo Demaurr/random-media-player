@@ -600,13 +600,41 @@ def build_screenshot_index():
 @measure_time(print_time=PRINT_TIME)
 def get_screenshots_for_file_from_index(filename, index):
     """
-    Build a screenshot index via static_methods.build_screenshot_index()
-    And pass the index along side the filename
+    Get screenshots for a single file using a prebuilt index.
+    Args:
+        filename (str): file name (not path)
+        index (dict): screenshot index from static_methods.build_screenshot_index()
     """
     screenshots = index.get(filename, [])
     if not screenshots:
             print(f"No screenshots found for file: {filename}")
     return screenshots
+
+@measure_time(print_time=PRINT_TIME)
+def get_screenshots_for_files_from_index(file_paths, index, flatten: bool = True):
+    """
+    Get screenshots for multiple files using a prebuilt index.
+
+    Args:
+        file_paths (list[str]): file paths or file names
+        index (dict): screenshot index from static_methods.build_screenshot_index()
+        flatten (bool): 
+            True  -> return a single list of screenshots
+            False -> return dict grouped by filename
+
+    Returns:
+        list | dict
+    """
+
+    filenames = {os.path.basename(p) for p in file_paths}
+
+    if flatten:
+        screenshots = []
+        for f in filenames:
+            screenshots.extend(index.get(f, []))
+        return screenshots
+
+    return {f: index.get(f, []) for f in filenames}
     
 def get_video_snippets_for_file(filename, sorted_list=False):
     """

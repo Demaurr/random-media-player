@@ -29,6 +29,7 @@ class SnippetsManager:
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         self._snippet_fingerprint_index = set()
         self._snippet_path_index = set()
+        self._original_to_snippets = defaultdict(list)
         self._load_snippets()
         # self.refactor_csv()
         self._build_indexes()
@@ -111,13 +112,14 @@ class SnippetsManager:
             self._snippet_fingerprint_index.add(row["Snippet Fingerprint"])
 
         self._snippet_path_index.add(row["Output File"])
+        self._original_to_snippets[original].append(row)
 
     
     def _build_indexes(self):
         self._snippet_fingerprint_index.clear()
         self._snippet_path_index.clear()
 
-        self._original_to_snippets = defaultdict(list)
+        self._original_to_snippets.clear()
 
         for s in self.snippets:
             fp = s.get("Snippet Fingerprint")

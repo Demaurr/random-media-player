@@ -45,7 +45,8 @@ class PropertiesWindow(tk.Toplevel):
     def __init__(self, parent, file_path, category_manager = None, favorites_manager=None, notes_manager=None, 
                  description_manager=None, deletion_manager=None, snippets_manager=None,
                  stats_manager=None, trimmed_segments=None,
-                 association_manager=None, fingerprint_manager=None, annotations_manager=None):
+                 association_manager=None, fingerprint_manager=None, annotations_manager=None,
+                 trimmed_segments_metadata=None):
         super().__init__(parent)
         self.withdraw()
         self.parent = parent
@@ -66,6 +67,7 @@ class PropertiesWindow(tk.Toplevel):
                                                                 deletion_manager=self.deletion_manager)
         self.annotations_manager = annotations_manager or AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
         self.trimmed_segments = trimmed_segments or {}
+        self.trimmed_segments_metadata = trimmed_segments_metadata or {}
         self._setup_styles()
         self.title(f"Properties - {os.path.basename(self.file_path)}")
         self.geometry("1000x600")
@@ -1006,7 +1008,10 @@ class PropertiesWindow(tk.Toplevel):
                             trimmed_segments=self.trimmed_segments,
                             snippets_manager=self.snippets_manager,
                             associations_manager=self.association_manager,
-                            deletion_manager=self.deletion_manager
+                            deletion_manager=self.deletion_manager,
+                            annotations_manager=self.annotations_manager,
+                            trimmed_segments_metadata=self.trimmed_segments_metadata,
+                            fingerprint_manager=self.fingerprint_manager,
                         )
                         app.update_video_progress()
                         app.lift()
