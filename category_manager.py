@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from threading import Lock
 from collections import defaultdict
+from typing import Dict, List
 
 from player_constants import CATEGORIES_FILE, LOG_PATH
 from static_methods import create_csv_file, measure_time, normalise_path
@@ -318,6 +319,28 @@ class CategoryManager:
             for file_path in self.hash_to_files.get(index_hash, ())
             for category in self.file_to_categories.get(file_path, ())
         })
+    
+    def get_categories_with_files_for_paths(self, file_paths: List[str]) -> Dict[str, List[str]]:
+        """
+        Get all categories and their associated files, filtered to only include
+        files that are in the provided file_paths list.
+        
+        Args:
+            file_paths (List[str]): List of file paths to filter by
+        
+        Returns:
+            Dict[str, List[str]]: {category_name: [file1, file2, ...]}
+        """
+        normalized_paths = {normalise_path(fp) for fp in file_paths}
+        result = {}
+        
+        for category, files_set in self.category_to_files.items():
+            # Get intersection of files in this category with provided paths
+            matching_files = [f for f in files_set if f in normalized_paths]
+            if matching_files:
+                result[category] = sorted(matching_files)
+        
+        return result
 
     def remap_index_hash(self, old_hash: str, new_hash: str):
         """
@@ -462,14 +485,14 @@ class CategoryManager:
                 if current_hash and not force_refresh:
                     continue
                 
-                # Try to get hash from fingerprint manager
+                # Get hash from fingerprint manager
                 new_hash = self.fingerprint_manager.get_index_hash_by_path(file_path)
                 
                 # If no hash found and file exists, try to compute it
                 if not new_hash and os.path.exists(file_path):
                     try:
                         size = os.path.getsize(file_path)
-                        # Optionally add fingerprint if it doesn't exist
+                        # Optional: add fingerprint if it doesn't exist
                         # The fingerprint manager will compute the hash
                         new_hash = self.fingerprint_manager.get_index_hash_by_path(file_path)
                         if not new_hash:
