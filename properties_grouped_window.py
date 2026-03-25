@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import csv
 import random
@@ -15,6 +16,7 @@ from player_constants import Colors
 from static_methods import (
     convert_bytes,
     get_screenshots_for_file_from_index,
+    get_screenshots_for_files_from_index,
     natural_sort_iterables,
     normalise_path,
     seconds_to_hhmmss,
@@ -31,18 +33,22 @@ from stats_manager import VideoStatsManager
 from snippets_manager import SnippetsManager
 from fingerprint_manager import MediaFingerprintManager
 from deletion_manager import DeletionManager
+from watch_history_logger import WatchHistoryLogger
+from tooltips import ToolTip
+from mixins import ResetMixin
 
-
-class GroupedPropertiesWindow(tk.Toplevel):
+class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
     def __init__(self, parent, file_paths: List[str] = None, category_name: str = None,
                  category_manager=None, favorites_manager=None, notes_manager=None,
                  description_manager=None, deletion_manager=None, snippets_manager=None,
                  stats_manager=None, association_manager=None, fingerprint_manager=None,
-                 annotations_manager=None, trimmed_segments=None, trimmed_segments_metadata=None):
+                 annotations_manager=None, trimmed_segments=None, trimmed_segments_metadata=None,
+                 watch_history_logger=None):
         super().__init__(parent)
         self.withdraw()
         self.parent = parent
-        self.file_paths = [normalise_path(fp) for fp in (file_paths or [])]
+        self.file_paths = list(set([normalise_path(fp) for fp in (file_paths or [])]))
+        self.all_related_file_paths = get_all_related_paths_multiple(self.file_paths)
         self.category_name = category_name
         
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
@@ -63,10 +69,13 @@ class GroupedPropertiesWindow(tk.Toplevel):
 
         self.trimmed_segments = trimmed_segments or {}
         self.trimmed_segments_metadata = trimmed_segments_metadata or {}
+        self.watch_history_logger = watch_history_logger or WatchHistoryLogger(fingerprint_manager=self.fingerprint_manager)
         
         self._setup_styles()
         self._setup_window()
-        self.grouped_data = None
+        self.grouped_data = {}
+        self.protocol("WM_DELETE_WINDOW", self._close_window)
+        
 
     def _setup_styles(self):
         self.colors = {
@@ -115,6 +124,7 @@ class GroupedPropertiesWindow(tk.Toplevel):
     def _preload_grouped_data(self):
         """Aggregate all data from multiple files"""
         total_files = len(self.file_paths)
+        total_related_files = len(self.all_related_file_paths)
         total_size = 0
         total_duration = 0.0
         favorite_count = 0
@@ -124,9 +134,37 @@ class GroupedPropertiesWindow(tk.Toplevel):
         all_snippets = []
         all_screenshots = []
         all_annotations = []
+        watch_stats_agg = {"total_views": 0, "total_duration": 0, "last_watched": None}
         
+        print("Building screenshot index for grouped properties...")
         screenshot_index = build_screenshot_index()
+        print("Retriving screenshots for files")
+        all_screenshots = get_screenshots_for_files_from_index(self.file_paths, screenshot_index)
+        print("Retrieved screenshots")
+
+        if self.watch_history_logger:
+
+            print("Building watch history stats index for grouped properties...")
+            self.watch_history_logger.build_fingerprint_stats_index()
+
+            print("Retrieving batch watch history stats for grouped properties...")
+            # watch_stats_by_path = self.watch_history_logger.get_watch_stats_for_file_paths_batch(self.file_paths)
+            watch_stats_agg = self.watch_history_logger.get_watch_stats_for_file_paths_batch(self.file_paths, aggregate=True)
         
+        print("Building category files mapping")
+        categories = self.category_manager.get_categories_with_files_for_paths(self.file_paths)
+        total_categories = sum(len(v) for v in categories.values() if isinstance(v, list))
+        all_categories = set(categories.keys())
+
+        print("Retrieving notes for files...")
+        all_file_notes = self.notes_manager.get_notes_for_files(self.file_paths, skip_empty=True)
+        print(len(all_file_notes))
+        files_with_notes = len(all_file_notes)
+
+        print("Retrieving snippets for files")
+        all_file_snippets = self.snippets_manager.get_snippets_for_files(self.file_paths)
+        print(len(all_file_snippets))
+
         for file_path in self.file_paths:
             # if not os.path.isfile(file_path):
             #     continue
@@ -138,31 +176,13 @@ class GroupedPropertiesWindow(tk.Toplevel):
                 except Exception:
                     pass
                 
-                # Check favorites
                 try:
                     is_fav = self.favorites_manager.check_favorites(file_path)
                     if is_fav:
                         favorite_count += 1
                 except Exception:
                     pass
-                
-                # Check notes
-                try:
-                    note = self.notes_manager.get_note(file_path)
-                    if note:
-                        files_with_notes += 1
-                except Exception:
-                    pass
-                
-                # Get categories
-                try:
-                    cats = self.category_manager.get_file_categories(file_path)
-                    if cats:
-                        all_categories.update(cats)
-                except Exception:
-                    pass
-                
-                # Get stats
+
                 try:
                     stats = self.stats_manager.get_stat(file_path, str(file_size))
                     if stats:
@@ -175,16 +195,6 @@ class GroupedPropertiesWindow(tk.Toplevel):
                 except Exception:
                     pass
                 
-                # Get screenshots
-                try:
-                    file_name = os.path.basename(file_path)
-                    screenshots = get_screenshots_for_file_from_index(file_name, screenshot_index)
-                    if screenshots:
-                        all_screenshots.extend(screenshots)
-                except Exception:
-                    pass
-                
-                # Get snippets
                 try:
                     snippets = self.snippets_manager.get_snippets_by_original_file(file_path)
                     if snippets:
@@ -192,7 +202,6 @@ class GroupedPropertiesWindow(tk.Toplevel):
                 except Exception:
                     pass
                 
-                # Get annotations
                 try:
                     annotations = self.annotations_manager.get_annotations_for_file(file_path)
                     if annotations:
@@ -204,21 +213,41 @@ class GroupedPropertiesWindow(tk.Toplevel):
                 
             except Exception as e:
                 continue
-        all_screenshots = list(set(all_screenshots))
-        random.shuffle(all_screenshots)
         
+        all_screenshots = list(set(all_screenshots))
+        shuffled_screenshots = all_screenshots
+
+        random.shuffle(shuffled_screenshots)
+        
+        print("snippets count", len(all_snippets))
+
         self.grouped_data = {
             "total_files": total_files,
+            "total_related_files": total_related_files,
             "total_size": total_size,
             "total_duration": total_duration,
             "favorite_count": favorite_count,
             "files_with_notes": files_with_notes,
-            "categories": sorted(list(all_categories), key=len),
+            "all_file_notes": all_file_notes,
+            "categories": sorted(list(all_categories), key=lambda x: len(natural_sort_iterables(x)), reverse=True),
+            "category_files": categories,
+            "total_categories": total_categories,
             "stats": all_stats,
-            # "screenshots": natural_sort_iterables(list(set(all_screenshots))),
-            "screenshots": all_screenshots,
+            "screenshots": natural_sort_iterables(all_screenshots),
+            "shuffled_screenshots": shuffled_screenshots,
             "snippets": all_snippets,
-            "annotations": all_annotations
+            "annotations": all_annotations,
+            "watch_count": watch_stats_agg["total_views"],
+            "watch_total_seconds": watch_stats_agg["total_duration"],
+            "last_watched_date": watch_stats_agg["last_watched"],
+            "last_watched_file": watch_stats_agg.get("last_watched_file", "No Last Watched File")
+        }
+    
+    def _get_defaults(self):
+        return {
+            "grouped_data": {},
+            "file_paths": [],
+
         }
 
     def _build_ui(self):
@@ -236,7 +265,7 @@ class GroupedPropertiesWindow(tk.Toplevel):
         self._bind_window_events()
 
     def _create_thumbnail(self, parent):
-        screenshots = self.grouped_data["screenshots"]
+        screenshots = self.grouped_data["shuffled_screenshots"]
         thumb_container = tk.Frame(parent, bg=self.colors['bg_secondary'], relief="flat", bd=0)
         thumb_container.pack()
         
@@ -347,22 +376,69 @@ class GroupedPropertiesWindow(tk.Toplevel):
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
     def _create_categories_section(self, parent):
-        """Display categories"""
+        """Display categories with hover tooltips showing file counts"""
+        
         content_frame = self._create_section_card(parent, "Categories", "🏷️")
+        
+        category_files = self.grouped_data.get('category_files', {})
         
         if self.grouped_data['categories']:
             for category in self.grouped_data['categories']:
-                tk.Label(content_frame, text=category, font=("Segoe UI", 10, "bold"),
-                        bg=self.colors['bg_hover'], fg=self.colors['accent'], padx=8, pady=4,
-                        relief="flat", bd=0).pack(anchor="w", pady=2, padx=4)
+                category_frame = tk.Frame(content_frame, bg=self.colors['bg_hover'])
+                category_frame.pack(anchor="w", pady=2, padx=4, fill="x")
+                
+                files_list = category_files.get(category, [])
+                file_count = len(files_list)
+                
+                category_label = tk.Label(
+                    category_frame,
+                    text=f"{category} ({file_count})",
+                    font=("Segoe UI", 10, "bold"),
+                    bg=self.colors['bg_hover'],
+                    fg=self.colors['accent'],
+                    padx=8,
+                    pady=4,
+                    relief="flat",
+                    bd=0,
+                    cursor="hand2"
+                )
+                category_label.pack(fill="x")
+                
+                files_tooltip = f"Category: {category}\n\nFiles ({file_count}):\n"
+                files_tooltip += "\n".join(f"  • {os.path.basename(f)}" for f in files_list[:10])
+                if len(files_list) > 6:
+                    files_tooltip += f"\n  ... +{len(files_list) - 10} more"
+                
+                ToolTip(category_label, files_tooltip, wraplength=350)
             
             if self.grouped_data['favorite_count'] > 0:
-                tk.Label(content_frame, text=f"⭐ {self.grouped_data['favorite_count']} Favorites",
-                        font=("Segoe UI", 10, "bold"), bg="black", fg="#FFC107", padx=8, pady=4,
-                        relief="flat", bd=0).pack(anchor="w", pady=2, padx=4)
+                fav_frame = tk.Frame(content_frame, bg="black")
+                fav_frame.pack(anchor="w", pady=2, padx=4, fill="x")
+                
+                fav_label = tk.Label(
+                    fav_frame,
+                    text=f"⭐ {self.grouped_data['favorite_count']} Favorites",
+                    font=("Segoe UI", 10, "bold"),
+                    bg="black",
+                    fg="#FFC107",
+                    padx=8,
+                    pady=4,
+                    relief="flat",
+                    bd=0,
+                    cursor="hand2"
+                )
+                fav_label.pack(fill="x")
+                
+                fav_tooltip = f"Favorite Files ({self.grouped_data['favorite_count']})"
+                ToolTip(fav_label, fav_tooltip, wraplength=250)
         else:
-            tk.Label(content_frame, text="No categories assigned", font=("Segoe UI", 10, "italic"),
-                    bg=self.colors['bg_card'], fg=self.colors['text_muted']).pack(anchor="w", pady=10)
+            tk.Label(
+                content_frame,
+                text="No categories assigned",
+                font=("Segoe UI", 10, "italic"),
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']
+            ).pack(anchor="w", pady=10)
 
     def _create_statistics_section(self, parent):
         """Display statistics"""
@@ -579,8 +655,8 @@ class GroupedPropertiesWindow(tk.Toplevel):
         display_keys = ["Output File", "Total Duration (s)", "Trim Mode", "File Size (MB)", "Notes"]
         all_snippets = [snip.get("Output File", "Unknown") for snip in self.grouped_data['snippets']]
         
-        # for i, snip in enumerate(self.grouped_data['snippets'][:6], 1):
-        for i, snip in enumerate(self.grouped_data['snippets'], 1):
+        for i, snip in enumerate(self.grouped_data['snippets'][:6], 1):
+        # for i, snip in enumerate(self.grouped_data['snippets'], 1):
             snippet_card = tk.Frame(content_frame, bg=self.colors['bg_secondary'], relief="solid", bd=1)
             snippet_card.pack(fill="x", pady=5, padx=2)
             
@@ -684,7 +760,7 @@ class GroupedPropertiesWindow(tk.Toplevel):
         row = 0
         max_cols = 3
         
-        for img_path in self.grouped_data['screenshots'][:12]:
+        for img_path in self.grouped_data['shuffled_screenshots'][:12]:
             try:
                 if not os.path.exists(img_path):
                     continue
@@ -745,6 +821,7 @@ class GroupedPropertiesWindow(tk.Toplevel):
 
     def _create_summary_stats_section(self, parent):
         """Create summary statistics section at the bottom"""
+        
         content_frame = self._create_section_card(parent, "Summary Statistics", "📊")
         
         unique_codecs = set()
@@ -760,30 +837,72 @@ class GroupedPropertiesWindow(tk.Toplevel):
         notes_percentage = (self.grouped_data['files_with_notes'] / self.grouped_data['total_files'] * 100) if self.grouped_data['total_files'] > 0 else 0
         
         summary_items = [
-            ("📁 Total Files", str(self.grouped_data['total_files'])),
-            ("💾 Total Size", convert_bytes(self.grouped_data['total_size'])),
-            ("⏱ Total Duration", seconds_to_hhmmss(int(self.grouped_data['total_duration']))),
-            ("⭐ Favorites", f"{self.grouped_data['favorite_count']} ({fav_percentage:.0f}%)"),
-            ("📝 Notes", f"{self.grouped_data['files_with_notes']} ({notes_percentage:.0f}%)"),
-            ("📌 Annotations", str(len(self.grouped_data['annotations']))),
-            ("🖼️ Screenshots", str(len(self.grouped_data['screenshots']))),
-            ("✂️ Snippets", str(len(self.grouped_data['snippets']))),
-            ("🏷️ Categories", str(len(self.grouped_data['categories']))),
-            ("🎬 Video Codecs", str(len(unique_codecs))),
-            ("📊 Statistics", str(len(self.grouped_data['stats']))),
+            ("📁 Total Files", str(self.grouped_data['total_files']), f"Files in group: {self.grouped_data['total_files']}"),
+            ("💾 Total Size", convert_bytes(self.grouped_data['total_size']), f"Combined size: {convert_bytes(self.grouped_data['total_size'])}"),
+            ("⏱ Total Duration", seconds_to_hhmmss(int(self.grouped_data['total_duration'])), f"Total playback time: {seconds_to_hhmmss(int(self.grouped_data['total_duration']))}"),
+            ("⭐ Favorites", f"{self.grouped_data['favorite_count']} ({fav_percentage:.0f}%)", f"{self.grouped_data['favorite_count']} files marked as favorite"),
+            ("📝 Notes", f"{self.grouped_data['files_with_notes']} ({notes_percentage:.0f}%)", f"{self.grouped_data['files_with_notes']} files have notes"),
+            ("📌 Annotations", str(len(self.grouped_data['annotations'])), f"Total annotations: {len(self.grouped_data['annotations'])}"),
+            ("🖼️ Screenshots", str(len(self.grouped_data['screenshots'])), f"Available screenshots: {len(self.grouped_data['screenshots'])}"),
+            ("✂️ Snippets", str(len(self.grouped_data['snippets'])), f"Created snippets: {len(self.grouped_data['snippets'])}"),
+            ("🏷️ Categories", str(len(self.grouped_data['categories'])), f"Assigned categories: {', '.join(self.grouped_data['categories'][:3])}{'...' if len(self.grouped_data['categories']) > 3 else ''}"),
+            ("🎬 Video Codecs", str(len(unique_codecs)), f"Codecs: {', '.join(sorted(unique_codecs)[:5])}{'...' if len(unique_codecs) > 5 else ''}"),
+            ("📊 Statistics", str(len(self.grouped_data['stats'])), f"Files with stats: {len(self.grouped_data['stats'])}"),
         ]
         
-        for label, value in summary_items:
+        for label, value, tooltip_text in summary_items:
             item_frame = tk.Frame(content_frame, bg=self.colors['bg_card'])
             item_frame.pack(fill="x", pady=5, padx=2)
             
-            tk.Label(item_frame, text=label, font=("Segoe UI", 10),
-                    bg=self.colors['bg_card'], fg=self.colors['text_secondary']).pack(side="left")
-            tk.Label(item_frame, text=value, font=("Segoe UI", 10, "bold"),
-                    bg=self.colors['bg_card'], fg=self.colors['accent']).pack(side="right")
+            label_widget = tk.Label(item_frame, text=label, font=("Segoe UI", 10),
+                    bg=self.colors['bg_card'], fg=self.colors['text_secondary'], cursor="hand2")
+            label_widget.pack(side="left")
+            
+            value_widget = tk.Label(item_frame, text=value, font=("Segoe UI", 10, "bold"),
+                    bg=self.colors['bg_card'], fg=self.colors['accent'], cursor="hand2")
+            value_widget.pack(side="right")
+            
+            ToolTip(label_widget, tooltip_text, wraplength=250)
+            ToolTip(value_widget, tooltip_text, wraplength=250)
             
             separator = tk.Frame(item_frame, bg=self.colors['border'], height=1)
             separator.pack(fill="x", pady=(5, 0))
+        
+        if self.watch_history_logger and self.grouped_data.get('watch_count', 0) > 0:
+            separator_main = tk.Frame(content_frame, bg=self.colors['border'], height=2)
+            separator_main.pack(fill="x", pady=10)
+            
+            watch_label = tk.Label(content_frame, text="👁️ Watch History", font=("Segoe UI", 11, "bold"),
+                    bg=self.colors['bg_card'], fg=self.colors['accent'])
+            watch_label.pack(anchor="w", pady=(5, 10))
+            
+            last_watched_file_tooltip = "Not available"
+            if self.grouped_data.get('watch_count', 0) > 0:
+                last_watched_file_tooltip = f"Last watched file:\n{self.grouped_data["last_watched_file"]}\n\nTime: {self.grouped_data['last_watched_date']}"
+            
+            watch_items = [
+                ("🔍 Total Views", str(self.grouped_data['watch_count']), f"Total times files watched: {self.grouped_data['watch_count']}"),
+                ("⏱ Total Watched", seconds_to_hhmmss(int(self.grouped_data['watch_total_seconds'])), f"Total time spent watching: {seconds_to_hhmmss(int(self.grouped_data['watch_total_seconds']))}"),
+                ("📅 Last Watched", self.grouped_data['last_watched_date'] if self.grouped_data['last_watched_date'] else "Never", last_watched_file_tooltip),
+            ]
+            
+            for label, value, tooltip_text in watch_items:
+                item_frame = tk.Frame(content_frame, bg=self.colors['bg_card'])
+                item_frame.pack(fill="x", pady=5, padx=2)
+                
+                label_widget = tk.Label(item_frame, text=label, font=("Segoe UI", 10),
+                        bg=self.colors['bg_card'], fg=self.colors['text_secondary'], cursor="hand2")
+                label_widget.pack(side="left")
+                
+                value_widget = tk.Label(item_frame, text=value, font=("Segoe UI", 10, "bold"),
+                        bg=self.colors['bg_card'], fg=self.colors['accent'], cursor="hand2")
+                value_widget.pack(side="right")
+                
+                ToolTip(label_widget, tooltip_text, wraplength=250)
+                ToolTip(value_widget, tooltip_text, wraplength=250)
+                
+                separator = tk.Frame(item_frame, bg=self.colors['border'], height=1)
+                separator.pack(fill="x", pady=(5, 0))
 
     def _create_file_list_section(self, parent):
         """Display file list"""
@@ -845,6 +964,9 @@ class GroupedPropertiesWindow(tk.Toplevel):
         """Close window safely"""
         try:
             self.unbind_all("<MouseWheel>")
+            self.watch_history_logger.clear_fingerprint_index()
+            self.watch_history_logger.clear_fingerprint_stats_index()
+            self.grouped_data.clear()
         except:
             pass
         self.after(0, self.destroy)
