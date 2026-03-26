@@ -3,7 +3,7 @@ import csv
 import os
 from logs_writer import LogManager
 from player_constants import LOG_PATH, WATCHED_HISTORY_LOG_PATH
-from static_methods import normalise_path, build_path_to_fingerprint_map
+from static_methods import normalise_path, build_path_to_fingerprint_map, measure_time, calculate_duration_in_seconds
 from fingerprint_manager import MediaFingerprintManager
 
 class WatchHistoryLogger:
@@ -95,6 +95,16 @@ class WatchHistoryLogger:
                     'Last Position': last_position,
                     'Fingerprint': fingerprint or ""
                 })
+
+            # following is for when we'll use a single WatchHistoryLogger from gui_main.py for the whole app.
+            # self.update_indexes_after_log(
+            #     file_name,
+            #     total_duration,
+            #     video_duration,
+            #     last_position,
+            #     fingerprint,
+            #     date_watched
+            # )
             if hasattr(self, "_last_position_index"):
                 self._last_position_index[normalise_path(file_name)] = last_position
         except Exception as e:
@@ -136,6 +146,60 @@ class WatchHistoryLogger:
             print(f"Error building fingerprint index: {e}")
             self._fingerprint_index = {}
 
+    @measure_time(print_time=True)
+    def build_fingerprint_stats_index(self):
+        """
+        Build an in-memory index for fast stats lookup by fingerprint.
+        Structure: {fingerprint: {"watch_count": int, "total_seconds": float, "last_watched": datetime, "entries": [rows]}}
+        
+        Call this once at startup or when you need fresh data.
+        """
+        self._fingerprint_stats_index = {}
+        try:
+            with open(self.csv_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    fp = row.get('Fingerprint', '').strip()
+                    if not fp:
+                        continue
+                    
+                    if fp not in self._fingerprint_stats_index:
+                        self._fingerprint_stats_index[fp] = {
+                            "watch_count": 0,
+                            "total_seconds": 0.0,
+                            "last_watched": None,
+                            "file_duration": 0.0,
+                            "entries": []
+                        }
+                    
+                    stats = self._fingerprint_stats_index[fp]
+                    stats["watch_count"] += 1
+                    stats["entries"].append(row)
+                    
+                    try:
+                        duration_seconds = calculate_duration_in_seconds(row.get("Duration Watched", "0:00.0"))
+                        stats["total_seconds"] += duration_seconds
+                    except Exception:
+                        pass
+
+                    try:
+                        if stats["file_duration"] == 0.0:
+                            file_duration = calculate_duration_in_seconds(row.get("Total Duration", "0:00:00"))
+                            stats["file_duration"] = file_duration
+                    except Exception:
+                        pass
+                    
+                    try:
+                        dt = datetime.strptime(row.get("Date Watched", ""), "%Y-%m-%d %H:%M:%S")
+                        if not stats["last_watched"] or dt > stats["last_watched"]:
+                            stats["last_watched"] = dt
+                    except Exception:
+                        pass
+        
+        except Exception as e:
+            print(f"Error building fingerprint stats index: {e}")
+            self._fingerprint_stats_index = {}
+
     def clear_fingerprint_index(self):
         """
         Clear the in-memory fingerprint index to free memory.
@@ -173,6 +237,69 @@ class WatchHistoryLogger:
             self.logger.error_logs(f"Error updating fingerprint for {file_name}: {e}")
             return False
         
+    def update_indexes_after_log(self, file_name, total_duration, video_duration, last_position, fingerprint, date_watched):
+        """
+        Fast incremental update of in-memory indexes after logging a watch entry.
+        This avoids rebuilding indexes from the CSV file.
+        """
+
+        norm_path = normalise_path(file_name)
+
+        if hasattr(self, "_last_position_index"):
+            self._last_position_index[norm_path] = last_position
+
+        if hasattr(self, "_fingerprint_index"):
+            row = {
+                "File Name": file_name,
+                "Total Duration": total_duration,
+                "Date Watched": date_watched,
+                "Duration Watched": video_duration,
+                "Last Position": last_position,
+                "Fingerprint": fingerprint or ""
+            }
+
+            self._fingerprint_index.setdefault(fingerprint, []).append(row)
+
+        if hasattr(self, "_fingerprint_stats_index") and fingerprint:
+
+            from static_methods import calculate_duration_in_seconds
+
+            duration_seconds = 0.0
+            try:
+                duration_seconds = calculate_duration_in_seconds(video_duration)
+            except Exception:
+                pass
+
+            try:
+                dt = datetime.strptime(date_watched, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                dt = None
+
+            stats = self._fingerprint_stats_index.setdefault(
+                fingerprint,
+                {
+                    "watch_count": 0,
+                    "total_seconds": 0.0,
+                    "last_watched": None,
+                    "entries": []
+                }
+            )
+
+            stats["watch_count"] += 1
+            stats["total_seconds"] += duration_seconds
+
+            if dt and (not stats["last_watched"] or dt > stats["last_watched"]):
+                stats["last_watched"] = dt
+
+            stats["entries"].append({
+                "File Name": file_name,
+                "Total Duration": total_duration,
+                "Date Watched": date_watched,
+                "Duration Watched": video_duration,
+                "Last Position": last_position,
+                "Fingerprint": fingerprint
+            })
+        
     def get_watch_history_by_fingerprint(self, fingerprint, sort_result=True):
         if not fingerprint:
             return []
@@ -186,6 +313,201 @@ class WatchHistoryLogger:
             entries = sorted(entries, key=lambda x: x.get('Date Watched', ''), reverse=True)
 
         return entries
+
+    def get_watch_stats_for_fingerprint(self, fingerprint):
+        """
+        Get combined watch stats for a single fingerprint.
+        Fast O(1) lookup if index is built.
+        
+        Args:
+            fingerprint (str): The fingerprint to look up.
+        
+        Returns:
+            dict: {
+                "watch_count": int,
+                "total_seconds": float,
+                "last_watched": "YYYY-MM-DD HH:MM:SS" or "Never",
+                "found": bool
+            }
+        """
+        if not hasattr(self, "_fingerprint_stats_index"):
+            self.build_fingerprint_stats_index()
+        
+        stats = self._fingerprint_stats_index.get(fingerprint.strip())
+        
+        if not stats:
+            return {
+                "watch_count": 0,
+                "total_seconds": 0.0,
+                "last_watched": "Never",
+                "found": False
+            }
+        
+        return {
+            "watch_count": stats["watch_count"],
+            "total_seconds": stats["total_seconds"],
+            "last_watched": stats["last_watched"].strftime("%Y-%m-%d %H:%M:%S") if stats["last_watched"] else "Never",
+            "found": True
+        }
+
+    @measure_time(print_time=True)
+    def get_watch_stats_for_fingerprints_batch(self, fingerprints, aggregate: bool = False):
+        """
+        Get watch stats for multiple fingerprints efficiently.
+
+        Args:
+            fingerprints (list[str]): fingerprints to look up
+            aggregate (bool): if True return combined statistics
+
+        Returns:
+            dict
+        """
+
+        if not hasattr(self, "_fingerprint_stats_index"):
+            self.build_fingerprint_stats_index()
+
+        results = {}
+        fingerprint_set = {fp.strip() for fp in fingerprints if fp}
+
+        total_views = 0
+        total_duration = 0.0
+        file_duration = 0.0
+        last_watched = None
+        last_watched_fp = None
+        fingerprints_found = 0
+
+        for fp in fingerprint_set:
+            stats = self._fingerprint_stats_index.get(fp)
+
+            if not stats:
+                stats_dict = {
+                    "watch_count": 0,
+                    "total_seconds": 0.0,
+                    "file_duration": 0.0,
+                    "last_watched": "Never",
+                    "found": False
+                }
+
+            else:
+                lw = stats["last_watched"]
+
+                stats_dict = {
+                    "watch_count": stats["watch_count"],
+                    "total_seconds": stats.get("total_seconds", 0.0),
+                    "file_duration": stats.get("file_duration", 0.0),
+                    "last_watched": lw.strftime("%Y-%m-%d %H:%M:%S") if lw else "Never",
+                    "found": True
+                }
+
+                total_views += stats["watch_count"]
+                total_duration += stats["total_seconds"]
+                file_duration += stats.get("file_duration", 0.0)
+                fingerprints_found += 1
+
+                if lw and (last_watched is None or lw > last_watched):
+                    last_watched = lw
+                    last_watched_fp = fp
+
+            results[fp] = stats_dict
+
+        if aggregate:
+            return {
+                "total_views": total_views,
+                "total_duration": total_duration,
+                "file_duration": file_duration,
+                "fingerprints_found": fingerprints_found,
+                "last_watched": last_watched.strftime("%Y-%m-%d %H:%M:%S") if last_watched else "Never",
+                "last_watched_fingerprint": last_watched_fp
+            }
+
+        return results
+
+    @measure_time(print_time=True)
+    def get_watch_stats_for_file_paths_batch(self, file_paths, aggregate: bool = False):
+        """
+        Get watch stats for multiple file paths.
+
+        Args:
+            file_paths (list[str]): file paths or file names
+            aggregate (bool): if True returns combined stats
+
+        Returns:
+            dict
+        """
+
+        if not hasattr(self, "_fingerprint_stats_index"):
+            print("Building fingerprint stats index for file path batch lookup...")
+            self.build_fingerprint_stats_index()
+
+        results = {}
+
+        total_views = 0
+        total_duration = 0.0
+        last_watched = None
+        last_watched_file = None
+        files_found = 0
+
+        for file_path in file_paths:
+            norm_path = normalise_path(file_path)
+            
+            # Get fingerprint directly from fingerprint_manager's in-memory dict
+            fp = self.fingerprint_manager.get_index_hash_by_path(norm_path)
+
+            if not fp:
+                stats_dict = {
+                    "watch_count": 0,
+                    "total_seconds": 0.0,
+                    "last_watched": "Never",
+                    "found": False
+                }
+            else:
+                stats = self._fingerprint_stats_index.get(fp)
+
+                if not stats:
+                    stats_dict = {
+                        "watch_count": 0,
+                        "total_seconds": 0.0,
+                        "last_watched": "Never",
+                        "found": False
+                    }
+                else:
+                    lw = stats["last_watched"]
+
+                    stats_dict = {
+                        "watch_count": stats["watch_count"],
+                        "total_seconds": stats["total_seconds"],
+                        "last_watched": lw.strftime("%Y-%m-%d %H:%M:%S") if lw else "Never",
+                        "found": True
+                    }
+
+                    # aggregate updates
+                    total_views += stats["watch_count"]
+                    total_duration += stats["total_seconds"]
+                    files_found += 1
+
+                    if lw and (last_watched is None or lw > last_watched):
+                        last_watched = lw
+                        last_watched_file = norm_path
+
+            results[norm_path] = stats_dict
+
+        if aggregate:
+            return {
+                "total_views": total_views,
+                "total_duration": total_duration,
+                "files_found": files_found,
+                "last_watched": last_watched.strftime("%Y-%m-%d %H:%M:%S") if last_watched else "Never",
+                "last_watched_file": last_watched_file
+            }
+
+        return results
+
+
+    def clear_fingerprint_stats_index(self):
+        """Clear the in-memory fingerprint stats index to free memory."""
+        if hasattr(self, "_fingerprint_stats_index"):
+            self._fingerprint_stats_index.clear()
+            del self._fingerprint_stats_index
 
         
     def fix_missing_fingerprints_by_name_and_duration(self):
