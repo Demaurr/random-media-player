@@ -95,7 +95,7 @@ class AnnotationsManager:
         """Save all annotations to CSV."""
         try:
             with open(self.annotations_file, "w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=self.FIELDNAMES)
+                writer = csv.DictWriter(f, fieldnames=self._headers)
                 writer.writeheader()
                 
                 for index_hash, annotations_list in self.annotations.items():

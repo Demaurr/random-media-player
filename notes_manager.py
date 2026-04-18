@@ -85,7 +85,7 @@ class NotesManager:
         This allows tracking which file_paths are associated with each note.
         """
         with open(self.notes_file, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=self.FIELDNAMES)
+            writer = csv.DictWriter(f, fieldnames=self._headers)
             writer.writeheader()
 
             for index_hash, data in self.notes.items():
