@@ -54,6 +54,226 @@ SHOW_SNIPPETS = True
 FAST_TRIM = True
 DELETE_ORIGINAL_PNG = True
 
+CSV_CONFIG = {
+    DELETE_FILES_CSV: {
+        "headers": ["File Path", "Delete_Status", "File Size", "Modification Time"],
+        "descriptions": {
+            "File Path": "Path of file to be deleted",
+            "Delete_Status": "Status of deletion operation",
+            "File Size": "Size of the file in bytes",
+            "Modification Time": "Last modification time of the file"
+        }
+    },
+    
+    FOLDER_LOGS: {
+        "headers": ["Folder Path", "Csv Path", "Date"],
+        "descriptions": {
+            "Folder Path": "Path of the scanned folder",
+            "Csv Path": "Path to the CSV file containing logs",
+            "Date": "Date when the folder was scanned"
+        }
+    },
+    
+    FILE_TRANSFER_LOG: {
+        "headers": ["Source Path", "Destination Path", "Status", "Date"],
+        "descriptions": {
+            "Source Path": "Original path of the file",
+            "Destination Path": "Destination path where file was transferred",
+            "Status": "Status of the transfer operation",
+            "Date": "Date and time of transfer"
+        }
+    },
+    
+    ANNOTATIONS_CSV: {
+        "headers": [
+            "annotation_id",
+            "index_hash",
+            "file_path",
+            "timestamp_seconds",
+            "annotation_text",
+            "created_at",
+            "modified_at"
+        ],
+        "descriptions": {
+            "annotation_id": "Unique identifier for the annotation",
+            "index_hash": "Hash index (fingerprint) of the media file",
+            "file_path": "Full path to the annotated file",
+            "timestamp_seconds": "Timestamp in seconds where annotation was added",
+            "annotation_text": "Text content of the annotation",
+            "created_at": "Date and time when annotation was created",
+            "modified_at": "Date and time when annotation was last modified"
+        }
+    },
+    
+    ASSOCIATIONS_CSV: {
+        "headers": [
+            "source_file", "source_hash", "target_file", "target_hash",
+            "association_type", "source_size", "target_size",
+            "association_date", "association_status"
+        ],
+        "descriptions": {
+            "source_file": "Path of the source file",
+            "source_hash": "Hash index (fingerprint) of the source file",
+            "target_file": "Path of the target/associated file",
+            "target_hash": "Hash index (fingerprint) of the target file",
+            "association_type": "Type of association between files",
+            "source_size": "Size of the source file in bytes",
+            "target_size": "Size of the target file in bytes",
+            "association_date": "Date when association was created/updated",
+            "association_status": "Status of the association (active/inactive)"
+        }
+    },
+    
+    CATEGORIES_FILE: {
+        "headers": [
+            "Category Name", "File Path", "Index Hash", "Date Added"
+        ],
+        "descriptions": {
+            "Category Name": "Name of the category",
+            "File Path": "Path of the file in this category",
+            "Index Hash": "file's fingerprint from the fingerprint manager",
+            "Date Added": "Date when the file was added to category"
+        }
+    },
+    
+    DESCRIPTION_CSV: {
+        "headers": [
+            "video_path", "size", "description", "timestamp"
+        ],
+        "descriptions": {
+            "video_path": "Full path to the video file",
+            "size": "Size of the video file in bytes",
+            "description": "Description or metadata of the video",
+            "timestamp": "Date and time when description was added"
+        }
+    },
+    
+    FAV_FILES: {
+        "headers": ["Hash", "Video Name", "Source Path", "Date Added"],
+        "descriptions": {
+            "Hash": "Hash of filepath and filename for quick lookup (not the media fingerprint)",
+            "Video Name": "Name of the video file",
+            "Source Path": "Original path of the file",
+            "Date Added": "Date when file was added to favorites"
+        }
+    },
+    
+    FINGERPRINTS_CSV: {
+        "headers": [
+            "name", "duration", "size_bytes", "partial_hash", "index_hash"
+        ],
+        "descriptions": {
+            "name": "Name or identifier of the media file",
+            "duration": "Duration of the video in seconds",
+            "size_bytes": "Size of the file in bytes",
+            "partial_hash": "Partial hash of the file for quick comparison",
+            "index_hash": "Full index hash unique identifier of the file"
+        }
+    },
+    
+    FINGERPRINTS_PATHS_CSV: {
+        "headers": [
+            "index_hash", "file_path", "unique_id", "added_at"
+        ],
+        "descriptions": {
+            "index_hash": "Hash index (fingerprint) of the media file",
+            "file_path": "Full path where the file is located",
+            "unique_id": "Unique identifier for this fingerprint entry",
+            "added_at": "Date and time when fingerprint was recorded"
+        }
+    },
+    
+    NOTES_CSV: {
+        "headers": [
+            "index_hash",
+            "file_path",
+            "note",
+            "rating",
+            "tags",
+            "mood",
+            "context",
+            "timestamp"
+        ],
+        "descriptions": {
+            "index_hash": "Hash index (fingerprint) of the media file",
+            "file_path": "Full path to the media file",
+            "note": "Text note or comment about the file",
+            "rating": "User rating of the file (numeric)",
+            "tags": "Comma-separated tags for categorization",
+            "mood": "Mood or emotion associated with the content",
+            "context": "Context or additional information",
+            "timestamp": "Date and time when note was created"
+        }
+    },
+    
+    SNIPPETS_HISTORY_CSV: {
+        "headers": [
+            "Timestamp", "Original File", "Original File Size", "Output File",
+            "Start Time (s)", "End Time (s)", "Trim Mode",
+            "Total Duration (s)", "Resolution", "File Size (MB)", "File Size (Bytes)",
+            "Video Format", "Notes", "Original Fingerprint", "Snippet Fingerprint"
+        ],
+        "descriptions": {
+            "Timestamp": "Date and time when snippet was created",
+            "Original File": "Path of the original video file",
+            "Original File Size": "Size of the original file in bytes",
+            "Output File": "Path of the created snippet file",
+            "Start Time (s)": "Start time of the clip in seconds",
+            "End Time (s)": "End time of the clip in seconds",
+            "Trim Mode": "Method used for trimming",
+            "Total Duration (s)": "Total duration of the original video",
+            "Resolution": "Video resolution of the snippet",
+            "File Size (MB)": "Size of snippet file in megabytes",
+            "File Size (Bytes)": "Size of snippet file in bytes",
+            "Video Format": "Video format/codec of the snippet",
+            "Notes": "User notes about the snippet",
+            "Original Fingerprint": "Fingerprint hash of the original file",
+            "Snippet Fingerprint": "Fingerprint hash of the created snippet"
+        }
+    },
+    
+    VIDEO_STATS_CSV: {
+        "headers": [
+            "File Path", "File Size", "Duration (s)", "Resolution", "Aspect Ratio", "Orientation",
+            "Format", "Video Codec", "Bitrate (kbps)", "Frame Rate", "Pixel Format",
+            "Profile", "Level", "Audio Codec", "Audio Channels", "Audio Sample Rate"
+        ],
+        "descriptions": {
+            "File Path": "Full path to the video file",
+            "File Size": "Size of the video file in bytes",
+            "Duration (s)": "Duration of the video in seconds",
+            "Resolution": "Resolution of the video (e.g., 1920x1080)",
+            "Aspect Ratio": "Aspect ratio of the video",
+            "Orientation": "Orientation of the video (portrait/landscape)",
+            "Format": "Container format of the video",
+            "Video Codec": "Video codec used for encoding",
+            "Bitrate (kbps)": "Bitrate of the video in kilobits per second",
+            "Frame Rate": "Frame rate in frames per second",
+            "Pixel Format": "Pixel format/color space of the video",
+            "Profile": "Codec profile used",
+            "Level": "Codec level used",
+            "Audio Codec": "Audio codec used for encoding",
+            "Audio Channels": "Number of audio channels",
+            "Audio Sample Rate": "Audio sample rate in Hz"
+        }
+    },
+    
+    WATCHED_HISTORY_LOG_PATH: {
+        "headers": [
+            "File Name", "Total Duration", "Date Watched",
+            "Duration Watched", "Last Position", "Fingerprint"
+        ],
+        "descriptions": {
+            "File Name": "Name of the video file",
+            "Total Duration": "Total duration of the video in seconds",
+            "Date Watched": "Date and time when the video was last watched",
+            "Duration Watched": "Duration watched in the current session",
+            "Last Position": "Last playback position in seconds",
+            "Fingerprint": "Hash fingerprint identifier of the file"
+        }
+    },
+}
+
 class Colors:
     """A class to hold color constants for the application."""
     GREEN = "#28a745"
