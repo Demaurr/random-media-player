@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, List
 from description_manager import DescriptionManager
 from fingerprint_manager import MediaFingerprintManager
-from player_constants import FILE_TRANSFER_LOG, LOG_PATH
+from player_constants import FILE_TRANSFER_LOG, LOG_PATH, CSV_CONFIG
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
@@ -23,21 +23,25 @@ class FileManager:
             category_manager=None, video_stats_manager=None, notes_manager=None, description_manager=None,
             fingerprint_manager=None, task_manager=None):
         self.log_file = FILE_TRANSFER_LOG
+        self._headers = CSV_CONFIG[self.log_file]["headers"]
         
-        self.favorites = favorites_manager or FavoritesManager()
-        self.deletes = deletion_manager or DeletionManager()
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.favorites = favorites_manager or FavoritesManager(fingerprint_manager=self.fingerprint_manager)
+        self.deletes = deletion_manager or DeletionManager(favorites_manager=self.favorites)
         if parent_window:
             self.deletes.set_parent_window(parent_window)
-        self.categories = category_manager or CategoryManager()
+        self.categories = category_manager or CategoryManager(fingerprint_manager=self.fingerprint_manager)
         self.video_stats_manager = video_stats_manager or VideoStatsManager()
         self.file_loader = VideoFileLoader()
         self.notes_manager = notes_manager or NotesManager()
         self.description_manager = description_manager or DescriptionManager()
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-        self.task_manager = task_manager or TaskManager()
+        self.task_manager = task_manager or TaskManager(root=self.parent, max_workers=4)
         
         self.logger = LogManager(LOG_PATH)
-        create_csv_file(["Source Path", "Destination Path", "Status", "Date"], self.log_file)
+        self._ensure_csv_exists()
+
+    def _ensure_csv_exists(self):
+        create_csv_file(self._headers, self.log_file)
 
     def move_file(self, src: str, dest: str) -> bool:
         try:

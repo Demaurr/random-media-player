@@ -2,7 +2,7 @@ import csv
 import os
 from datetime import datetime
 from fingerprint_manager import MediaFingerprintManager
-from player_constants import NOTES_CSV, NOTES_LOG_PATH
+from player_constants import NOTES_CSV, NOTES_LOG_PATH, CSV_CONFIG
 from static_methods import create_csv_file, get_file_transfer_history
 from logs_writer import LogManager
 
@@ -18,25 +18,17 @@ class NotesManager:
     - CSV allows multiple rows per hash (one per file_path) for reference
     """
 
-    FIELDNAMES = [
-        "index_hash",
-        "file_path",
-        "note",
-        "rating",
-        "tags",
-        "mood",
-        "context",
-        "timestamp"
-    ]
-
     def __init__(self, fingerprint_manager=None):
         self.notes_file = NOTES_CSV
-        create_csv_file(filename=self.notes_file, headers=self.FIELDNAMES)
+        self._headers = CSV_CONFIG[self.notes_file]["headers"]
         self.notes: dict[str, dict] = {}
         self.path_to_hash: dict[str, str] = {}
         self.logger = LogManager(NOTES_LOG_PATH)
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         self._load_notes()
+
+    def _ensure_csv_exists(self):
+        create_csv_file(filename=self.notes_file, headers=self._headers)
 
     def _load_notes(self):
         """
@@ -196,9 +188,10 @@ class NotesManager:
         # return self.notes.get(index_key)
         return dict(self.notes[index_key]) if index_key in self.notes else None
     
-    def get_notes_for_files(self, file_keys: list) -> dict[str, dict]:
+    def get_notes_for_files(self, file_keys: list, skip_empty: bool=False) -> dict[str, dict]:
         """
         Get notes for multiple files by their paths.
+        skip_empty bool: if False will return all the file_paths even if their isn't any note_data
         Returns: {file_path: note_data | None}
         """
         resolved = self._resolve_keys_batch(file_keys)
@@ -207,7 +200,7 @@ class NotesManager:
         for file_path, index_key in resolved.items():
             if index_key and index_key in self.notes:
                 results[file_path] = dict(self.notes[index_key])
-            else:
+            elif not skip_empty:
                 results[file_path] = None
 
         return results

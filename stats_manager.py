@@ -2,26 +2,25 @@ import csv
 import os
 from snippets_manager import SnippetsManager
 from deletion_manager import DeletionManager
-from static_methods import gather_all_media, normalise_path
-from player_constants import ALL_MEDIA_CSV, SNIPPETS_HISTORY_CSV, VIDEO_STATS_CSV, STATS_LOG_PATH
+from static_methods import create_csv_file, gather_all_media, normalise_path
+from player_constants import ALL_MEDIA_CSV, SNIPPETS_HISTORY_CSV, VIDEO_STATS_CSV, STATS_LOG_PATH, CSV_CONFIG
 from logs_writer import LogManager
 from get_aspects import VideoProcessor
 
 logger = LogManager(STATS_LOG_PATH)
 
 class VideoStatsManager:
-    STATS_HEADER = [
-        "File Path", "File Size", "Duration (s)", "Resolution", "Aspect Ratio", "Orientation",
-        "Format", "Video Codec", "Bitrate (kbps)", "Frame Rate", "Pixel Format",
-        "Profile", "Level", "Audio Codec", "Audio Channels", "Audio Sample Rate"
-    ]
 
-    def __init__(self, stats_csv=VIDEO_STATS_CSV, snippets_manager=None, deletion_manager=None):
-        self.stats_csv = stats_csv
+    def __init__(self, snippets_manager=None, deletion_manager=None):
+        self.stats_csv = VIDEO_STATS_CSV
+        self._headers = CSV_CONFIG[self.stats_csv]["headers"]
         self.stats = self._load_existing_stats()
         self.processor = VideoProcessor(max_workers=8)
         self.deletion_manager = deletion_manager or DeletionManager()
         self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager)
+
+    def _ensure_csv_exists(self):
+        create_csv_file(headers=self._headers, filename=self.stats_csv)
 
     def _load_existing_stats(self):
         stats = {}
@@ -85,7 +84,7 @@ class VideoStatsManager:
     def _write_stats(self, new_stats):
         file_exists = os.path.exists(self.stats_csv)
         with open(self.stats_csv, "a", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self.STATS_HEADER)
+            writer = csv.DictWriter(f, fieldnames=self._headers)
             if not file_exists:
                 writer.writeheader()
             for row in new_stats:
@@ -114,7 +113,7 @@ class VideoStatsManager:
                     updated = True
                 rows.append(row)
         with open(self.stats_csv, "w", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self.STATS_HEADER)
+            writer = csv.DictWriter(f, fieldnames=self._headers)
             writer.writeheader()
             writer.writerows(rows)
         if updated:
@@ -133,7 +132,7 @@ class VideoStatsManager:
                     continue
                 rows.append(row)
         with open(self.stats_csv, "w", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self.STATS_HEADER)
+            writer = csv.DictWriter(f, fieldnames=self._headers)
             writer.writeheader()
             writer.writerows(rows)
         if deleted:
@@ -245,7 +244,7 @@ class VideoStatsManager:
 
         new_row = result[0]
         with open(self.stats_csv, "a", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self.STATS_HEADER)
+            writer = csv.DictWriter(f, fieldnames=self._headers)
             if os.stat(self.stats_csv).st_size == 0:
                 writer.writeheader()
             writer.writerow(new_row)

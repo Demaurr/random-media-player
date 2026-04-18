@@ -5,24 +5,20 @@ from typing import Optional, List, Dict, Tuple
 
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
-from player_constants import ASSOCIATIONS_CSV, ASSOCIATION_LOG_PATH
-from static_methods import normalise_path
+from player_constants import ASSOCIATIONS_CSV, ASSOCIATION_LOG_PATH, CSV_CONFIG
+from static_methods import normalise_path, create_csv_file
 
 
 class FileAssociator:
     """
     Associations will generally be lower than categories or other stuff, therefore not using the indexing
     """
-    def __init__(self, csv_path=ASSOCIATIONS_CSV, deletion_manager=None, fingerprint_manager=None):
-        self.csv_path = csv_path
+    def __init__(self, deletion_manager=None, fingerprint_manager=None):
+        self.csv_path = ASSOCIATIONS_CSV
         self.deletion_manager = deletion_manager or DeletionManager()
         self.fingerprint_manager = fingerprint_manager
         
-        self._headers = [
-            'source_file', 'source_hash', 'target_file', 'target_hash',
-            'association_type', 'source_size', 'target_size',
-            'association_date', 'association_status'
-        ]
+        self._headers = CSV_CONFIG[self.csv_path]["headers"]
         
         self._associations = {}
         self.logger = LogManager(ASSOCIATION_LOG_PATH)
@@ -36,12 +32,7 @@ class FileAssociator:
 
     def _ensure_csv_exists(self):
         """Make sure CSV exists with headers."""
-        if not os.path.exists(self.csv_path):
-            with open(self.csv_path, 'w', newline='', encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(self._headers)
-        else:
-            self._migrate_csv_if_needed()
+        create_csv_file(filename=self.csv_path, headers=self._headers)
 
     def _migrate_csv_if_needed(self):
         """Migrate old CSV format (without fingerprints) to new format."""

@@ -1,11 +1,13 @@
 import csv
 import os
+from typing import Any
 import uuid
 from datetime import datetime
 from fingerprint_manager import MediaFingerprintManager
+from collections import defaultdict
 from logs_writer import LogManager
 from static_methods import create_csv_file
-from player_constants import ANNOTATIONS_CSV, ANNOTATIONS_LOG_PATH
+from player_constants import ANNOTATIONS_CSV, ANNOTATIONS_LOG_PATH, CSV_CONFIG
 
 class AnnotationsManager:
     """
@@ -19,16 +21,6 @@ class AnnotationsManager:
     - Persisted in CSV for long-term storage
     """
 
-    FIELDNAMES = [
-        "annotation_id",
-        "index_hash",
-        "file_path",
-        "timestamp_seconds",
-        "annotation_text",
-        "created_at",
-        "modified_at"
-    ]
-
     def __init__(self, fingerprint_manager=None):
         """
         Initialize the annotations manager.
@@ -39,15 +31,20 @@ class AnnotationsManager:
         self.annotations_file = ANNOTATIONS_CSV
         self.log_path = ANNOTATIONS_LOG_PATH
         
-        create_csv_file(filename=ANNOTATIONS_CSV, headers=self.FIELDNAMES)
+        # create_csv_file(filename=ANNOTATIONS_CSV, headers=self.FIELDNAMES)
         self.logger = LogManager(ANNOTATIONS_LOG_PATH)
+        self._headers = CSV_CONFIG[ANNOTATIONS_CSV]["headers"]
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         
         self.annotations: dict[str, list] = {}
         self.annotation_ids: dict[str, str] = {}
         self.path_to_hash: dict[str, str] = {}
+        self._text_index = defaultdict(list)
         
         self._load_annotations()
+
+    def _create_db(self):
+        create_csv_file(filename=ANNOTATIONS_CSV, headers=self._headers)
 
     def _load_annotations(self):
         """Load all annotations from CSV."""
@@ -82,9 +79,14 @@ class AnnotationsManager:
                     }
                     self.annotations[index_hash].append(annotation)
                 
-                # Sort annotations by timestamp for each hash
                 for hash_key in self.annotations:
                     self.annotations[hash_key].sort(key=lambda x: x["timestamp_seconds"])
+                
+                for hash_key in self.annotations:
+                    for annotation in self.annotations[hash_key]:
+                        text = annotation["annotation_text"].lower()
+                        for word in text.split():
+                            self._text_index[word].append(annotation["annotation_id"])
                     
         except Exception as e:
             self.logger.error_logs(f"Error loading annotations: {e}")
@@ -187,13 +189,13 @@ class AnnotationsManager:
         """Get specific annotation by ID."""
         index_hash = self.annotation_ids.get(annotation_id)
         if not index_hash:
-            return None
+            return {}
         
         for annotation in self.annotations.get(index_hash, []):
             if annotation["annotation_id"] == annotation_id:
                 return annotation
         
-        return None
+        return {}
 
     def update_annotation(self, annotation_id: str, annotation_text: str = None) -> bool:
         """Update annotation text."""
@@ -304,6 +306,67 @@ class AnnotationsManager:
             if search_lower in a["annotation_text"].lower()
         ]
 
+    def search_annotations_for_files(
+        self,
+        file_paths: list[str],
+        text: str,
+        return_file_paths: bool = False
+    ) -> list:
+        """
+        Doesn't work correctly as intended. 
+        Needs to be reworked to search annotations across multiple files 
+        and return either matching annotations or file paths.    
+        """
+
+        annotation_ids = self.search_annotations_global(text)
+
+        hashes = {
+            self._resolve_hash(p)
+            for p in file_paths
+            if p
+        }
+
+        results = []
+        result_paths = set()
+
+        for ann_id in annotation_ids:
+            index_hash = self.annotation_ids.get(ann_id)
+
+            if index_hash not in hashes:
+                continue
+
+            if return_file_paths:
+                annotation = self.get_annotation_by_id(ann_id)
+                if annotation:
+                    result_paths.add(annotation["file_path"])
+            else:
+                annotation = self.get_annotation_by_id(ann_id)
+                if annotation:
+                    results.append(annotation)
+
+        return list(result_paths) if return_file_paths else results
+    
+    def search_annotations_global(self, search_text: str) -> list[str]:
+        """Fast global search across all annotations."""
+        if not search_text:
+            return []
+
+        words = search_text.lower().split()
+
+        results = []
+        for word in words:
+            results.extend(self._text_index.get(word, []))
+
+        seen = set()
+        unique_ids = []
+
+        for ann_id in results:
+            if ann_id not in seen:
+                seen.add(ann_id)
+                unique_ids.append(ann_id)
+
+        return unique_ids
+
     def get_stats(self) -> dict:
         """Get statistics about annotations."""
         total_videos = len(self.annotations)
@@ -340,3 +403,8 @@ class AnnotationsManager:
         self.path_to_hash.clear()
         self._save_annotations()
         self.logger.update_logs("[WARNING]", "All annotations cleared")
+
+if __name__ == "__main__":
+    fm = MediaFingerprintManager()
+    am = AnnotationsManager(fingerprint_manager=fm)
+    

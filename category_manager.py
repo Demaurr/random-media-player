@@ -5,7 +5,7 @@ from threading import Lock
 from collections import defaultdict
 from typing import Dict, List
 
-from player_constants import CATEGORIES_FILE, LOG_PATH
+from player_constants import CATEGORIES_FILE, LOG_PATH, CSV_CONFIG
 from static_methods import create_csv_file, measure_time, normalise_path
 from logs_writer import LogManager
 from fingerprint_manager import MediaFingerprintManager
@@ -26,23 +26,21 @@ class CategoryManager:
         self.logger = Logger
         self.lock = Lock()
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-        self._ensure_categories_file()
         self.entries = []
+        self.headers = CSV_CONFIG[self.categories_file]["headers"]
         self.category_to_files = defaultdict(set)
         self.file_to_categories = defaultdict(set)
         self.hash_to_files = defaultdict(set)
         self.file_to_hash = {}
         self._load_entries()
+        self._ensure_categories_file()
+
 
     def _ensure_categories_file(self):
-        """Ensure CSV exists with updated headers including index_hash."""
-        if not os.path.exists(self.categories_file):
-            create_csv_file(
-                headers=['Category Name', 'File Path', 'Index Hash', 'Date Added'],
-                filename=self.categories_file
-            )
-        else:
-            self._migrate_csv_if_needed()
+        create_csv_file(
+            headers= self.headers,
+            filename=self.categories_file
+        )
 
     def _migrate_csv_if_needed(self):
         """Migrate old CSV format (3 columns) to new format (4 columns with Index Hash)."""

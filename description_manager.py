@@ -3,7 +3,7 @@ import csv
 import os
 import datetime
 
-from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH, FILE_TRANSFER_LOG
+from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH, FILE_TRANSFER_LOG, CSV_CONFIG
 from static_methods import create_csv_file, normalise_path
 from logs_writer import LogManager
 from associations_manager import FileAssociator
@@ -11,14 +11,17 @@ from associations_manager import FileAssociator
 logger = LogManager(DESCRIPTION_LOG_PATH)
 
 class DescriptionManager:
-    def __init__(self, csv_path=DESCRIPTION_CSV, association_manager=None, deletion_manager=None):
-        self.csv_path = csv_path
+    def __init__(self, association_manager=None, deletion_manager=None):
+        self.csv_path = DESCRIPTION_CSV
         self.descriptions = {}
+        self._headers = CSV_CONFIG[self.csv_path]["headers"]
         self.association_manager = association_manager or FileAssociator(deletion_manager=deletion_manager)
-        create_csv_file(headers=["video_path", "size", "description", "timestamp"], filename=csv_path)
         self._load_descriptions()
         self.graph = self.build_graph()
+        self._ensure_csv_exists()
 
+    def _ensure_csv_exists(self):
+        create_csv_file(headers=self._headers, filename=self.csv_path)
 
     def _load_descriptions(self):
         if not os.path.exists(self.csv_path):

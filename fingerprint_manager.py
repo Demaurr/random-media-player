@@ -5,9 +5,9 @@ import hashlib
 from pprint import pprint
 from typing import Any, Dict, List, Optional
 import uuid
-from player_constants import FINGERPRINTS_CSV, FINGERPRINTS_LOG_PATH, FINGERPRINTS_PATHS_CSV
+from player_constants import CSV_CONFIG, FINGERPRINTS_CSV, FINGERPRINTS_LOG_PATH, FINGERPRINTS_PATHS_CSV
 from logs_writer import LogManager
-from static_methods import _atomic_save_csv, normalise_path, measure_time, measure_memory, measure_class_memory
+from static_methods import _atomic_save_csv, create_csv_file, normalise_path, measure_time, measure_memory, measure_class_memory
 
 class MediaFingerprintManager:
     def __init__(self):
@@ -19,16 +19,21 @@ class MediaFingerprintManager:
         self.fingerprints: Dict[str, Dict] = {}  
         self.paths: Dict[str, List[Dict]] = {}
         self.path_to_index_hash: Dict[str, str] = {}
+        self._paths_headers = CSV_CONFIG[self.paths_file]["headers"]
+        self._fingerprint_headers = CSV_CONFIG[self.csv_file]["headers"]
 
         # self.refactor_paths_csv()
+        self._ensure_csvs_exists()
         self._load_from_csv()
         self._load_paths()
         # self.refactor_fingerprints_round_duration()
 
+    def _ensure_csvs_exists(self):
+        create_csv_file(headers=self._fingerprint_headers, filename=self.csv_file)
+        create_csv_file(headers=self._paths_headers, filename=self.paths_file)
+
     def _load_from_csv(self) -> None:
         """Load existing fingerprints into memory."""
-        if not os.path.exists(self.csv_file):
-            return
         try:
             with open(self.csv_file, mode="r", newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -39,8 +44,6 @@ class MediaFingerprintManager:
 
     def _load_paths(self):
         """Load join table mapping index_hash -> file paths."""
-        if not os.path.exists(self.paths_file):
-            return
         try:
             with open(self.paths_file, mode="r", newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -64,7 +67,8 @@ class MediaFingerprintManager:
         rows = list(self.fingerprints.values())
         _atomic_save_csv(
             self.csv_file,
-            ["name", "duration", "size_bytes", "partial_hash", "index_hash"],
+            # ["name", "duration", "size_bytes", "partial_hash", "index_hash"],
+            self._fingerprint_headers,
             rows,
         )
 
@@ -91,7 +95,8 @@ class MediaFingerprintManager:
 
         _atomic_save_csv(
             self.paths_file,
-            ["index_hash", "file_path", "unique_id", "added_at"],
+            # ["index_hash", "file_path", "unique_id", "added_at"],
+            self._paths_headers,
             rows,
         )
 

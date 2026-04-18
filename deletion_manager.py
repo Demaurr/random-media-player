@@ -3,8 +3,8 @@ import csv
 import tkinter as tk
 from send2trash import send2trash
 from tkinter import filedialog
-from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists
-from player_constants import FAV_FILES, DELETE_FILES_CSV, LOG_PATH
+from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists, create_csv_file
+from player_constants import FAV_FILES, DELETE_FILES_CSV, LOG_PATH, CSV_CONFIG
 from logs_writer import LogManager
 from favorites_manager import FavoritesManager
 from datetime import datetime
@@ -14,12 +14,17 @@ from custom_messagebox import showinfo, showwarning, showerror, askyesno
 class DeletionManager:
     def __init__(self, fav_manager=None, gui_parent=None):
         self.delete_csv = DELETE_FILES_CSV  
+        self.headers = CSV_CONFIG[self.delete_csv]["headers"]
         self.fav_manager = fav_manager or FavoritesManager(FAV_FILES) 
         self.logger = LogManager(LOG_PATH)
         self.deletion_files = self.read_csv_file()
         self.gui_parent = gui_parent
         self.parent_window = None
         self.message_window = self.parent_window
+        self._ensure_csv_exists()
+
+    def _ensure_csv_exists(self):
+        create_csv_file(headers=self.headers, filename=self.delete_csv)
 
     def set_parent_window(self, parent):
         """Set the parent window for message boxes."""
@@ -45,7 +50,8 @@ class DeletionManager:
 
     def write_csv_file(self, file_status_dict):
         """Writes the updated dictionary back to the CSV with size and modification datetime."""
-        headers = ["File Path", "Delete_Status", "File Size", "Modification Time"]
+        # headers = ["File Path", "Delete_Status", "File Size", "Modification Time"]
+        headers = self.headers
         with open(self.delete_csv, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
             writer.writerow(headers)

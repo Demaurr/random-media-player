@@ -2,16 +2,17 @@ import os
 import csv
 from datetime import datetime
 from logs_writer import LogManager
-from player_constants import FAV_FILES, LOG_PATH, LOGS_FOLDER
+from player_constants import FAV_FILES, LOG_PATH, LOGS_FOLDER, CSV_CONFIG
 from static_methods import create_csv_file, get_file_size, normalise_path, ensure_folder_exists
 import hashlib
 from pprint import pprint
 from fingerprint_manager import MediaFingerprintManager
 
 class FavoritesManager:
-    def __init__(self, fav_csv=FAV_FILES, fingerprint_manager=None):
+    def __init__(self, fingerprint_manager=None):
         ensure_folder_exists(LOGS_FOLDER)
-        self.fav_csv = fav_csv
+        self.fav_csv = FAV_FILES
+        self._headers = CSV_CONFIG[self.fav_csv]["headers"]
         self._ensure_favorites_csv()
         self.logger = LogManager(LOG_PATH)
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
@@ -19,7 +20,7 @@ class FavoritesManager:
         self._hash_cache = None
 
     def _ensure_favorites_csv(self):
-        create_csv_file(["Hash", "Video Name", "Source Path", "Date Added"], self.fav_csv)
+        create_csv_file(self._headers, self.fav_csv)
 
     @staticmethod
     def hash_string(input_string, hash_length=32):

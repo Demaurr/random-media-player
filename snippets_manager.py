@@ -5,23 +5,17 @@ from pprint import pprint
 import time
 from deletion_manager import DeletionManager
 from fingerprint_manager import MediaFingerprintManager
-from player_constants import SNIPPETS_HISTORY_CSV, LOG_PATH
+from player_constants import CSV_CONFIG, SNIPPETS_HISTORY_CSV, LOG_PATH
 from static_methods import _atomic_save_csv, create_csv_file, get_all_identity_paths, get_all_related_paths, measure_time
 from logs_writer import LogManager
 from associations_manager import FileAssociator
 
 
 class SnippetsManager:
-    def __init__(self, csv_path=SNIPPETS_HISTORY_CSV, logger=None, deletion_manager=None, association_manager=None,
+    def __init__(self, logger=None, deletion_manager=None, association_manager=None,
                  fingerprint_manager=None):
-        self.csv_path = csv_path
-        self.headers = [
-            "Timestamp", "Original File", "Original File Size", "Output File",
-            "Start Time (s)", "End Time (s)", "Trim Mode",
-            "Total Duration (s)", "Resolution", "File Size (MB)", "File Size (Bytes)",
-            "Video Format", "Notes", "Original Fingerprint", "Snippet Fingerprint"
-        ]
-        create_csv_file(self.headers, self.csv_path)
+        self.csv_path = SNIPPETS_HISTORY_CSV
+        self._headers = CSV_CONFIG[self.csv_path]["headers"]
         self.snippets = []
         self.deletion_manager = deletion_manager or DeletionManager()
         # self.associator = association_manager or FileAssociator()
@@ -30,9 +24,13 @@ class SnippetsManager:
         self._snippet_fingerprint_index = set()
         self._snippet_path_index = set()
         self._original_to_snippets = defaultdict(list)
+        self._ensure_csv_exists()
         self._load_snippets()
         # self.refactor_csv()
         self._build_indexes()
+    
+    def _ensure_csv_exists(self):
+        create_csv_file(self._headers, self.csv_path)
 
     def _load_snippets(self):
         self.snippets.clear()
@@ -45,7 +43,7 @@ class SnippetsManager:
     def _save_snippets(self):
         _atomic_save_csv(
             file_path=self.csv_path,
-            fieldnames=self.headers,
+            fieldnames=self._headers,
             rows=self.snippets
         )
 
@@ -157,12 +155,13 @@ class SnippetsManager:
 
     def get_snippets_for_files(self, file_paths, related_paths=False, graph=None):
         """
-        Efficiently fetch snippets for multiple files.
+        Efficiently fetch snippets for multiple files.\n
+        Pass transfer graph if related_paths=True for better performance.
 
         Args:
             file_paths (list[str]): list of original file paths
             related_paths (bool): include related paths
-            graph: graph for related paths
+            graph: transfer_graph for related paths
 
         Returns:
             list: list of snippet dicts
@@ -199,7 +198,7 @@ class SnippetsManager:
             print("[WARNING] 'Output File' cannot be updated directly. Use rename_snippet_file().")
             updates.pop("Output File")
 
-        valid_updates = {k: v for k, v in updates.items() if k in self.headers}
+        valid_updates = {k: v for k, v in updates.items() if k in self._headers}
         snippet.update(valid_updates)
         self._save_snippets()
         self.logger.update_logs("[SNIPPET UPDATED]", f"Updated snippet: {output_file} {updates.keys()}")
@@ -473,10 +472,10 @@ class SnippetsManager:
             force_recompute (bool): if True, recompute fingerprints even if already present
         """
         fingerprint_manager = self.fingerprint_manager
-        if "Original Fingerprint" not in self.headers:
-            self.headers.append("Original Fingerprint")
-        if "Snippet Fingerprint" not in self.headers:
-            self.headers.append("Snippet Fingerprint")
+        if "Original Fingerprint" not in self._headers:
+            self._headers.append("Original Fingerprint")
+        if "Snippet Fingerprint" not in self._headers:
+            self._headers.append("Snippet Fingerprint")
 
         if not self.snippets:
             self._load_snippets()
