@@ -166,9 +166,6 @@ class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
         print(len(all_file_snippets))
 
         for file_path in self.file_paths:
-            # if not os.path.isfile(file_path):
-            #     continue
-            
             try:
                 try:
                     file_size = os.path.getsize(file_path)
@@ -196,13 +193,6 @@ class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
                     pass
                 
                 try:
-                    snippets = self.snippets_manager.get_snippets_by_original_file(file_path)
-                    if snippets:
-                        all_snippets.extend(snippets)
-                except Exception:
-                    pass
-                
-                try:
                     annotations = self.annotations_manager.get_annotations_for_file(file_path)
                     if annotations:
                         for annot in annotations:
@@ -218,8 +208,6 @@ class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
         shuffled_screenshots = all_screenshots
 
         random.shuffle(shuffled_screenshots)
-        
-        print("snippets count", len(all_snippets))
 
         self.grouped_data = {
             "total_files": total_files,
@@ -235,7 +223,7 @@ class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
             "stats": all_stats,
             "screenshots": natural_sort_iterables(all_screenshots),
             "shuffled_screenshots": shuffled_screenshots,
-            "snippets": all_snippets,
+            "snippets": all_file_snippets,
             "annotations": all_annotations,
             "watch_count": watch_stats_agg["total_views"],
             "watch_total_seconds": watch_stats_agg["total_duration"],

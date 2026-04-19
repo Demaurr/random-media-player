@@ -48,16 +48,16 @@ class MediaPlayerApp(tk.Toplevel):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
+        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         self.favorites_manager = favorites_manager or FavoritesManager()
         self.logger = LogManager(LOG_PATH)
         self.deleter = deletion_manager or DeletionManager(self.favorites_manager)
         self.deleter.set_parent_window(self)
+        self.associations_manager = associations_manager or FileAssociator(deletion_manager=self.deleter, fingerprint_manager=self.fingerprint_manager)
         self.category_manager = category_manager or CategoryManager()
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-        self.watch_history_logger = WatchHistoryLogger(self.watch_history_csv, self.fingerprint_manager)
+        self.watch_history_logger = WatchHistoryLogger(self.fingerprint_manager)
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
-        self.associations_manager = associations_manager or FileAssociator()
         self.annotations_manager = annotations_manager or AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}

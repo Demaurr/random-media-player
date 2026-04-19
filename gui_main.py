@@ -29,9 +29,13 @@ from file_manager import FileManager
 from image_player import ImageViewer
 from logs_writer import LogManager
 from tooltips import ToolTip
+from properties_grouped_window import GroupedPropertiesWindow
+
 from player_constants import (
+    BACKUP_FOLDER,
+    CSV_CONFIG,
+    LOGS_FOLDER,
     SHOW_SNIPPETS,
-    VIDEO_STATS_CSV,
     Colors,
     DELETE_FILES_CSV,
     FILES_FOLDER,
@@ -42,8 +46,6 @@ from player_constants import (
     WATCHED_HISTORY_LOG_PATH,
     DEMO_WATCHED_HISTORY,
     VIDEO_SNIPPETS_FOLDER,
-    FILE_TRANSFER_LOG,
-    ASSOCIATIONS_CSV
 )
 from settings_manager import SettingsWindow
 from static_methods import (
@@ -62,6 +64,7 @@ from static_methods import (
     get_file_transfer_history, 
     get_screenshots_for_file,
     get_screenshots_for_file_from_index,
+    get_screenshots_for_files_from_index,
     get_video_snippets_for_file,
     natural_sort_iterables,
     natural_sort_key, 
@@ -114,15 +117,9 @@ class FileExplorerApp:
         self.trimmed_segments = {}
         self.trimmed_segments_metadata = {}
 
-        ensure_folder_exists(FILES_FOLDER)
-        ensure_folder_exists(SCREENSHOTS_FOLDER)
-        ensure_folder_exists(REPORTS_FOLDER)
-        ensure_folder_exists(VIDEO_SNIPPETS_FOLDER)
+        self._ensure_folders()
+        self._ensure_csvs_exist()
         self.center_window(window=self.root)
-
-        create_csv_file(["File Path", "Delete_Status", "File Size", "Modification Time"], DELETE_FILES_CSV)
-        create_csv_file(["Folder Path","Csv Path", "Date"], FOLDER_LOGS)
-        create_csv_file(["Source Path","Destination Path","Status","Date"], FILE_TRANSFER_LOG)
         self.root.after(0, self._show_loading_message)
         self.task_manager = TaskManager(self.root)
         self.logger = LogManager(LOG_PATH)
@@ -130,6 +127,20 @@ class FileExplorerApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # threading.Thread(target=self._init_managers_background, daemon=True).start()
+
+    def _ensure_folders(self):
+        """Ensure necessary folders exist."""
+        ensure_folder_exists(FILES_FOLDER)
+        ensure_folder_exists(SCREENSHOTS_FOLDER)
+        ensure_folder_exists(REPORTS_FOLDER)
+        ensure_folder_exists(VIDEO_SNIPPETS_FOLDER)
+        ensure_folder_exists(BACKUP_FOLDER)
+        ensure_folder_exists(LOGS_FOLDER)
+    
+    def _ensure_csvs_exist(self):
+        for filename, configs in CSV_CONFIG.items():
+            create_csv_file(headers=configs["headers"], filename=filename)
+
 
     def _show_loading_message(self):
         self.loading_label = tk.Label(self.root, text="Loading managers...", bg=Colors.PLAIN_BLACK, fg=Colors.PLAIN_WHITE, font=("Segoe UI", 18))
@@ -147,7 +158,7 @@ class FileExplorerApp:
         self.snippets_manager = SnippetsManager(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.video_stats_manager = VideoStatsManager(snippets_manager=self.snippets_manager, deletion_manager=self.deletion_manager)
         self.deletion_manager.set_parent_window(self.root)
-        self.associations_manager = FileAssociator(csv_path=ASSOCIATIONS_CSV, deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
+        self.associations_manager = FileAssociator(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.description_manager = DescriptionManager(association_manager=self.associations_manager, deletion_manager=self.deletion_manager)
         # self.media_collector = MediaPathsCollector(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.root.after(0, self._on_managers_ready)
@@ -533,6 +544,7 @@ class FileExplorerApp:
                     deletion_manager=self.deletion_manager,
                     stats_manager=self.video_stats_manager,
                     trimmed_segments=self.trimmed_segments,
+                    trimmed_segments_metadata=self.trimmed_segments_metadata,
                     snippets_manager=self.snippets_manager,
                     association_manager=self.associations_manager,
                     fingerprint_manager=self.fingerprint_manager,
@@ -756,8 +768,6 @@ class FileExplorerApp:
 
     def _show_grouped_properties(self, selected_items, is_category_view):
         """Show grouped properties for multiple files or category view."""
-        from grouped_properties import GroupedPropertiesWindow
-        
         loading_win = self.show_loading_screen(message="Loading grouped properties...")
         
         def worker():
@@ -784,7 +794,8 @@ class FileExplorerApp:
                     association_manager=self.associations_manager,
                     fingerprint_manager=self.fingerprint_manager,
                     annotations_manager=self.annotations_manager,
-                    trimmed_segments=self.trimmed_segments
+                    trimmed_segments=self.trimmed_segments,
+                    trimmed_segments_metadata=self.trimmed_segments_metadata
                 )
                 
                 if grouped_window.preload_properties():
@@ -799,6 +810,7 @@ class FileExplorerApp:
                     ))
                 
             except Exception as e:
+                e = str(e)
                 self.root.after(0, lambda: (
                     loading_win.destroy(),
                     showerror(self.root, "Error", f"Failed to show grouped properties: {e}")
@@ -944,9 +956,9 @@ class FileExplorerApp:
         def reload_constants():
             importlib.reload(player_constants)
             importlib.reload(file_loader)
-            self.deletion_manager = DeletionManager()
+            self.deletion_manager = DeletionManager(self.fav_manager)
             self.deletion_manager.set_parent_window(self.root)
-            self.fav_manager = FavoritesManager(self.fingerprint_manager)
+            self.fav_manager = FavoritesManager(fingerprint_manager=self.fingerprint_manager)
             self.logger = LogManager(LOG_PATH)
         SettingsWindow(self.root, 
                        backup_manager=self.backup_manager, 
@@ -2179,6 +2191,8 @@ class FileExplorerApp:
                     matched_desc_keys = self.description_manager.search_description_by_keys_advanced(query, search_files)
                     matched_note_keys = self.notes_manager.search_notes_by_keys(query=query, allowed_keys=search_files)
                     matched_cat_keys = self.category_manager.search_categories_by_keys(query=query, allowed_keys=search_files)
+                    # The search with annotations doesn't work correctly for now.
+                    # matched_annot_keys = self.annotations_manager.search_annotations_for_files(file_paths=search_files, text=query, return_file_paths=True)
                     # matched_snippets_keys = self.snippets_manager.search_snippets_by_notes_global(query) if self.entry.get() == "All Media Files" else None
             # folder_input = normalise_path(self.entry.get()).rstrip("\\/")
             for file in search_files:
@@ -2195,6 +2209,9 @@ class FileExplorerApp:
 
                 elif top_level_only and file in matched_cat_keys:
                     matched = True
+
+                # elif top_level_only and file in matched_annot_keys:
+                #     matched = True
 
                 if matched:
                     file_name = os.path.basename(file) if self.entry.get() != "show categories" else file
