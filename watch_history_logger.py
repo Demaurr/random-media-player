@@ -2,24 +2,20 @@ from datetime import datetime
 import csv
 import os
 from logs_writer import LogManager
-from player_constants import LOG_PATH, WATCHED_HISTORY_LOG_PATH
-from static_methods import normalise_path, build_path_to_fingerprint_map, measure_time, calculate_duration_in_seconds
+from player_constants import LOG_PATH, WATCHED_HISTORY_LOG_PATH, CSV_CONFIG
+from static_methods import create_csv_file, normalise_path, build_path_to_fingerprint_map, measure_time, calculate_duration_in_seconds
 from fingerprint_manager import MediaFingerprintManager
 
 class WatchHistoryLogger:
     """A class for logging the history of watched videos with fingerprint support."""
 
-    def __init__(self, csv_file=WATCHED_HISTORY_LOG_PATH, fingerprint_manager=None):
-        self.csv_file = csv_file
+    def __init__(self, fingerprint_manager=None):
+        self.csv_file = WATCHED_HISTORY_LOG_PATH
         self.logger = LogManager(LOG_PATH)
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-        self.fieldnames = ['File Name', 'Total Duration', 'Date Watched', 'Duration Watched', 'Last Position', 'Fingerprint']
+        self.fieldnames = CSV_CONFIG[WATCHED_HISTORY_LOG_PATH]["headers"]
         self.file_exists = self.check_file_exists()
-        if not self.file_exists:
-            self.create_csv_file()
-        else:
-            # self.refresh_csv_if_needed()
-            pass
+        self._ensure_csv_exists()
 
     def build_last_position_index(self):
         """Build a dictionary mapping file names to their last known position."""
@@ -38,15 +34,13 @@ class WatchHistoryLogger:
     def check_file_exists(self):
         return os.path.isfile(self.csv_file)
 
-    def create_csv_file(self):
-        with open(self.csv_file, 'a', newline='', encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=self.fieldnames)
-            writer.writeheader()
+    def _ensure_csv_exists(self):
+        create_csv_file(headers=self.fieldnames, filename=self.csv_file)
 
     def refresh_csv_if_needed(self):
         """Refresh the CSV file to add missing columns ('Last Position', 'Fingerprint')."""
         if not os.path.exists(self.csv_file):
-            self.create_csv_file()
+            self._ensure_csv_exists()
             return
 
         with open(self.csv_file, 'r', newline='', encoding="utf-8") as file:
