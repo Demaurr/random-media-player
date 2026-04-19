@@ -6,10 +6,22 @@ from custom_messagebox import *
 from PIL import Image, ImageTk
 import random
 from deletion_manager import DeletionManager
+from mixins import ResetMixin
 
-
-class ImageViewer:
-    def __init__(self, master, image_files, index=0, width=1000, height=600, fullscreen=False, deletion_manager=None):
+class ImageViewer(ResetMixin):
+    def __init__(self, master, image_files, index=0, width=1000, height=600, fullscreen=False, deletion_manager=None, favorites_manager=None):
+        """
+        Initializes the ImageViewer.
+        Args:
+            master: The parent Tkinter window.
+            image_files: List of image file paths to display.
+            index: The starting index in the image_files list.
+            width: The width of the viewer window.
+            height: The height of the viewer window.
+            fullscreen: Whether to start in fullscreen mode.
+            deletion_manager: An instance of DeletionManager for handling deletions.
+            favorites_manager: An instance of FavoritesManager for handling favorites (optional if deletion_manager is None).
+        """
         self.master = master
         self.master.geometry(f"{width}x{height}")
         self.scale_factor = 1.0
@@ -26,7 +38,7 @@ class ImageViewer:
         self.shuffled_image_files = []
         self.shuffle_mode = False
         self.fullscreen = fullscreen
-        self.deletion_manager = deletion_manager or DeletionManager()
+        self.deletion_manager = deletion_manager or DeletionManager(fav_manager=favorites_manager)
         self.deletion_manager.set_parent_window(self.master)
         self.master.attributes("-fullscreen", self.fullscreen)
 
@@ -93,7 +105,15 @@ class ImageViewer:
         self.master.bind("<Control-C>", self.copy_image_path)
 
     def close_window(self, event=None):
+        self.reset_window()
         self.master.destroy()
+
+    def reset_window(self):
+        self.reset(exclude=[
+            "master",
+            "frame",
+            "label"
+        ], deep=True)
 
     def to_end(self, event=None):
         self.current_index = len(self.image_files) - 1
