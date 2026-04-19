@@ -1,17 +1,25 @@
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 from custom_messagebox import showerror
-from player_constants import DEMO_WATCHED_HISTORY
+from player_constants import DEMO_WATCHED_HISTORY, WATCHED_HISTORY_LOG_PATH
 from static_methods import normalise_path, sort_treeview_column
 from category_manager import CategoryManager
 
 plt.style.use('dark_background')
+matplotlib.use("Agg")
 # sns.set_palette(sns.color_palette(["#e74c3c", "#44b300", "#ffffff", "#222222"]))
+
+COL_TOTAL_DURATION = "Total Duration"
+COL_DURATION_WATCHED = "Duration Watched"
+COL_DATE_WATCHED = "Date Watched"
+COL_FILE_NAME = "File Name"
 
 class ScrollableFrame(tk.Frame):
     """A scrollable frame that can contain other widgets"""
@@ -53,8 +61,31 @@ class DashboardWindow():
 
         self.master.state('zoomed')
         
+        self.master.withdraw()
         self.create_widgets(self.master)
-        self.load_and_plot_data()
+        self.master.after(50, self._load_and_show)
+
+    def _load_and_show(self):
+        self.load_data()
+        # self.load_data_async()
+        self.master.deiconify()
+
+    def load_data_async(self):
+        """Starts background loading."""
+        self.master.withdraw()  # optional but recommended
+
+        thread = threading.Thread(
+            target=self._background_loader,
+            daemon=True
+        )
+        thread.start()
+    
+    def _background_loader(self):
+        try:
+            data = self._load_and_prepare_data()
+            self.master.after(0, lambda: self._on_data_ready(data))
+        except Exception as e:
+            self.master.after(0, lambda: showerror("Error", str(e)))
 
     def create_widgets(self, master):
         title_frame = tk.Frame(master, bg="black")
@@ -137,9 +168,81 @@ class DashboardWindow():
         )
         if file_path:
             self.csv_path = file_path
-            self.load_and_plot_data()
+            self.load_data()
 
-    def load_and_plot_data(self):
+    def _load_and_prepare_data(self):
+        """Heavy data processing only (thread-safe)."""
+        COL_TOTAL_DURATION = "Total Duration"
+        COL_DURATION_WATCHED = "Duration Watched"
+        COL_DATE_WATCHED = "Date Watched"
+        COL_FILE_NAME = "File Name"
+
+        df = pd.read_csv(self.csv_path)
+
+        for col in [COL_TOTAL_DURATION, COL_DURATION_WATCHED]:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: f"00:{x}" if isinstance(x, str) and len(x.split(':')) == 2 else x
+                )
+                df[col] = pd.to_timedelta(df[col], errors="coerce")
+
+        if COL_DATE_WATCHED in df.columns:
+            df[COL_DATE_WATCHED] = pd.to_datetime(df[COL_DATE_WATCHED], errors="coerce")
+            df["date"] = df[COL_DATE_WATCHED].dt.date
+            df["hour"] = df[COL_DATE_WATCHED].dt.hour
+            df["weekday"] = df[COL_DATE_WATCHED].dt.day_name()
+
+            weekday_counts = (
+                df["weekday"]
+                .value_counts()
+                .reindex(
+                    ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                    fill_value=0
+                )
+            )
+        else:
+            weekday_counts = pd.Series(dtype=int)
+
+        if COL_FILE_NAME in df.columns:
+            df["video_name"] = df[COL_FILE_NAME].apply(
+                lambda x: os.path.basename(x) if isinstance(x, str) else "Unknown"
+            )
+            df["primary_folder"] = df[COL_FILE_NAME].apply(
+                lambda x: os.path.dirname(normalise_path(x)) if isinstance(x, str) else "Unknown"
+            )
+
+        if "Duration Category" not in df.columns and COL_TOTAL_DURATION in df.columns:
+            df["Duration Category"] = df[COL_TOTAL_DURATION].apply(self._categorize_duration)
+
+        top_10_duration = (
+            df.groupby("video_name")[COL_DURATION_WATCHED]
+            .sum()
+            .nlargest(10)
+            .reset_index()
+            if "video_name" in df.columns and COL_DURATION_WATCHED in df.columns
+            else pd.DataFrame()
+        )
+
+        total_duration = df[COL_TOTAL_DURATION].sum() if COL_TOTAL_DURATION in df.columns else pd.Timedelta(0)
+        total_watch_time = df[COL_DURATION_WATCHED].sum() if COL_DURATION_WATCHED in df.columns else pd.Timedelta(0)
+        if COL_DATE_WATCHED in df.columns:
+            last_30 = df[df[COL_DATE_WATCHED] >= (pd.Timestamp.now() - pd.Timedelta(days=30))]
+            video_count_by_date = last_30.groupby('date').size()
+        else:
+            video_count_by_date = pd.Series(dtype=int)
+
+        return {
+            "df": df,
+            "weekday_counts": weekday_counts,
+            "top_10_duration": top_10_duration,
+            "total_duration": total_duration,
+            "total_watch_time": total_watch_time,
+            "video_count_by_date": video_count_by_date,
+            "last_30": last_30
+        }
+
+
+    def load_data(self):
         COL_TOTAL_DURATION = "Total Duration"
         COL_DURATION_WATCHED = "Duration Watched"
         COL_DATE_WATCHED = "Date Watched"
@@ -213,12 +316,6 @@ class DashboardWindow():
             for widget in scroll_frame.scrollable_frame.winfo_children():
                 widget.destroy()
 
-        overview_content = self.overview_scroll.scrollable_frame
-        overview_left = tk.Frame(overview_content, bg="black")
-        overview_right = tk.Frame(overview_content, bg="black")
-        overview_left.pack(side="left", fill="x", expand=True, padx=(20, 10), pady=10)
-        overview_right.pack(side="right", fill="x", expand=True, padx=(10, 20), pady=10)
-
         card_metrics = [
             ("Total Duration Elapsed", str(total_duration), "#44b300"),
             ("Total Watched Elapsed", str(total_watch_time), "#e74c3c"),
@@ -236,7 +333,66 @@ class DashboardWindow():
             unique_videos = df["video_name"].nunique()
             card_metrics.append(("Rewatched Videos", str(rewatched), "#f39c12"))
             card_metrics.append(("Unique Videos", str(unique_videos), "#8e44ad"))
-            
+
+        self._plot_data(df, 
+                        top_10_duration, 
+                        weekday_counts, 
+                        COL_TOTAL_DURATION, 
+                        COL_DURATION_WATCHED, 
+                        card_metrics, 
+                        video_count_by_date, 
+                        last_30)
+
+    def _build_card_metrics(self, data):
+        df = data["df"]
+        total_duration = data["total_duration"]
+        total_watch_time = data["total_watch_time"]
+
+        COL_DATE_WATCHED = "Date Watched"
+
+        card_metrics = [
+            ("Total Duration Elapsed", str(total_duration), "#44b300"),
+            ("Total Watched Elapsed", str(total_watch_time), "#e74c3c"),
+            ("Total Videos", str(len(df)), "#3498db"),
+        ]
+
+        if COL_DATE_WATCHED in df.columns and not df[COL_DATE_WATCHED].isnull().all():
+            min_date = df[COL_DATE_WATCHED].min()
+            max_date = df[COL_DATE_WATCHED].max()
+
+            card_metrics.append((
+                "Data covers",
+                f"{min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}",
+                "#5C2626"
+            ))
+
+            latest_row = df.loc[df[COL_DATE_WATCHED].idxmax()]
+            latest_video = latest_row.get("video_name", "Unknown")
+
+            card_metrics.append((
+                "Latest Watched Video",
+                str(latest_video),
+                "#3498db"
+            ))
+
+        if "video_name" in df.columns:
+            counts = df["video_name"].value_counts()
+            rewatched = (counts > 1).sum()
+            unique_videos = df["video_name"].nunique()
+
+            card_metrics.append(("Rewatched Videos", str(rewatched), "#f39c12"))
+            card_metrics.append(("Unique Videos", str(unique_videos), "#8e44ad"))
+
+        return card_metrics
+
+
+    def _plot_data(self, df, top_10_duration, weekday_counts, total_duration, total_duration_watched, card_metrics, video_count_by_date=None, last_30=None):
+        """Plot various data visualizations on the dashboard."""
+        overview_content = self.overview_scroll.scrollable_frame
+        overview_left = tk.Frame(overview_content, bg="black")
+        overview_right = tk.Frame(overview_content, bg="black")
+        overview_left.pack(side="left", fill="x", expand=True, padx=(20, 10), pady=10)
+        overview_right.pack(side="right", fill="x", expand=True, padx=(10, 20), pady=10)
         overview_right.grid_rowconfigure(tuple(range(len(card_metrics))), weight=1)
         overview_right.grid_columnconfigure(0, weight=1)
 
@@ -254,12 +410,12 @@ class DashboardWindow():
 
         if not video_count_by_date.empty:
             self._plot_last_30_days_with_categories(
-                overview_left, video_count_by_date, last_30, df, COL_TOTAL_DURATION
+                overview_left, video_count_by_date, last_30, df, total_duration
             )
         else:
             tk.Label(overview_left, text="No data for last 30 days.", bg="black", fg="#e74c3c", font=("Segoe UI", 14)).pack(pady=40)
 
-        if COL_TOTAL_DURATION in df.columns:
+        if total_duration in df.columns:
             duration_counts = df["Duration Category"].value_counts().reindex(
                 ["Very Short (<1 min)", "Short (1-3 min)", "Medium (3-10 min)", "Long (10-60 min)", "Very Long (>1 hr)"], fill_value=0
             )
@@ -276,12 +432,11 @@ class DashboardWindow():
             ax2.set_title("Videos by Duration Category", color="white")
             fig2.tight_layout()
             self._embed_plot(overview_right, fig2, len(card_metrics))
-
-        self._plot_top_10_duration(overview_left, top_10_duration, COL_DURATION_WATCHED, len(card_metrics)+1)
+        self._plot_top_10_duration(overview_left, top_10_duration, total_duration_watched, len(card_metrics)+1)
         self._populate_folder_tab(df)
         self._populate_hour_tab(df)
-        self._populate_weekday_tab(df, weekday_counts, COL_TOTAL_DURATION)
         self._populate_monthly_tab(df)
+        self._populate_weekday_tab(df, weekday_counts, total_duration)
         self._populate_category_tab(df, self.category_manager)
     
     def _merge_categories(self, df, category_manager):
@@ -306,6 +461,23 @@ class DashboardWindow():
             raise ValueError("No file path column found in DataFrame.")
         df["Category Name"] = df[file_col].apply(get_cats)
         return df
+    
+    def _on_data_ready(self, data):
+        """UI-safe method."""
+        self._df = data["df"]
+
+        self._plot_data(
+            df=data["df"],
+            top_10_duration=data["top_10_duration"],
+            weekday_counts=data["weekday_counts"],
+            total_duration=data["total_duration"],
+            total_duration_watched=data["total_watch_time"],
+            card_metrics=self._build_card_metrics(data),
+            video_count_by_date=data["video_count_by_date"],
+            last_30=data["last_30"]
+        )
+
+        self.master.deiconify()
     
     def _populate_category_tab(self, df, category_manager):
         """Populate the category tab with plots and tables."""
@@ -718,7 +890,7 @@ class DashboardWindow():
         self._embed_plot(parent, fig, row)
 
         
-    def _plot_top_10_duration(self, parent, top_10_duration, COL_DURATION_WATCHED, row):
+    def _plot_top_10_duration(self, parent, top_10_duration, col_duration_watched, row):
         """Plot the Top 10 Most Watched Videos by Duration as a horizontal bar chart."""
         if not top_10_duration.empty:
             fig3, ax3 = plt.subplots(figsize=(7, 2.8))
@@ -869,6 +1041,7 @@ class DashboardWindow():
         canvas = FigureCanvasTkAgg(fig, master=parent)
         canvas.draw()
         canvas.get_tk_widget().grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        plt.close(fig)
 
     def on_closing(self):
         plt.close('all')
@@ -896,4 +1069,6 @@ def show_stats_window(parent=None):
         root.mainloop()
 
 if __name__ == "__main__":
-    show_stats_window()
+    root = tk.Tk()
+    app = DashboardWindow(master=root, csv_path=WATCHED_HISTORY_LOG_PATH)
+    root.mainloop()
