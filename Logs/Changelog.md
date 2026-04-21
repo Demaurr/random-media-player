@@ -3,6 +3,85 @@
 All notable changes to this project will be documented in this file.
 ---
 
+## **Version [3.7.0]** — *2026-04-19*
+
+### **Added**
+- centralized *`CSV_CONFIG`* in *`player_constants.py`* as a single source of truth for all CSV schemas and headers.  
+- standardized CSV initialization utilities: `create_csv_file`, `_ensure_csv_exists`, and `_ensure_csvs_exist`.  
+- background data loading in dashboard using `_load_and_prepare_data` with `_on_data_ready` callback for safe UI updates.  
+- batch APIs for efficient data retrieval:
+  - `get_snippets_for_files`
+  - `get_screenshots_for_files_from_index`
+  - `get_watch_stats_for_fingerprints_batch`
+  - `get_watch_stats_for_file_paths_batch`  
+- in-memory indexes for performance:
+  - `_original_to_snippets` (snippets)
+  - fingerprint stats index (watch history)
+  - inverted index for annotation search  
+- fingerprint-based fields (`index_hash`) across watch history, notes, snippets, categories, and associations.  
+- identity resolution utilities: `get_all_identity_paths*`, `build_path_to_fingerprint_map`.  
+- hash-based association APIs: `get_associations_by_hash`, `get_targets_by_hash`, `get_sources_by_hash`.  
+- `ResetMixin` with `reset_window()` for proper UI state cleanup.  
+- `get_screenshots_for_file_from_index` for near-instant screenshots retrieval.  
+- support for `WATCHED_HISTORY_LOG_PATH` as default data source in dashboard.  
+- propagation of `trimmed_segments_metadata` across player and UI components.  
+- annotation support in video player:
+  - annotation markers on progress bar  
+  - hover tooltips for annotations  
+  - add/update/delete annotation actions at timestamps  
+- added grouped properties with features:
+  - watch history integration
+  - category-to-files mapping
+  - thumbnail shuffling
+  - limited snippet previews  
+- category filtering API: `get_categories_with_files_for_paths` for path-based category retrieval.  
+
+---
+
+### **Changed**
+- replaced all hardcoded CSV headers (`FIELDNAMES`) with config-driven `_headers` using *`CSV_CONFIG`*.  
+- refactored all managers to use standardized CSV initialization pattern.  
+- migrated core modules to fingerprint-first architecture using *`MediaFingerprintManager`*.  
+- refactored dashboard pipeline:
+  - split into `load_data` and `_plot_data`
+  - added `_build_card_metrics` helper  
+- updated grouped properties to use batch-loaded data instead of per-file fetching.  
+- optimized screenshot loading by replacing filesystem scans with indexed lookups.  
+- updated snippet handling to use indexed mapping instead of repeated scans.  
+- refactored dependency injection order across managers (favorites, deletion, fingerprint-aware modules).  
+- simplified *`FileAssociator`* initialization by removing `csv_path` parameter.  
+- updated constructor signatures for multiple classes including:
+  - `WatchHistoryLogger`
+  - `ImageViewer`
+  - `FileAssociator`
+  - various managers  
+- replaced inline imports with top-level imports (e.g., `GroupedPropertiesWindow`).  
+- improved reload logic to correctly reinitialize managers with dependencies.  
+- enhanced video player progress bar:
+  - integrated annotations with timeline  
+  - improved tooltip rendering  
+  - optimized segment lookup using `IntervalTree`  
+- improved plotting logic by explicitly closing matplotlib figures to prevent memory leaks.  
+- updated notes, annotations, and snippets writers to align with centralized schema.  
+- optimized index rebuild strategies by clearing and repopulating instead of full reinitialization.  
+- improved `ImageViewer` lifecycle handling by integrating reset behavior on close.  
+
+---
+
+### **Fixed**
+- fixed dependency initialization order issues causing inconsistent manager behavior.  
+- resolved CSV header mismatches across modules by centralizing schema definitions.  
+- eliminated redundant snippet fetching in grouped properties.  
+- fixed potential UI blocking during dashboard loading by introducing async processing.  
+- prevented memory leaks in plotting by ensuring figure cleanup.  
+- improved error handling in grouped properties loading to avoid crashes.  
+- resolved `NoneType` issues in indexing and search operations.  
+- ensured `get_annotation_by_id` returns `{}` instead of `None` for safer usage.  
+- removed debug prints and inconsistent behaviors across modules.  
+- fixed stale state issues in *`ImageViewer`* by introducing reset logic.  
+- corrected screenshot loading inefficiencies by switching to indexed retrieval.  
+- fixed reload-related issues where managers were not properly reinitialized.  
+
 ## **Version [3.6.3]** — *2025-10-10*
 
 ### **Added**
