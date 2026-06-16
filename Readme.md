@@ -1,4 +1,4 @@
-# Random Media Analyser ![Version](https://img.shields.io/badge/version-3.6.3-blue.svg)
+# Random Media Analyser ![Version](https://img.shields.io/badge/version-3.7.0-blue.svg)
 
 ![Main Screen Page](Screenshots/Current_Gui_Main_Screen.png)
 
@@ -43,6 +43,31 @@ Download the zip from the tags for stable version.
    It will automatically create a `Random Media Analyser.bat` file on your Desktop.  
    You can use this `.bat` file to launch the app anytime without needing to open `gui_main.py` manually.
 ---
+
+## What's New in v3.7.0
+
+- **Fingerprint-based system** for reliable media tracking across renames and moves
+- **Annotations in video player** with timeline markers and tooltips
+- **Grouped Properties View** for multi-file insights and batch metadata
+- **Async Dashboard loading** for faster startup and smoother UI
+- **Massive performance improvements** with indexing (screenshots, snippets, watch history)
+- **Centralized CSV schema system (`CSV_CONFIG`)** for consistency and easier maintenance
+- **Improved dependency management** and cleaner initialization across modules
+
+### Performance Improvements
+
+- Screenshot lookup reduced from ~0.2s per file → ~0.0002s using indexing (~99.9% faster)
+- Snippet retrieval optimized using O(1) indexing
+- Watch history analytics use in-memory aggregation for instant results
+- Batch loading reduces repeated disk I/O operations
+
+### ⚠️ Migration Notice (v3.7.0)
+CSV schemas have changed (new fingerprint/index fields)
+Existing data may be auto-migrated
+### ⚠️ Backup your CSV files before upgrading
+
+---
+
 ## Screenshots
 ![Media Player](Screenshots/Current_Main_Screen.png)
 
@@ -88,18 +113,20 @@ These dashboards help you understand your viewing habits, spot trends, and manag
 
 ## Main Features
 
-- **Video Playback:** Play videos from your local directories with a user-friendly interface.
-- **Playback Controls:** Play, pause, stop, fast-forward, rewind, and adjust volume.
-- **Watch History:** Automatically logs watched videos and durations.
-- **Favorites:** Save and quickly access your favorite media files.
-- **Category Management:** Organize files into custom categories.
-- **Notes & Descriptions:** Add notes and descriptions to media files.
-- **Video Trimming:** Clip favorite segments from videos (requires FFmpeg).
-- **Files Associations:** Connect/Association different related files with each other.
-- **Image Viewing:** View screenshots taken during playback.
-- **File Management:** Move or mark files for deletion directly from the app.
-- **Session Statistics:** View and export watch statistics for your sessions.
-- **Dashboard:** Visualize media consumption statistics.
+- **Video Playback:** Play videos with full playback controls (play, pause, seek, speed).
+- **Annotations System:** Add timestamp-based annotations directly on the video timeline with hover tooltips.
+- **Watch History & Analytics:** Track viewing habits with detailed statistics and dashboard insights.
+- **Dashboard (Async):** Visualize media consumption with charts (hourly, weekly, trends).
+- **Fingerprint-Based Tracking:** Files are tracked using content hashes, so renames/moves don’t break metadata.
+- **Grouped Properties View:** View combined metadata (notes, categories, stats, screenshots) for multiple files.
+- **Categories & Favorites:** Organize and quickly access your media.
+- **Notes & Descriptions:** Attach rich metadata to files.
+- **File Associations:** Link related media together.
+- **Video Trimming (Snippets):** Extract clips using FFmpeg.
+- **Screenshot Management:** Capture and browse thumbnails efficiently.
+- **High-Performance Indexing:** Near-instant lookups using in-memory indexes.
+- **File Management:** Move, organize, or mark files for deletion.
+- **Session Statistics:** Analyze usage patterns over time.
 
 ---
 
@@ -145,6 +172,10 @@ The project follows a modular structure to separate concerns and improve maintai
 - **`image_player.py`**: Displays screenshots and images.  
 - **`player_constants.py`**: Stores configuration settings and constants.  
 - **`requirements.txt`**: Lists required Python packages.  
+- **`watch_history_logger.py`**: Tracks and analyzes viewing data.
+- **`annotations_manager.py`**: Handles video annotations.
+- **`grouped_properties_window.py`**: Multi-file metadata viewer.
+- **`dashboard/`**: Dashboard logic and plotting system.
 
 ## More Information
 
