@@ -39,12 +39,14 @@ from associations_manager import FileAssociator
 from fingerprint_manager import MediaFingerprintManager
 from custom_messagebox import askopenfilename, showinfo, showwarning, showerror, askyesno
 from tooltips import ToolTip
+from videoinfo_window import VideoInfoWindow
 
 class MediaPlayerApp(tk.Toplevel):
     def __init__(self, video_files, current_file=None, random_select=True, video_path=None, watch_history_csv=WATCHED_HISTORY_LOG_PATH,
                   parent=None, category_manager=None, favorites_manager=None, deletion_manager=None,
                   notes_manager=None, snippets_manager=None, trimmed_segments=None,
-                  associations_manager=None, fingerprint_manager=None, trimmed_segments_metadata=None, annotations_manager=None):
+                  associations_manager=None, fingerprint_manager=None, trimmed_segments_metadata=None, annotations_manager=None, 
+                  description_manager=None, stats_manager=None):
         super().__init__(parent)
         self.master = parent
         self._get_history_csvfile(watch_history_csv)
@@ -59,6 +61,8 @@ class MediaPlayerApp(tk.Toplevel):
         self.snippets_manager = snippets_manager or SnippetsManager()
         self.notes_manager = notes_manager or NotesManager()
         self.annotations_manager = annotations_manager or AnnotationsManager(fingerprint_manager=self.fingerprint_manager)
+        self.description_manager = description_manager
+        self.stats_manager = stats_manager
 
         self.trimmed_segments = trimmed_segments if trimmed_segments is not None else {}
         self.trimmed_segments_metadata = trimmed_segments_metadata if trimmed_segments_metadata is not None else {}
@@ -862,6 +866,9 @@ class MediaPlayerApp(tk.Toplevel):
             ("<Shift-KeyPress-c>", self.add_annotation),
             ("<Shift-KeyPress-C>", self.add_annotation),
             ("<Control-Delete>", self.delete_annotation_at_time),
+            ("<Shift-KeyPress-i>", self.show_video_info),
+            ("<Shift-KeyPress-I>", self.show_video_info),
+
         ]
 
         for seq, func in self._bindings:
@@ -2017,6 +2024,40 @@ class MediaPlayerApp(tk.Toplevel):
                 chosen = [name for (id, name) in tracks if id == ids[0]][0]
                 print(f"Audio restored: {chosen}")
                 self.show_marquee(f"Audio: {chosen}")
+
+
+    def show_video_info(self, event=None):
+        if not self.current_file:
+            showwarning(self, "No file", "No current video to show info for.")
+            return
+
+        was_topmost = self.attributes("-topmost")
+        was_playing = not self.video_paused
+
+        if was_playing:
+            self.pause_video()
+        if was_topmost:
+            self.attributes("-topmost", False)
+
+        win = VideoInfoWindow(
+            self,
+            self.current_file,
+            notes_manager=self.notes_manager,
+            description_manager=getattr(self, "description_manager", None),
+            category_manager=self.category_manager,
+            associations_manager=self.associations_manager,
+            annotations_manager=self.annotations_manager,
+            fingerprint_manager=self.fingerprint_manager,
+            stats_manager=self.stats_manager,
+            width=420,
+            max_height=800
+        )
+        win.show()
+
+        if was_playing:
+            self.pause_video()
+        if was_topmost:
+            self.attributes("-topmost", True)
 
     
 
