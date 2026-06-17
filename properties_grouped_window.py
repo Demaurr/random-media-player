@@ -719,7 +719,9 @@ class GroupedPropertiesWindow(tk.Toplevel, ResetMixin):
                             deletion_manager=self.deletion_manager,
                             trimmed_segments_metadata=self.trimmed_segments_metadata,
                             fingerprint_manager=self.fingerprint_manager,
-                            annotations_manager=self.annotations_manager
+                            annotations_manager=self.annotations_manager,
+                            description_manager=self.description_manager,
+                            stats_manager=self.stats_manager
                         )
                         app.update_video_progress()
                     else:

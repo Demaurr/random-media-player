@@ -159,7 +159,7 @@ class FileExplorerApp:
         self.video_stats_manager = VideoStatsManager(snippets_manager=self.snippets_manager, deletion_manager=self.deletion_manager)
         self.deletion_manager.set_parent_window(self.root)
         self.associations_manager = FileAssociator(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
-        self.description_manager = DescriptionManager(association_manager=self.associations_manager, deletion_manager=self.deletion_manager)
+        self.description_manager = DescriptionManager(association_manager=self.associations_manager)
         # self.media_collector = MediaPathsCollector(deletion_manager=self.deletion_manager, fingerprint_manager=self.fingerprint_manager)
         self.root.after(0, self._on_managers_ready)
 
@@ -232,7 +232,7 @@ class FileExplorerApp:
         #     return
             
         window = tk.Toplevel(self.root)
-        FileAssociationWindow(window, source_file=file_path, associator=self.associations_manager, fingerprint_manager=self.fingerprint_manager)
+        FileAssociationWindow(window, source_file=file_path, associator=self.associations_manager, fingerprint_manager=self.fingerprint_manager, deletion_manager=self.deletion_manager)
         window.focus_force()
 
     def on_close(self):
@@ -1694,7 +1694,8 @@ class FileExplorerApp:
             columns=columns,
             show="headings",
             selectmode="extended",
-            height=15
+            height=15,
+            style="Treeview"
         )
 
         tree.heading("Folder", text="Folder")
@@ -2427,7 +2428,9 @@ class FileExplorerApp:
                 associations_manager=self.associations_manager,
                 deletion_manager=self.deletion_manager,
                 fingerprint_manager=self.fingerprint_manager,
-                trimmed_segments_metadata=self.trimmed_segments_metadata
+                trimmed_segments_metadata=self.trimmed_segments_metadata,
+                description_manager=self.description_manager,
+                stats_manager=self.video_stats_manager
             )
             app.update_video_progress()
             print(len(self.trimmed_segments))
@@ -2507,7 +2510,9 @@ class FileExplorerApp:
                                  deletion_manager=self.deletion_manager,
                                  fingerprint_manager=self.fingerprint_manager,
                                  annotations_manager=self.annotations_manager,
-                                 trimmed_segments_metadata=self.trimmed_segments_metadata
+                                 trimmed_segments_metadata=self.trimmed_segments_metadata,
+                                 description_manager=self.description_manager,
+                                 stats_manager=self.video_stats_manager
                                  )
             app.update_video_progress()
             # app.protocol("WM_DELETE_WINDOW", lambda: self._on_close_player(app))

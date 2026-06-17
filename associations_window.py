@@ -3,7 +3,6 @@ import tkinter as tk
 from tkinter import ttk
 import os
 
-from fingerprint_manager import MediaFingerprintManager
 from static_methods import (
     are_paths_same, 
     build_transfer_graph, 
@@ -19,7 +18,7 @@ from tooltips import ToolTip
 
 
 class FileAssociationWindow:
-    def __init__(self, root, source_file=None, associator=None, graph=None, fingerprint_manager=None):
+    def __init__(self, root, source_file=None, associator=None, graph=None, fingerprint_manager=None, deletion_manager=None):
         self.root = root
         self.root.title("File Associations Manager")
         self.root.geometry("1000x600")
@@ -28,7 +27,7 @@ class FileAssociationWindow:
 
         self.source_file = normalise_path(source_file) if source_file else None
         self.source_hash = None
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
         
         if self.source_file and self.fingerprint_manager:
             self.source_hash = self.fingerprint_manager.get_index_hash_by_path(self.source_file)
@@ -41,7 +40,7 @@ class FileAssociationWindow:
 
         self.root.bind("<Escape>", self.on_closing)
 
-        self.associator = associator or FileAssociator(csv_path=ASSOCIATIONS_CSV, fingerprint_manager=self.fingerprint_manager)
+        self.associator = associator or FileAssociator(deletion_manager=deletion_manager, fingerprint_manager=self.fingerprint_manager)
         
         self.transfer_graph = graph or build_transfer_graph()
         self.root.withdraw()

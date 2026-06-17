@@ -13,10 +13,10 @@ from static_methods import build_transfer_graph, get_all_identity_paths, normali
 from deletion_manager import DeletionManager
 
 class MediaPathsCollector:
-    def __init__(self, deletion_manager: Optional[DeletionManager] = None, fingerprint_manager: Optional[MediaFingerprintManager] = None):
-        self.deletion_manager = deletion_manager or DeletionManager()
+    def __init__(self, deletion_manager, fingerprint_manager):
+        self.deletion_manager = deletion_manager
         self.file_data: Dict[str, Dict] = {}
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
 
     def collect_from_watch_history(self) -> None:
         """Read watch history CSV and extract file paths and sizes."""
@@ -49,7 +49,7 @@ class MediaPathsCollector:
 
 
     def collect_from_video_stats(self) -> None:
-        """Update using video stats if watch history didn’t provide duration or size."""
+        """Update using video stats if watch history didn't provide duration or size."""
         if not os.path.exists(VIDEO_STATS_CSV):
             return
 

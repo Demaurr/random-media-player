@@ -52,8 +52,7 @@ class GroupedPropertiesWindow(tk.Toplevel):
         self.deletion_manager = deletion_manager or DeletionManager(fav_manager=self.favorites_manager)
         self.association_manager = association_manager or FileAssociator(deletion_manager=self.deletion_manager,
                                                                          fingerprint_manager=self.fingerprint_manager)
-        self.description_manager = description_manager or DescriptionManager(association_manager=self.association_manager,
-                                                                              fingerprint_manager=self.fingerprint_manager)
+        self.description_manager = description_manager or DescriptionManager(association_manager=self.association_manager)
         self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager,
                                                                     association_manager=self.association_manager,
                                                                     fingerprint_manager=self.fingerprint_manager)
@@ -652,7 +651,10 @@ class GroupedPropertiesWindow(tk.Toplevel):
                             trimmed_segments=self.trimmed_segments,
                             snippets_manager=self.snippets_manager,
                             associations_manager=self.association_manager,
-                            deletion_manager=self.deletion_manager
+                            deletion_manager=self.deletion_manager,
+                            fingerprint_manager=self.fingerprint_manager,
+                            description_manager=self.description_manager,
+                            stats_manager=self.stats_manager
                         )
                         app.update_video_progress()
                     else:

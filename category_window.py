@@ -71,7 +71,7 @@ class Tooltip:
             self.text = None
 
 class CategoryWindow(tk.Toplevel):
-    def __init__(self, parent, files=None, category_manager = None, fingerprint_manager=None):
+    def __init__(self, parent, files, category_manager, fingerprint_manager):
         super().__init__(parent)
         self.master = parent
         self.title("Category Manager")
@@ -79,8 +79,8 @@ class CategoryWindow(tk.Toplevel):
         self.minsize(850, 400)  # Set minimum size
         self.configure(bg=Colors.PLAIN_BLACK)
 
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
-        self.category_manager = category_manager or CategoryManager(fingerprint_manager=fingerprint_manager)
+        self.fingerprint_manager = fingerprint_manager
+        self.category_manager = category_manager
         self.files = files if isinstance(files, list) else [files] if files else []
         self.selected_category = None
         

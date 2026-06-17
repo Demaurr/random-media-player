@@ -38,7 +38,6 @@ from description_manager import DescriptionManager
 from stats_manager import VideoStatsManager
 from snippets_manager import SnippetsManager
 from fingerprint_manager import MediaFingerprintManager
-from deletion_manager import DeletionManager
 
 # @measure_class_memory(print_memory=True)
 class PropertiesWindow(tk.Toplevel):
@@ -55,11 +54,10 @@ class PropertiesWindow(tk.Toplevel):
         self.category_manager = category_manager or CategoryManager(fingerprint_manager=self.fingerprint_manager)
         self.favorites_manager = favorites_manager or FavoritesManager(fingerprint_manager=self.fingerprint_manager)
         self.notes_manager = notes_manager or NotesManager(fingerprint_manager=self.fingerprint_manager)
-        self.deletion_manager = deletion_manager or DeletionManager(fav_manager=self.favorites_manager)
+        self.deletion_manager = deletion_manager
         self.association_manager = association_manager or FileAssociator(deletion_manager=self.deletion_manager,
                                                                          fingerprint_manager=self.fingerprint_manager)
-        self.description_manager = description_manager or DescriptionManager(association_manager=self.association_manager,
-                                                                           fingerprint_manager=self.fingerprint_manager)
+        self.description_manager = description_manager or DescriptionManager(association_manager=self.association_manager)
         self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager,
                                                                     association_manager=self.association_manager,
                                                                     fingerprint_manager=self.fingerprint_manager)
@@ -1012,6 +1010,7 @@ class PropertiesWindow(tk.Toplevel):
                             annotations_manager=self.annotations_manager,
                             trimmed_segments_metadata=self.trimmed_segments_metadata,
                             fingerprint_manager=self.fingerprint_manager,
+                            description_manager=self.description_manager,
                         )
                         app.update_video_progress()
                         app.lift()
