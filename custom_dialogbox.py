@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from _themes import THEMES
 from custom_messagebox import showerror, showinfo, showwarning
+from custom_textbox import EditableTextbox
 from static_methods import add_hover_effect, center_window
 from typing import Any, Callable
 from contextlib import contextmanager
@@ -9,7 +10,8 @@ from contextlib import contextmanager
 
 
 class MultiFieldDialog(tk.Toplevel):
-    def __init__(self, parent, title="Input Dialog", theme="crimson_dark", max_height=500, header_height=40, window_width=520, window_height=400):
+    def __init__(self, parent, title="Input Dialog", theme="crimson_dark", max_height=500, header_height=40, window_width=520, window_height=400,
+                 window_position="center", offset_x=20, offset_y=20):
         super().__init__(parent)
         self.parent = parent
         self.theme=THEMES[theme]
@@ -34,6 +36,10 @@ class MultiFieldDialog(tk.Toplevel):
         self.wraplength = 0.9  * window_width
         self.default_input_padx = 0
         self.default_input_pady = 0
+
+        self.window_position = window_position
+        self.offset_x = offset_x
+        self.offset_y = offset_y
 
         header_frame = tk.Frame(self, bg=self.theme["bg"], height=header_height)
         header_frame.pack(fill="x", pady=(0, 10))
@@ -81,7 +87,11 @@ class MultiFieldDialog(tk.Toplevel):
         hint_label.pack(anchor="center")
         self._keybindings()
         self.update_idletasks()
-        self.geometry(f"{self.window_width}x{min(self.window_height, self.max_height)}")
+        # self.geometry(f"{self.window_width}x{min(self.window_height, self.max_height)}")
+        self._apply_geometry(
+            self.window_width,
+            min(self.window_height, self.max_height)
+        )
         self.after(10, self._evaluate_dependencies)
 
     def _sort_tree(self, tree, col):
@@ -176,6 +186,63 @@ class MultiFieldDialog(tk.Toplevel):
 
         self.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _apply_geometry(self, width, height):
+        self.update_idletasks()
+
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+
+        parent = self.parent
+
+        # default fallback
+        x = (screen_w - width) // 2
+        y = (screen_h - height) // 2
+
+        if self.window_position == "center":
+            pass  # keep default
+
+        elif self.window_position == "left":
+            x = self.offset_x
+            y = (screen_h - height) // 2
+
+        elif self.window_position == "right":
+            x = screen_w - width - self.offset_x
+            y = (screen_h - height) // 2
+
+        elif self.window_position == "top_left":
+            x = self.offset_x
+            y = self.offset_y
+
+        elif self.window_position == "top_right":
+            x = screen_w - width - self.offset_x
+            y = self.offset_y
+
+        elif self.window_position == "relative" and parent is not None:
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+            pw = parent.winfo_width()
+            ph = parent.winfo_height()
+
+            x = px + (pw - width) // 2
+            y = py + (ph - height) // 2
+
+        elif self.window_position == "parent_right" and parent is not None:
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+            pw = parent.winfo_width()
+
+            x = px + pw - width - self.offset_x
+            y = py + (parent.winfo_height() - height) // 2
+
+        elif self.window_position == "parent_left" and parent is not None:
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+
+            x = px + self.offset_x
+            y = py + (parent.winfo_height() - height) // 2
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
 
 
@@ -439,7 +506,8 @@ class MultiFieldDialog(tk.Toplevel):
 
         self.update_idletasks()
         new_height = min(self.window_height + len(self.fields) * 60, self.max_height)
-        center_window(self, width=self.window_width, height=new_height)
+        # center_window(self, width=self.window_width, height=new_height)
+        self._apply_geometry(self.window_width, new_height)
 
     def validate_fields(self):
         """
@@ -460,7 +528,10 @@ class MultiFieldDialog(tk.Toplevel):
             if not field.get("visible", True):
                 continue 
 
-            if readonly:
+            if field.get("smart_text"):
+                value = self.entries[name].get()
+
+            elif readonly:
                 value = self.entries[name].cget("text")
             elif multiline:
                 value = self.entries[name].get("1.0", "end").strip()
@@ -623,7 +694,8 @@ class MultiFieldDialog(tk.Toplevel):
             self.window_height + (len(self.fields) * 60) + (len(options) * 28),
             self.max_height
         )
-        center_window(self, width=self.window_width, height=new_height)
+        # center_window(self, width=self.window_width, height=new_height)
+        self._apply_geometry(self.window_width, new_height)
 
     def add_ranked_selections(
         self,
@@ -756,11 +828,13 @@ class MultiFieldDialog(tk.Toplevel):
         }
 
         self.update_idletasks()
-        center_window(
-            self,
-            width=self.window_width,
-            height=min(self.max_height, self.window_height + len(options) * 34)
-        )
+        # center_window(
+        #     self,
+        #     width=self.window_width,
+        #     height=min(self.max_height, self.window_height + len(options) * 34)
+        # )
+        self._apply_geometry(self.window_width, height = min(self.max_height, self.window_height + len(options) * 34))
+
 
 
     def add_dropdown_field(
@@ -853,7 +927,9 @@ class MultiFieldDialog(tk.Toplevel):
 
         self.update_idletasks()
         new_height = min(self.window_height + len(self.fields) * 60, self.max_height)
-        center_window(self, width=self.window_width, height=new_height)
+        # center_window(self, width=self.window_width, height=new_height)
+        self._apply_geometry(self.window_width, height = new_height)
+
 
     def add_section(
         self,
@@ -1065,7 +1141,7 @@ class MultiFieldDialog(tk.Toplevel):
         title_lbl.pack(anchor="w", pady=(0, 6))
 
         style = ttk.Style()
-        style.theme_use("default")
+        # style.theme_use("default")
         style.configure(
             "Dialog.Treeview",
             background=t["input_bg"],
@@ -1185,11 +1261,80 @@ class MultiFieldDialog(tk.Toplevel):
         }
 
         self.update_idletasks()
-        center_window(
-            self,
-            width=self.window_width,
-            height=min(self.max_height, self.window_height + height * 30)
+        # center_window(
+        #     self,
+        #     width=self.window_width,
+        #     height=min(self.max_height, self.window_height + height * 30)
+        # )
+        self._apply_geometry(self.window_width, height = min(self.max_height, self.window_height + height * 30))
+
+    def add_smart_text(
+        self,
+        field_name,
+        display_name,
+        *,
+        default="",
+        required=False,
+
+        display_font=("Segoe UI", 11),
+        display_fg=None,
+        display_bg=None,
+
+        edit_font=("Segoe UI", 11),
+        edit_fg=None,
+        edit_bg=None,
+
+        multiline=True,
+        height=4,
+
+        validator=None,
+        on_save=None,
+    ):
+        parent = self._get_active_container()
+
+        row = tk.Frame(parent, bg=self.main_bg)
+        row.pack(fill="x", pady=3)
+
+        label = tk.Label(
+            row,
+            text=display_name,
+            fg=self.theme["muted"],
+            bg=self.main_bg,
+            font=("Segoe UI", 11, "bold"),
+            anchor="w"
         )
+        label.pack(anchor="w")
+
+        widget = EditableTextbox(
+            row,
+            text=default,
+
+            display_font=display_font,
+            display_fg=display_fg or self.theme["fg"],
+            display_bg=display_bg or self.theme["bg"],
+
+            edit_font=edit_font,
+            edit_fg=edit_fg or self.theme["input_fg"],
+            edit_bg=edit_bg or self.theme["input_bg"],
+
+            multiline=multiline,
+            height=height,
+
+            validator=validator,
+            on_save=on_save
+        )
+
+        widget.pack(fill="x", expand=True)
+
+        self.entries[field_name] = widget
+
+        self.fields.append({
+            "name": field_name,
+            "type": str,
+            "required": required,
+            "smart_text": True
+        })
+        self.entries[f"{field_name}__row"] = row
 
     def end_section(self):
         """Stop routing widgets into the current section."""
@@ -1208,8 +1353,12 @@ class MultiFieldDialog(tk.Toplevel):
                 multiline = field.get("multiline", False)
                 readonly = field.get("readonly", False)
 
-                if readonly:
+                if field.get("smart_text"):
+                    value = self.entries[name].get()
+
+                elif readonly:
                     value = self.entries[name].cget("text")
+
                 elif multiline:
                     value = self.entries[name].get("1.0", "end").strip()
                 elif field.get("dropdown"):
