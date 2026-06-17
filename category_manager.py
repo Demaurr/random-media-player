@@ -9,9 +9,10 @@ from player_constants import CATEGORIES_FILE, LOG_PATH, CSV_CONFIG
 from static_methods import create_csv_file, measure_time, normalise_path
 from logs_writer import LogManager
 from fingerprint_manager import MediaFingerprintManager
+from category_mixins import CategoryStatsMixin
 
 Logger = LogManager(LOG_PATH)
-class CategoryManager:
+class CategoryManager(CategoryStatsMixin):
     """
     Manages file categorization with support for both path-based and fingerprint-based lookups.
     
@@ -21,11 +22,11 @@ class CategoryManager:
     - Fingerprint lookups are secondary and only work when index_hash is present
     """
 
-    def __init__(self, fingerprint_manager=None):
+    def __init__(self, fingerprint_manager):
         self.categories_file = CATEGORIES_FILE
         self.logger = Logger
         self.lock = Lock()
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
         self.entries = []
         self.headers = CSV_CONFIG[self.categories_file]["headers"]
         self.category_to_files = defaultdict(set)
@@ -524,6 +525,7 @@ class CategoryManager:
                 self.fingerprint_manager.flush()
         
         return updated_count
+
     
 if __name__ == "__main__":
     # Simple test code
@@ -533,6 +535,7 @@ if __name__ == "__main__":
     # cat_mgr._migrate_csv_if_needed()
     updated = cat_mgr.refresh_file_hashes(force_refresh=True)
     print("Force refreshed {updated} hashes")
+    print(cat_mgr.get_category_stats())
     # print(cat_mgr.get_category_stats())
     # print(cat_mgr.get_all_categories())
     # print(cat_mgr.get_all_categories_with_dates())

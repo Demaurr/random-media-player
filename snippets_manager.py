@@ -17,10 +17,9 @@ class SnippetsManager:
         self.csv_path = SNIPPETS_HISTORY_CSV
         self._headers = CSV_CONFIG[self.csv_path]["headers"]
         self.snippets = []
-        self.deletion_manager = deletion_manager or DeletionManager()
-        # self.associator = association_manager or FileAssociator()
+        self.deletion_manager = deletion_manager
         self.logger = logger or LogManager(LOG_PATH)
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
         self._snippet_fingerprint_index = set()
         self._snippet_path_index = set()
         self._original_to_snippets = defaultdict(list)
@@ -433,12 +432,14 @@ class SnippetsManager:
             self.fingerprint_manager.flush()
             print(f"Filled {updated} missing snippet fingerprints.")
     
-    def build_all_associations(self, association_type="related"):
+    def build_all_associations(self, association_type="related", associator=None):
         """
         Add associations for all snippets with their original files.
         Association type is 'related' by default.
         """
-        self.associator = FileAssociator()
+        self.associator = associator
+        if not self.associator:
+            raise ValueError("Association manager is required to build associations.")
         if not self.snippets:
             self.logger.update_logs("[ASSOCIATION BUILDER]", "No snippets found to build associations.")
             return 0

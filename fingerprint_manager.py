@@ -319,16 +319,6 @@ class MediaFingerprintManager:
             for h, paths in self.paths.items() if len(paths) > 1
         }
         return duplicates
-    
-    # def get_index_hash_by_path(self, file_path: str) -> Optional[str]:
-    #     """
-    #     Given a file path, return its associated index_hash.
-    #     Returns None if not found.
-    #     """
-    #     for index_hash, paths in self.paths.items():
-    #         if any(p["file_path"] == normalise_path(file_path) for p in paths):
-    #             return index_hash
-    #     return None
 
     def get_index_hash_by_path(self, file_path: str) -> Optional[str]:
         return self.path_to_index_hash.get(normalise_path(file_path))
@@ -385,6 +375,34 @@ class MediaFingerprintManager:
         }
 
         return info
+    
+    def get_size_by_path(self, file_path: str) -> Optional[int]:
+        """
+        Return file size (bytes) for a given file path.
+        Prefers stored fingerprint size; falls back to os.path.getsize.
+        """
+        file_path = normalise_path(file_path)
+
+        index_hash = self.path_to_index_hash.get(file_path)
+        if not index_hash:
+            try:
+                return os.path.getsize(file_path)
+            except Exception:
+                return None
+
+        fp = self.fingerprints.get(index_hash)
+        if fp and fp.get("size_bytes"):
+            try:
+                return int(fp["size_bytes"])
+            except (ValueError, TypeError):
+                pass
+
+        # fallback to filesystem if fingerprint missing/invalid
+        try:
+            return os.path.getsize(file_path)
+        except Exception as e:
+            self.logger.error_logs(f"Error getting size for {file_path}: {e}")
+            return None
     
     def are_files_same(self, path1: str, path2: str) -> bool:
         """
@@ -954,8 +972,10 @@ if __name__ == "__main__":
     from deletion_manager import DeletionManager
     from associations_manager import FileAssociator
     from annotations_manager import AnnotationsManager
+    from favorites_manager import FavoritesManager
     manager = MediaFingerprintManager()
-    deletion_manager = DeletionManager()
+    fm = FavoritesManager(fingerprint_manager=manager)
+    deletion_manager = DeletionManager(fav_manager=fm)
     snippets_manager = SnippetsManager(fingerprint_manager=manager, deletion_manager=deletion_manager)
     stats_manager = VideoStatsManager(deletion_manager=deletion_manager, snippets_manager=snippets_manager)
     notes_manager = NotesManager(fingerprint_manager=manager)

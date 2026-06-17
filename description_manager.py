@@ -2,20 +2,21 @@ from collections import defaultdict, deque
 import csv
 import os
 import datetime
+from collections import Counter
 
 from player_constants import DESCRIPTION_CSV, DESCRIPTION_LOG_PATH, FILE_TRANSFER_LOG, CSV_CONFIG
 from static_methods import create_csv_file, normalise_path
 from logs_writer import LogManager
-from associations_manager import FileAssociator
+from description_mixins import DescriptionStatsMixin
 
 logger = LogManager(DESCRIPTION_LOG_PATH)
 
-class DescriptionManager:
-    def __init__(self, association_manager=None, deletion_manager=None):
+class DescriptionManager(DescriptionStatsMixin):
+    def __init__(self, association_manager):
         self.csv_path = DESCRIPTION_CSV
         self.descriptions = {}
         self._headers = CSV_CONFIG[self.csv_path]["headers"]
-        self.association_manager = association_manager or FileAssociator(deletion_manager=deletion_manager)
+        self.association_manager = association_manager
         self._load_descriptions()
         self.graph = self.build_graph()
         self._ensure_csv_exists()
@@ -274,3 +275,17 @@ class DescriptionManager:
 
         logger.update_logs("[DESCRIPTION UPDATED]", f"Path Changed from {old_path} -> {new_path}")
         return True
+    
+
+if __name__ == "__main__":
+    from associations_manager import FileAssociator
+    from fingerprint_manager import MediaFingerprintManager
+    from favorites_manager import FavoritesManager
+    from deletion_manager import DeletionManager
+    fm = MediaFingerprintManager()
+    fav_manager = FavoritesManager(fingerprint_manager=fm)
+    dm = DeletionManager(fav_manager=fav_manager)
+    am = FileAssociator(fingerprint_manager=fm, deletion_manager=dm)
+    dm = DescriptionManager(association_manager=am)
+    stats = dm.get_description_stats()
+    print(stats)

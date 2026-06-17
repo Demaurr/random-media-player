@@ -1,6 +1,7 @@
 import os
 import csv
 import tkinter as tk
+from collections import Counter, defaultdict
 from send2trash import send2trash
 from tkinter import filedialog
 from static_methods import get_favs_folder, normalise_path, ensure_folder_exists, rename_if_exists, create_csv_file
@@ -10,12 +11,13 @@ from favorites_manager import FavoritesManager
 from datetime import datetime
 import shutil
 from custom_messagebox import showinfo, showwarning, showerror, askyesno
+from deletion_mixins import DeletionStatsMixin
 
-class DeletionManager:
-    def __init__(self, fav_manager=None, gui_parent=None):
+class DeletionManager(DeletionStatsMixin):
+    def __init__(self, fav_manager, gui_parent=None):
         self.delete_csv = DELETE_FILES_CSV  
         self.headers = CSV_CONFIG[self.delete_csv]["headers"]
-        self.fav_manager = fav_manager or FavoritesManager(FAV_FILES) 
+        self.fav_manager = fav_manager 
         self.logger = LogManager(LOG_PATH)
         self.deletion_files = self.read_csv_file()
         self.gui_parent = gui_parent
@@ -25,6 +27,90 @@ class DeletionManager:
 
     def _ensure_csv_exists(self):
         create_csv_file(headers=self.headers, filename=self.delete_csv)
+
+    def get_deletion_stats(self):
+        """
+        Returns summary statistics for deletion_files.
+        """
+        stats = {
+            "total_entries": 0,
+            "status_counts": {},
+            "total_size_bytes": 0,
+            "size_by_status": {},
+            "existing_files": 0,
+            "missing_files": 0,
+            "unique_folders": 0,
+            "largest_file": None,
+            "largest_file_size": 0,
+            "oldest_file": None,
+            "newest_file": None,
+        }
+
+        status_counts = Counter()
+        size_by_status = defaultdict(int)
+
+        folders = set()
+        largest_file = None
+        largest_size = 0
+
+        oldest_dt = None
+        newest_dt = None
+        oldest_file = None
+        newest_file = None
+
+        for file_path, metadata in self.deletion_files.items():
+
+            stats["total_entries"] += 1
+
+            status = metadata.get("status", "Unknown")
+            size = metadata.get("size", 0)
+
+            if not isinstance(size, int):
+                size = 0
+
+            status_counts[status] += 1
+            size_by_status[status] += size
+            stats["total_size_bytes"] += size
+
+            folders.add(os.path.dirname(file_path))
+
+            if os.path.exists(file_path):
+                stats["existing_files"] += 1
+            else:
+                stats["missing_files"] += 1
+
+            if size > largest_size:
+                largest_size = size
+                largest_file = file_path
+
+            mod_time = metadata.get("mod_time")
+
+            if mod_time and mod_time != "N/A":
+                try:
+                    dt = datetime.strptime(mod_time, "%Y-%m-%d %H:%M:%S")
+
+                    if oldest_dt is None or dt < oldest_dt:
+                        oldest_dt = dt
+                        oldest_file = file_path
+
+                    if newest_dt is None or dt > newest_dt:
+                        newest_dt = dt
+                        newest_file = file_path
+
+                except Exception:
+                    pass
+
+        stats["status_counts"] = dict(status_counts)
+        stats["size_by_status"] = dict(size_by_status)
+        stats["unique_folders"] = len(folders)
+
+        stats["largest_file"] = largest_file
+        stats["largest_file_size"] = largest_size
+
+        stats["oldest_file"] = oldest_file
+        stats["newest_file"] = newest_file
+
+        return stats
 
     def set_parent_window(self, parent):
         """Set the parent window for message boxes."""
@@ -322,5 +408,10 @@ class DeletionManager:
             print(f"CSV file {self.delete_csv} not found. No changes made.")
 
 if __name__ == "__main__":
-    de = DeletionManager()
-    de.refactor_csv()
+    from fingerprint_manager import MediaFingerprintManager
+    from favorites_manager import FavoritesManager
+    fm = MediaFingerprintManager()
+    fav_manager = FavoritesManager(fingerprint_manager=fm)
+    de = DeletionManager(fav_manager=fav_manager)
+    print(de.get_deletion_stats())
+    # de.refactor_csv()

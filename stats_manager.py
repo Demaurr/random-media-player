@@ -16,7 +16,7 @@ class VideoStatsManager:
         self._headers = CSV_CONFIG[self.stats_csv]["headers"]
         self.stats = self._load_existing_stats()
         self.processor = VideoProcessor(max_workers=8)
-        self.deletion_manager = deletion_manager or DeletionManager()
+        self.deletion_manager = deletion_manager
         self.snippets_manager = snippets_manager or SnippetsManager(deletion_manager=self.deletion_manager)
 
     def _ensure_csv_exists(self):

@@ -21,7 +21,7 @@ class AnnotationsManager:
     - Persisted in CSV for long-term storage
     """
 
-    def __init__(self, fingerprint_manager=None):
+    def __init__(self, fingerprint_manager):
         """
         Initialize the annotations manager.
         
@@ -34,7 +34,7 @@ class AnnotationsManager:
         # create_csv_file(filename=ANNOTATIONS_CSV, headers=self.FIELDNAMES)
         self.logger = LogManager(ANNOTATIONS_LOG_PATH)
         self._headers = CSV_CONFIG[ANNOTATIONS_CSV]["headers"]
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
         
         self.annotations: dict[str, list] = {}
         self.annotation_ids: dict[str, str] = {}

@@ -2,20 +2,22 @@ import csv
 from datetime import datetime
 import os
 from typing import Optional, List, Dict, Tuple
+from collections import Counter
 
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
 from player_constants import ASSOCIATIONS_CSV, ASSOCIATION_LOG_PATH, CSV_CONFIG
 from static_methods import normalise_path, create_csv_file
+from associations_mixins import AssociationStatsMixin
 
 
-class FileAssociator:
+class FileAssociator(AssociationStatsMixin):
     """
     Associations will generally be lower than categories or other stuff, therefore not using the indexing
     """
-    def __init__(self, deletion_manager=None, fingerprint_manager=None):
+    def __init__(self, fingerprint_manager, deletion_manager=None):
         self.csv_path = ASSOCIATIONS_CSV
-        self.deletion_manager = deletion_manager or DeletionManager()
+        self.deletion_manager = deletion_manager
         self.fingerprint_manager = fingerprint_manager
         
         self._headers = CSV_CONFIG[self.csv_path]["headers"]
@@ -403,6 +405,18 @@ class FileAssociator:
                         return True
         return False
 
+    def get_association_stats(self, active_only: bool = False) -> dict:
+        return {
+            "total_associations": self.get_total_associations(active_only),
+            "active_associations": self.get_active_associations_count(),
+            "inactive_associations": self.get_inactive_associations_count(),
+            "association_types": self.get_association_type_count(active_only),
+            "by_type": self.get_associations_by_type(active_only),
+            "unique_sources": self.get_unique_source_count(active_only),
+            "unique_targets": self.get_unique_target_count(active_only),
+            "unique_hashes": self.get_unique_hash_count(active_only),
+        }
+
     def get_inactive_associations(self) -> List[Dict]:
         """Return all inactive associations."""
         return [
@@ -515,6 +529,9 @@ if __name__ == "__main__":
     # Example usage
     from fingerprint_manager import MediaFingerprintManager
     from deletion_manager import DeletionManager
+    from favorites_manager import FavoritesManager
     fm = MediaFingerprintManager()
-    dm = DeletionManager()
+    fav_manager = FavoritesManager(fingerprint_manager=fm)
+    dm = DeletionManager(fav_manager=fav_manager)
     associator = FileAssociator(deletion_manager=dm, fingerprint_manager=fm)
+    print(associator.get_association_stats())

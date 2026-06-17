@@ -7,8 +7,9 @@ from static_methods import create_csv_file, get_file_size, normalise_path, ensur
 import hashlib
 from pprint import pprint
 from fingerprint_manager import MediaFingerprintManager
+from favorites_mixins import FavoritesGettersMixin
 
-class FavoritesManager:
+class FavoritesManager(FavoritesGettersMixin):
     def __init__(self, fingerprint_manager=None):
         ensure_folder_exists(LOGS_FOLDER)
         self.fav_csv = FAV_FILES
@@ -18,6 +19,17 @@ class FavoritesManager:
         self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
         self.total_size = 0.0
         self._hash_cache = None
+        self.favorite_files = None  # Cache for favorite files for stats
+    
+    def _read_favorites(self, force_reload=False):
+        """
+        Load favorites into memory and reuse them until explicitly refreshed.
+        """
+        if self.favorite_files is None or force_reload:
+            with open(self.fav_csv, "r", newline="", encoding="utf-8") as file:
+                self.favorite_files = list(csv.DictReader(file))
+
+        return self.favorite_files
 
     def _ensure_favorites_csv(self):
         create_csv_file(self._headers, self.fav_csv)
@@ -251,10 +263,11 @@ if __name__ == "__main__":
 
     # Normalize paths and update hashes in the favorites CSV
     # fav_manager.normalize_favorites_paths_and_hashes()
-    favorites_by_name = fav_manager.get_favorites_by_name()
+    # favorites_by_name = fav_manager.get_favorites_by_name()
+    favorites_stats = fav_manager.get_favorites_stats()
     # for video_name, paths in favorites_by_name.items():
     #     if len(paths) > 1:
     #         print(f"Video: {video_name}, Paths: {paths}")
 
-    pprint(favorites_by_name)
+    pprint(favorites_stats)
     pass

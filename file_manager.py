@@ -3,17 +3,13 @@ import shutil
 import csv
 from datetime import datetime
 from typing import Dict, List
-from description_manager import DescriptionManager
-from fingerprint_manager import MediaFingerprintManager
 from player_constants import FILE_TRANSFER_LOG, LOG_PATH, CSV_CONFIG
 from favorites_manager import FavoritesManager
 from deletion_manager import DeletionManager
 from logs_writer import LogManager
 from static_methods import create_csv_file, ensure_folder_exists, rename_if_exists, compare_folders, normalise_path
 from category_manager import CategoryManager
-from stats_manager import VideoStatsManager
 from file_loader import VideoFileLoader
-from notes_manager import NotesManager
 from task_manager import TaskManager
 import threading
 
@@ -25,16 +21,16 @@ class FileManager:
         self.log_file = FILE_TRANSFER_LOG
         self._headers = CSV_CONFIG[self.log_file]["headers"]
         
-        self.fingerprint_manager = fingerprint_manager or MediaFingerprintManager()
+        self.fingerprint_manager = fingerprint_manager
         self.favorites = favorites_manager or FavoritesManager(fingerprint_manager=self.fingerprint_manager)
         self.deletes = deletion_manager or DeletionManager(favorites_manager=self.favorites)
         if parent_window:
             self.deletes.set_parent_window(parent_window)
         self.categories = category_manager or CategoryManager(fingerprint_manager=self.fingerprint_manager)
-        self.video_stats_manager = video_stats_manager or VideoStatsManager()
+        self.video_stats_manager = video_stats_manager
         self.file_loader = VideoFileLoader()
-        self.notes_manager = notes_manager or NotesManager()
-        self.description_manager = description_manager or DescriptionManager()
+        self.notes_manager = notes_manager
+        self.description_manager = description_manager
         self.task_manager = task_manager or TaskManager(root=self.parent, max_workers=4)
         
         self.logger = LogManager(LOG_PATH)
